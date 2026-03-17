@@ -4,10 +4,13 @@ import asyncio
 import contextlib
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import RedirectResponse, Response
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from jose import JWTError, jwt as jose_jwt
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
@@ -38,6 +41,23 @@ from services.process_flagged_appeals.db import (
     wait_for_db,
 )
 from services.process_flagged_appeals.models import AppealInbox, FlaggedCase
+
+_ANALYST_JWT_SECRET = os.getenv("ANALYST_JWT_SECRET", "analyst-dev-secret-change-in-prod")
+_ANALYST_USERNAME   = os.getenv("ANALYST_USERNAME", "analyst")
+_ANALYST_PASSWORD   = os.getenv("ANALYST_PASSWORD", "analyst123")
+
+_bearer = HTTPBearer()
+
+def _make_analyst_token() -> str:
+    exp = datetime.now(timezone.utc) + timedelta(hours=8)
+    return jose_jwt.encode({"sub": "analyst", "exp": exp}, _ANALYST_JWT_SECRET, algorithm="HS256")
+
+def _require_analyst(creds: HTTPAuthorizationCredentials = Depends(_bearer)) -> str:
+    try:
+        payload = jose_jwt.decode(creds.credentials, _ANALYST_JWT_SECRET, algorithms=["HS256"])
+        return payload["sub"]
+    except JWTError:
+        raise HTTPException(status_code=401, detail="invalid or expired token")
 
 
 class AppState:
@@ -158,8 +178,15 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.post("/login")
+async def analyst_login(body: dict[str, Any]) -> dict[str, str]:
+    if body.get("username") != _ANALYST_USERNAME or body.get("password") != _ANALYST_PASSWORD:
+        raise HTTPException(status_code=401, detail="invalid credentials")
+    return {"access_token": _make_analyst_token(), "token_type": "bearer"}
+
+
 @app.get("/flagged")
-async def list_flagged() -> list[dict[str, Any]]:
+async def list_flagged(_: str = Depends(_require_analyst)) -> list[dict[str, Any]]:
     assert state.sessionmaker is not None
     async with state.sessionmaker() as session:
         result = await session.execute(select(FlaggedCase).order_by(FlaggedCase.updated_at.desc()))
@@ -178,7 +205,7 @@ async def list_flagged() -> list[dict[str, Any]]:
 
 
 @app.post("/flagged/{transaction_id}/resolve")
-async def resolve_flagged(transaction_id: str, request: dict[str, Any]) -> dict[str, str]:
+async def resolve_flagged(transaction_id: str, request: dict[str, Any], _: str = Depends(_require_analyst)) -> dict[str, str]:
     try:
         manual_outcome = ManualOutcome(request["manual_outcome"])
         reason = str(request["reason"])
@@ -204,7 +231,7 @@ async def resolve_flagged(transaction_id: str, request: dict[str, Any]) -> dict[
 
 
 @app.get("/appeals")
-async def list_appeals() -> list[dict[str, Any]]:
+async def list_appeals(_: str = Depends(_require_analyst)) -> list[dict[str, Any]]:
     assert state.sessionmaker is not None
     async with state.sessionmaker() as session:
         result = await session.execute(select(AppealInbox).order_by(AppealInbox.updated_at.desc()))
@@ -223,7 +250,7 @@ async def list_appeals() -> list[dict[str, Any]]:
 
 
 @app.post("/appeals/{appeal_id}/resolve")
-async def resolve_appeal(appeal_id: str, request: dict[str, Any]) -> dict[str, str]:
+async def resolve_appeal(appeal_id: str, request: dict[str, Any], _: str = Depends(_require_analyst)) -> dict[str, str]:
     assert state.sessionmaker is not None
     async with state.sessionmaker() as session:
         result = await session.execute(select(AppealInbox).where(AppealInbox.appeal_id == appeal_id))

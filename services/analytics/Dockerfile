@@ -11,5 +11,5 @@ COPY services/analytics /app/services/analytics
 
 ENV PYTHONPATH=/app
 
-CMD ["python", "-m", "services.analytics.worker"]
+CMD ["uvicorn", "services.analytics.app:app", "--host", "0.0.0.0", "--port", "8006"]
 

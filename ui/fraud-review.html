@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FTDS | Fraud Review</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' fill='%236d28d9' viewBox='0 0 16 16'><path d='M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2m3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2'/></svg>" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+  <style>
+    body { background: #f5f3ff; min-height: 100vh; }
+    /* ── Login page ── */
+    #loginPage { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .auth-card { width: 100%; max-width: 420px; border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,.12); }
+    .brand-header { background: linear-gradient(135deg, #6d28d9 0%, #4c1d95 100%); border-radius: 16px 16px 0 0; padding: 2rem; color: #fff; text-align: center; }
+    .brand-header h1 { font-size: 1.5rem; font-weight: 700; margin: 0; letter-spacing: -.5px; }
+    .brand-header p  { margin: .3rem 0 0; opacity: .8; font-size: .9rem; }
+    /* ── Main app ── */
+    #mainPage { display: none; }
+    .navbar { background: linear-gradient(135deg, #6d28d9 0%, #4c1d95 100%) !important; }
+    .nav-pills .nav-link { color: #6d28d9; font-weight: 600; }
+    .nav-pills .nav-link.active { background-color: #6d28d9; color: #fff; }
+    .table th { background: #ede9fe; color: #4c1d95; font-weight: 600; }
+    .btn-resolve-approve { background: #6d28d9; border-color: #6d28d9; color: #fff; }
+    .btn-resolve-approve:hover { background: #5b21b6; border-color: #5b21b6; color: #fff; }
+    .alert { font-size: .88rem; }
+    .card { border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,.07); }
+  </style>
+</head>
+<body>
+
+<!-- ================================================================
+     LOGIN PAGE
+================================================================ -->
+<div id="loginPage">
+  <div class="auth-card bg-white">
+    <div class="brand-header">
+      <div class="mb-2"><i class="bi bi-shield-exclamation" style="font-size:2rem"></i></div>
+      <h1>Fraud Review Portal</h1>
+      <p>Analyst access — FTDS</p>
+    </div>
+    <div class="p-4">
+      <div id="loginAlert" class="alert alert-danger d-none" role="alert"></div>
+      <form id="loginForm">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Username</label>
+          <input type="text" class="form-control" id="loginUsername" placeholder="analyst" required autocomplete="username" />
+        </div>
+        <div class="mb-4">
+          <label class="form-label fw-semibold">Password</label>
+          <input type="password" class="form-control" id="loginPassword" placeholder="••••••••" required autocomplete="current-password" />
+        </div>
+        <button type="submit" class="btn w-100 py-2 fw-semibold text-white" style="background:#6d28d9">
+          <span class="spinner-border spinner-border-sm d-none me-2" id="loginSpinner"></span>
+          <i class="bi bi-box-arrow-in-right me-1"></i>Sign In
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================
+     MAIN APP
+================================================================ -->
+<div id="mainPage">
+
+  <!-- Navbar -->
+  <nav class="navbar navbar-dark px-4 py-2">
+    <span class="navbar-brand fw-bold fs-5">
+      <i class="bi bi-shield-exclamation me-2"></i>Fraud Review Portal
+    </span>
+    <div class="d-flex align-items-center gap-2">
+      <span class="text-white-50 small me-2" id="refreshCountdown"></span>
+      <button class="btn btn-outline-light btn-sm" onclick="logout()">
+        <i class="bi bi-box-arrow-right me-1"></i>Logout
+      </button>
+    </div>
+  </nav>
+
+  <div class="container-fluid px-4 py-3">
+
+    <!-- Global alert -->
+    <div id="mainAlert" class="alert d-none" role="alert"></div>
+
+    <!-- Tabs -->
+    <ul class="nav nav-pills mb-3" id="mainTabs">
+      <li class="nav-item">
+        <button class="nav-link active" data-tab="flagged">
+          <i class="bi bi-flag-fill me-1"></i>Flagged Transactions
+        </button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link" data-tab="appeals">
+          <i class="bi bi-chat-left-text-fill me-1"></i>Appeals
+        </button>
+      </li>
+    </ul>
+
+    <!-- ── Flagged tab ── -->
+    <div id="tabFlagged" class="card p-3">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="mb-0 fw-bold text-purple" style="color:#4c1d95">Flagged Transactions</h6>
+        <button class="btn btn-sm btn-outline-secondary" onclick="loadFlagged()">
+          <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+        </button>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Transaction ID</th>
+              <th>Risk Score</th>
+              <th>Reason</th>
+              <th>Status</th>
+              <th>Flagged At</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="flaggedBody">
+            <tr><td colspan="6" class="text-center text-muted py-4">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Appeals tab ── -->
+    <div id="tabAppeals" class="card p-3 d-none">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="mb-0 fw-bold" style="color:#4c1d95">Customer Appeals</h6>
+        <button class="btn btn-sm btn-outline-secondary" onclick="loadAppeals()">
+          <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+        </button>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Appeal ID</th>
+              <th>Transaction ID</th>
+              <th>Customer Reason</th>
+              <th>Status</th>
+              <th>Submitted At</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="appealsBody">
+            <tr><td colspan="6" class="text-center text-muted py-4">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ================================================================
+     RESOLVE MODAL
+================================================================ -->
+<div class="modal fade" id="resolveModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header" style="background:#6d28d9;color:#fff">
+        <h5 class="modal-title" id="resolveModalTitle">Resolve</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Outcome</label>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-success flex-fill" id="btnOutcomeApprove" onclick="selectOutcome('APPROVED')">
+              <i class="bi bi-check-lg me-1"></i>Approve
+            </button>
+            <button type="button" class="btn btn-outline-danger flex-fill" id="btnOutcomeReject" onclick="selectOutcome('REJECTED')">
+              <i class="bi bi-x-lg me-1"></i>Reject
+            </button>
+          </div>
+          <input type="hidden" id="resolveOutcome" value="" />
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Reason / Notes <span class="text-danger">*</span></label>
+          <textarea class="form-control" id="resolveReason" rows="3" placeholder="Enter your reason or notes…" required></textarea>
+        </div>
+        <div id="resolveAlert" class="alert alert-danger d-none small"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn text-white fw-semibold" style="background:#6d28d9" id="resolveConfirmBtn" onclick="submitResolve()">
+          <span class="spinner-border spinner-border-sm d-none me-1" id="resolveSpinner"></span>
+          Confirm
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  const API = '/api/fraud-review';
+  const TOKEN_KEY = 'analyst_token';
+
+  let _resolveType   = null;   // 'flagged' | 'appeal'
+  let _resolveId     = null;   // transaction_id or appeal_id
+  let _resolveModal  = null;
+  let _autoRefreshTimer = null;
+  let _countdown = 30;
+
+  // ── Auth helpers ─────────────────────────────────────────────────
+  function getToken() { return sessionStorage.getItem(TOKEN_KEY); }
+  function setToken(t) { sessionStorage.setItem(TOKEN_KEY, t); }
+  function clearToken() { sessionStorage.removeItem(TOKEN_KEY); }
+
+  function authHeaders() {
+    return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` };
+  }
+
+  // ── Page init ────────────────────────────────────────────────────
+  window.addEventListener('DOMContentLoaded', () => {
+    _resolveModal = new bootstrap.Modal(document.getElementById('resolveModal'));
+
+    // Tab switching
+    document.querySelectorAll('[data-tab]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-tab]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const tab = btn.dataset.tab;
+        document.getElementById('tabFlagged').classList.toggle('d-none', tab !== 'flagged');
+        document.getElementById('tabAppeals').classList.toggle('d-none', tab !== 'appeals');
+        if (tab === 'flagged') loadFlagged();
+        else loadAppeals();
+      });
+    });
+
+    if (getToken()) {
+      showMain();
+    }
+  });
+
+  function showMain() {
+    document.getElementById('loginPage').style.display = 'none';
+    document.getElementById('mainPage').style.display  = 'block';
+    loadFlagged();
+    loadAppeals();
+    startAutoRefresh();
+  }
+
+  function logout() {
+    clearToken();
+    stopAutoRefresh();
+    document.getElementById('loginPage').style.display = 'flex';
+    document.getElementById('mainPage').style.display  = 'none';
+    document.getElementById('loginAlert').classList.add('d-none');
+  }
+
+  // ── Auto-refresh ─────────────────────────────────────────────────
+  function startAutoRefresh() {
+    _countdown = 30;
+    updateCountdown();
+    _autoRefreshTimer = setInterval(() => {
+      _countdown--;
+      if (_countdown <= 0) {
+        _countdown = 30;
+        loadFlagged();
+        loadAppeals();
+      }
+      updateCountdown();
+    }, 1000);
+  }
+
+  function stopAutoRefresh() {
+    if (_autoRefreshTimer) clearInterval(_autoRefreshTimer);
+  }
+
+  function updateCountdown() {
+    const el = document.getElementById('refreshCountdown');
+    if (el) el.textContent = `Auto-refresh in ${_countdown}s`;
+  }
+
+  // ── Alert helpers ────────────────────────────────────────────────
+  function showMainAlert(msg, type = 'danger') {
+    const el = document.getElementById('mainAlert');
+    el.className = `alert alert-${type}`;
+    el.textContent = msg;
+  }
+
+  function hideMainAlert() {
+    document.getElementById('mainAlert').className = 'alert d-none';
+  }
+
+  // ── Badge helper ─────────────────────────────────────────────────
+  function statusBadge(status) {
+    const map = {
+      FLAGGED:  'warning',
+      RESOLVED: 'secondary',
+      PENDING:  'warning',
+      APPROVED: 'success',
+      REJECTED: 'danger',
+    };
+    return `<span class="badge bg-${map[status] || 'light'} text-dark">${status}</span>`;
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleString();
+  }
+
+  // ── Load Flagged ─────────────────────────────────────────────────
+  async function loadFlagged() {
+    try {
+      const res = await fetch(`${API}/flagged`, { headers: authHeaders() });
+      if (res.status === 401) { logout(); return; }
+      if (!res.ok) throw new Error(await res.text());
+      const rows = await res.json();
+      const tbody = document.getElementById('flaggedBody');
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No flagged transactions.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map(r => `
+        <tr>
+          <td><code class="small">${r.transaction_id}</code></td>
+          <td>${r.rules_score != null ? (r.rules_score * 100).toFixed(1) + '%' : '—'}</td>
+          <td class="small text-muted" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(r.reason || '')}">${escHtml(r.reason || '—')}</td>
+          <td>${statusBadge(r.status)}</td>
+          <td class="small">${fmtDate(r.created_at)}</td>
+          <td>
+            ${r.status === 'FLAGGED' ? `
+              <button class="btn btn-sm btn-success me-1" onclick="openResolve('flagged','${r.transaction_id}','APPROVED')">
+                <i class="bi bi-check-lg"></i> Approve
+              </button>
+              <button class="btn btn-sm btn-danger" onclick="openResolve('flagged','${r.transaction_id}','REJECTED')">
+                <i class="bi bi-x-lg"></i> Reject
+              </button>
+            ` : '<span class="text-muted small">—</span>'}
+          </td>
+        </tr>
+      `).join('');
+    } catch (err) {
+      showMainAlert('Failed to load flagged transactions: ' + err.message);
+    }
+  }
+
+  // ── Load Appeals ─────────────────────────────────────────────────
+  async function loadAppeals() {
+    try {
+      const res = await fetch(`${API}/appeals`, { headers: authHeaders() });
+      if (res.status === 401) { logout(); return; }
+      if (!res.ok) throw new Error(await res.text());
+      const rows = await res.json();
+      const tbody = document.getElementById('appealsBody');
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No appeals.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map(r => `
+        <tr>
+          <td><code class="small">${r.appeal_id}</code></td>
+          <td><code class="small">${r.transaction_id}</code></td>
+          <td class="small text-muted" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(r.reason_for_appeal || '')}">${escHtml(r.reason_for_appeal || '—')}</td>
+          <td>${statusBadge(r.status)}</td>
+          <td class="small">${fmtDate(r.created_at)}</td>
+          <td>
+            ${r.status === 'PENDING' ? `
+              <button class="btn btn-sm btn-success me-1" onclick="openResolve('appeal','${r.appeal_id}','APPROVED')">
+                <i class="bi bi-check-lg"></i> Approve
+              </button>
+              <button class="btn btn-sm btn-danger" onclick="openResolve('appeal','${r.appeal_id}','REJECTED')">
+                <i class="bi bi-x-lg"></i> Reject
+              </button>
+            ` : '<span class="text-muted small">—</span>'}
+          </td>
+        </tr>
+      `).join('');
+    } catch (err) {
+      showMainAlert('Failed to load appeals: ' + err.message);
+    }
+  }
+
+  // ── Resolve modal ────────────────────────────────────────────────
+  function openResolve(type, id, outcome) {
+    _resolveType = type;
+    _resolveId   = id;
+    document.getElementById('resolveOutcome').value = '';
+    document.getElementById('resolveReason').value  = '';
+    document.getElementById('resolveAlert').classList.add('d-none');
+    const title = type === 'flagged' ? `Resolve Transaction: ${id}` : `Resolve Appeal: ${id}`;
+    document.getElementById('resolveModalTitle').textContent = title;
+    selectOutcome(outcome);
+    _resolveModal.show();
+  }
+
+  function selectOutcome(outcome) {
+    document.getElementById('resolveOutcome').value = outcome;
+    const approveBtn = document.getElementById('btnOutcomeApprove');
+    const rejectBtn  = document.getElementById('btnOutcomeReject');
+    if (outcome === 'APPROVED') {
+      approveBtn.className = 'btn btn-success flex-fill';
+      rejectBtn.className  = 'btn btn-outline-danger flex-fill';
+    } else {
+      approveBtn.className = 'btn btn-outline-success flex-fill';
+      rejectBtn.className  = 'btn btn-danger flex-fill';
+    }
+  }
+
+  async function submitResolve() {
+    const outcome = document.getElementById('resolveOutcome').value;
+    const reason  = document.getElementById('resolveReason').value.trim();
+    const alertEl = document.getElementById('resolveAlert');
+    const spinner = document.getElementById('resolveSpinner');
+
+    alertEl.classList.add('d-none');
+
+    if (!outcome) {
+      alertEl.textContent = 'Please select an outcome.';
+      alertEl.classList.remove('d-none');
+      return;
+    }
+    if (!reason) {
+      alertEl.textContent = 'Please enter a reason.';
+      alertEl.classList.remove('d-none');
+      return;
+    }
+
+    spinner.classList.remove('d-none');
+    document.getElementById('resolveConfirmBtn').disabled = true;
+
+    try {
+      let url, body;
+      if (_resolveType === 'flagged') {
+        url  = `${API}/flagged/${_resolveId}/resolve`;
+        body = JSON.stringify({ manual_outcome: outcome, reason });
+      } else {
+        url  = `${API}/appeals/${_resolveId}/resolve`;
+        body = JSON.stringify({ manual_outcome: outcome, outcome_reason: reason });
+      }
+
+      const res = await fetch(url, { method: 'POST', headers: authHeaders(), body });
+      if (res.status === 401) { _resolveModal.hide(); logout(); return; }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || res.statusText);
+      }
+
+      _resolveModal.hide();
+      showMainAlert('Resolved successfully.', 'success');
+      setTimeout(hideMainAlert, 4000);
+      loadFlagged();
+      loadAppeals();
+    } catch (err) {
+      alertEl.textContent = 'Error: ' + err.message;
+      alertEl.classList.remove('d-none');
+    } finally {
+      spinner.classList.add('d-none');
+      document.getElementById('resolveConfirmBtn').disabled = false;
+    }
+  }
+
+  // ── Login form ───────────────────────────────────────────────────
+  document.getElementById('loginForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const alertEl = document.getElementById('loginAlert');
+    const spinner = document.getElementById('loginSpinner');
+    alertEl.classList.add('d-none');
+    spinner.classList.remove('d-none');
+    try {
+      const res = await fetch(`${API}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: document.getElementById('loginUsername').value,
+          password: document.getElementById('loginPassword').value,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Login failed');
+      setToken(data.access_token);
+      showMain();
+    } catch (err) {
+      alertEl.textContent = err.message;
+      alertEl.classList.remove('d-none');
+    } finally {
+      spinner.classList.add('d-none');
+    }
+  });
+
+  // ── Utility ──────────────────────────────────────────────────────
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+</script>
+</body>
+</html>
