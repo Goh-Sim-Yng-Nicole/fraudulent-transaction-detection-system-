@@ -28,9 +28,17 @@ async def main() -> None:
                     continue
                 created = TransactionCreated.model_validate(value.get("data", {}))
                 score_request = FraudScoreRequest(**created.model_dump())
-                resp = await client.post(settings.fraud_score_url, json=score_request.model_dump())
+                resp = await client.post(
+                    settings.fraud_score_url,
+                    json=score_request.model_dump(exclude_none=True),
+                )
                 resp.raise_for_status()
-                rules_score = int(resp.json().get("rules_score", 0))
+                body = resp.json()
+                if "rules_score" in body:
+                    rules_score = int(body.get("rules_score", 0))
+                else:
+                    fraud_probability = float(body.get("fraud_probability", 0.0))
+                    rules_score = int(round(max(0.0, min(1.0, fraud_probability)) * 100))
 
                 scored = TransactionScored(transaction_id=created.transaction_id, rules_score=rules_score)
                 payload = envelope(

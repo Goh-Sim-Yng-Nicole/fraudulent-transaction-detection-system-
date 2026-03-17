@@ -1,0 +1,4 @@
+node_modules/
+services/fraud_score/node_modules/
+services/fraud_score/reports/
+services/fraud_score/models/*.json
