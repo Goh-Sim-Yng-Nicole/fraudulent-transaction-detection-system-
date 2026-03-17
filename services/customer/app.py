@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, field_validator, model_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, AsyncEngine
 
@@ -60,6 +60,11 @@ class CustomerResponse(BaseModel):
     updated_at: Any
 
     model_config = {"from_attributes": True}
+
+    @field_validator("customer_id", mode="before")
+    @classmethod
+    def coerce_uuid_to_str(cls, v: Any) -> str:
+        return str(v)
 
 
 class TokenResponse(BaseModel):
