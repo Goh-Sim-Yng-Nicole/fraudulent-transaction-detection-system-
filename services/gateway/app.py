@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
 
 
@@ -19,6 +19,7 @@ class Downstreams:
         self.transaction_base = _env("TRANSACTION_BASE_URL", "http://localhost:8000")
         self.fraud_review_base = _env("FRAUD_REVIEW_BASE_URL", "http://localhost:8002")
         self.appeal_base = _env("APPEAL_BASE_URL", "http://localhost:8003")
+        self.customer_base = _env("CUSTOMER_BASE_URL", "http://localhost:8005")
 
 
 class AppState:
@@ -58,10 +59,16 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-async def _proxy(method: str, url: str, *, json_body: Any | None = None) -> Any:
+async def _proxy(
+    method: str,
+    url: str,
+    *,
+    json_body: Any | None = None,
+    headers: dict[str, str] | None = None,
+) -> Any:
     assert state.client is not None
     try:
-        resp = await state.client.request(method, url, json=json_body)
+        resp = await state.client.request(method, url, json=json_body, headers=headers)
     except httpx.RequestError as exc:
         raise HTTPException(status_code=502, detail=f"downstream error: {exc}") from exc
     if resp.status_code >= 400:
@@ -79,7 +86,38 @@ async def _proxy(method: str, url: str, *, json_body: Any | None = None) -> Any:
         return resp.text
 
 
+# Customer auth + profile (proxied to customer service)
+@app.post("/auth/register")
+async def proxy_register(payload: dict[str, Any]) -> Any:
+    return await _proxy("POST", f"{state.downstreams.customer_base}/register", json_body=payload)
+
+
+@app.post("/auth/login")
+async def proxy_login(payload: dict[str, Any]) -> Any:
+    return await _proxy("POST", f"{state.downstreams.customer_base}/login", json_body=payload)
+
+
+@app.get("/customers/me")
+async def proxy_get_me(request: Request) -> Any:
+    auth = request.headers.get("Authorization")
+    hdrs = {"Authorization": auth} if auth else None
+    return await _proxy("GET", f"{state.downstreams.customer_base}/me", headers=hdrs)
+
+
+@app.put("/customers/me")
+async def proxy_update_me(payload: dict[str, Any], request: Request) -> Any:
+    auth = request.headers.get("Authorization")
+    hdrs = {"Authorization": auth} if auth else None
+    return await _proxy("PUT", f"{state.downstreams.customer_base}/me", json_body=payload, headers=hdrs)
+
+
 # Customer Banking UI (composite)
+@app.get("/customer/transactions")
+async def customer_list_transactions(customer_id: str) -> Any:
+    url = f"{state.downstreams.transaction_base}/transactions?customer_id={customer_id}"
+    return await _proxy("GET", url)
+
+
 @app.post("/customer/transactions")
 async def customer_create_transaction(payload: dict[str, Any]) -> Any:
     url = f"{state.downstreams.transaction_base}/transactions"
