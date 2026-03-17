@@ -1,0 +1,287 @@
+services:
+  postgres-transaction:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_TRANSACTION_DB:-ftds_transaction}
+      POSTGRES_USER: ${POSTGRES_TRANSACTION_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_TRANSACTION_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ftds_postgres_transaction_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres-appeal:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_APPEAL_DB:-ftds_appeal}
+      POSTGRES_USER: ${POSTGRES_APPEAL_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_APPEAL_PASSWORD:-postgres}
+    ports:
+      - "5433:5432"
+    volumes:
+      - ftds_postgres_appeal_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres-fraud-review:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_FRAUD_REVIEW_DB:-ftds_fraud_review}
+      POSTGRES_USER: ${POSTGRES_FRAUD_REVIEW_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_FRAUD_REVIEW_PASSWORD:-postgres}
+    ports:
+      - "5434:5432"
+    volumes:
+      - ftds_postgres_fraud_review_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:latest
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp
+      - "1"
+      - --memory
+      - 1G
+      - --reserve-memory
+      - 0M
+      - --node-id
+      - "0"
+      - --check=false
+      - --kafka-addr
+      - internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr
+      - internal://redpanda:9092,external://localhost:19092
+    ports:
+      - "19092:19092"
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster info --brokers localhost:9092 >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  kafka-init:
+    image: docker.redpanda.com/redpandadata/redpanda:latest
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      rpk topic create transaction.created --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true;
+      rpk topic create transaction.scored --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true;
+      rpk topic create transaction.flagged --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true;
+      rpk topic create transaction.finalised --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true;
+      rpk topic create transaction.reviewed --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true;
+      rpk topic create appeal.created --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true;
+      rpk topic create appeal.resolved --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true;
+      echo "[kafka-init] ok"
+
+  transaction:
+    build:
+      context: .
+      dockerfile: services/transaction/Dockerfile
+    env_file: .env
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_TRANSACTION_USER:-postgres}:${POSTGRES_TRANSACTION_PASSWORD:-postgres}@postgres-transaction:5432/${POSTGRES_TRANSACTION_DB:-ftds_transaction}
+    ports:
+      - "8000:8000"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      postgres-transaction:
+        condition: service_healthy
+      transaction-migrate:
+        condition: service_completed_successfully
+
+  transaction-migrate:
+    build:
+      context: .
+      dockerfile: services/transaction/Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_TRANSACTION_USER:-postgres}:${POSTGRES_TRANSACTION_PASSWORD:-postgres}@postgres-transaction:5432/${POSTGRES_TRANSACTION_DB:-ftds_transaction}
+    command: ["python", "-m", "services.transaction.migrate"]
+    depends_on:
+      postgres-transaction:
+        condition: service_healthy
+
+  fraud-score:
+    build:
+      context: .
+      dockerfile: services/fraud_score/Dockerfile
+    env_file: .env
+    ports:
+      - "8001:8001"
+
+  detect-fraud:
+    build:
+      context: .
+      dockerfile: services/detect_fraud/Dockerfile
+    env_file: .env
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      FRAUD_SCORE_URL: http://fraud-score:8001/score
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      fraud-score:
+        condition: service_started
+
+  decision:
+    build:
+      context: .
+      dockerfile: services/decision/Dockerfile
+    env_file: .env
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+
+  fraud-review:
+    build:
+      context: .
+      dockerfile: services/process_flagged_appeals/Dockerfile
+    env_file: .env
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_FRAUD_REVIEW_USER:-postgres}:${POSTGRES_FRAUD_REVIEW_PASSWORD:-postgres}@postgres-fraud-review:5432/${POSTGRES_FRAUD_REVIEW_DB:-ftds_fraud_review}
+    ports:
+      - "8002:8002"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      postgres-fraud-review:
+        condition: service_healthy
+      fraud-review-migrate:
+        condition: service_completed_successfully
+
+  fraud-review-migrate:
+    build:
+      context: .
+      dockerfile: services/process_flagged_appeals/Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_FRAUD_REVIEW_USER:-postgres}:${POSTGRES_FRAUD_REVIEW_PASSWORD:-postgres}@postgres-fraud-review:5432/${POSTGRES_FRAUD_REVIEW_DB:-ftds_fraud_review}
+    command: ["python", "-m", "services.process_flagged_appeals.migrate"]
+    depends_on:
+      postgres-fraud-review:
+        condition: service_healthy
+
+  appeal:
+    build:
+      context: .
+      dockerfile: services/appeal/Dockerfile
+    env_file: .env
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_APPEAL_USER:-postgres}:${POSTGRES_APPEAL_PASSWORD:-postgres}@postgres-appeal:5432/${POSTGRES_APPEAL_DB:-ftds_appeal}
+    ports:
+      - "8003:8003"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      postgres-appeal:
+        condition: service_healthy
+      appeal-migrate:
+        condition: service_completed_successfully
+
+  appeal-migrate:
+    build:
+      context: .
+      dockerfile: services/appeal/Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_APPEAL_USER:-postgres}:${POSTGRES_APPEAL_PASSWORD:-postgres}@postgres-appeal:5432/${POSTGRES_APPEAL_DB:-ftds_appeal}
+    command: ["python", "-m", "services.appeal.migrate"]
+    depends_on:
+      postgres-appeal:
+        condition: service_healthy
+
+  notification:
+    build:
+      context: .
+      dockerfile: services/notification/Dockerfile
+    env_file: .env
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+
+  audit:
+    build:
+      context: .
+      dockerfile: services/audit/Dockerfile
+    env_file: .env
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+
+  analytics:
+    build:
+      context: .
+      dockerfile: services/analytics/Dockerfile
+    env_file: .env
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+
+  gateway:
+    build:
+      context: .
+      dockerfile: services/gateway/Dockerfile
+    env_file: .env
+    environment:
+      TRANSACTION_BASE_URL: http://transaction:8000
+      FRAUD_REVIEW_BASE_URL: http://fraud-review:8002
+      APPEAL_BASE_URL: http://appeal:8003
+    ports:
+      - "8004:8004"
+    depends_on:
+      transaction:
+        condition: service_started
+      fraud-review:
+        condition: service_started
+      appeal:
+        condition: service_started
+
+volumes:
+  ftds_postgres_transaction_data:
+  ftds_postgres_appeal_data:
+  ftds_postgres_fraud_review_data:
