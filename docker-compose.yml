@@ -184,6 +184,9 @@ services:
     environment:
       KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_FRAUD_REVIEW_USER:-postgres}:${POSTGRES_FRAUD_REVIEW_PASSWORD:-postgres}@postgres-fraud-review:5432/${POSTGRES_FRAUD_REVIEW_DB:-ftds_fraud_review}
+      ANALYST_USERNAME: ${ANALYST_USERNAME:-analyst}
+      ANALYST_PASSWORD: ${ANALYST_PASSWORD:-analyst123}
+      ANALYST_JWT_SECRET: ${ANALYST_JWT_SECRET:-analyst-dev-secret-change-in-prod}
     ports:
       - "8002:8002"
     depends_on:
@@ -279,6 +282,11 @@ services:
     env_file: .env
     environment:
       KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      MANAGER_USERNAME: ${MANAGER_USERNAME:-manager}
+      MANAGER_PASSWORD: ${MANAGER_PASSWORD:-manager123}
+      MANAGER_JWT_SECRET: ${MANAGER_JWT_SECRET:-manager-dev-secret-change-in-prod}
+    ports:
+      - "8006:8006"
     depends_on:
       redpanda:
         condition: service_healthy
@@ -368,8 +376,47 @@ services:
       timeout: 10s
       retries: 10
 
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.47.2
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    ports:
+      - "9091:8080"
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ftds_prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    depends_on:
+      - cadvisor
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+    volumes:
+      - ftds_grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+
 volumes:
   ftds_postgres_transaction_data:
   ftds_postgres_appeal_data:
   ftds_postgres_fraud_review_data:
   ftds_postgres_customer_data:
+  ftds_prometheus_data:
+  ftds_grafana_data:
