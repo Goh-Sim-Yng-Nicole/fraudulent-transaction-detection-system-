@@ -36,9 +36,12 @@ class TransactionCreateRequest(BaseModel):
     currency: str
     card_type: str
     country: str
-    merchant_id: str
-    hour_utc: int = Field(ge=0, le=23)
+    merchant_id: Optional[str] = None
+    hour_utc: Optional[int] = Field(default=None, ge=0, le=23)
     customer_id: Optional[str] = None
+    sender_name: Optional[str] = None
+    recipient_customer_id: Optional[str] = None
+    recipient_name: Optional[str] = None
 
 
 class TransactionRecord(TransactionCreateRequest):
@@ -48,6 +51,7 @@ class TransactionRecord(TransactionCreateRequest):
     updated_at: datetime
     fraud_score: Optional[int] = None
     outcome_reason: Optional[str] = None
+    direction: Optional[str] = None  # OUTGOING | INCOMING (set at query time)
 
 
 class TransactionCreated(BaseModel):

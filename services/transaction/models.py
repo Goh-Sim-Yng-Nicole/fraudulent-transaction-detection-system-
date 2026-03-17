@@ -23,6 +23,9 @@ class Transaction(Base):
     hour_utc: Mapped[int] = mapped_column(Integer)
 
     customer_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
+    sender_name: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    recipient_customer_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
+    recipient_name: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     status: Mapped[str] = mapped_column(String(16), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
