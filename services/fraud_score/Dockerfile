@@ -1,15 +1,16 @@
-FROM python:3.11-slim
+FROM node:20-slim
 
 WORKDIR /app
 
-COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
+COPY services/fraud_score/package.json services/fraud_score/package-lock.json* ./
+RUN npm install --omit=dev
 
-COPY ftds /app/ftds
-COPY services/__init__.py /app/services/__init__.py
-COPY services/fraud_score /app/services/fraud_score
+COPY services/fraud_score/src ./src
+COPY services/fraud_score/data ./data
+COPY services/fraud_score/models ./models
+COPY services/fraud_score/scripts ./scripts
 
-ENV PYTHONPATH=/app
+ENV PORT=8001
+EXPOSE 8001
 
-CMD ["python", "-m", "uvicorn", "services.fraud_score.app:app", "--host", "0.0.0.0", "--port", "8001"]
-
+CMD ["node", "src/server.js"]
