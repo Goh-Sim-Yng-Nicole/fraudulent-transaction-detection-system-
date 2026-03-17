@@ -97,6 +97,18 @@ async def proxy_login(payload: dict[str, Any]) -> Any:
     return await _proxy("POST", f"{state.downstreams.customer_base}/login", json_body=payload)
 
 
+@app.get("/customers/lookup")
+async def proxy_lookup_customer(query: str, request: Request) -> Any:
+    auth = request.headers.get("Authorization")
+    hdrs = {"Authorization": auth} if auth else None
+    from urllib.parse import quote
+    return await _proxy(
+        "GET",
+        f"{state.downstreams.customer_base}/lookup?query={quote(query)}",
+        headers=hdrs,
+    )
+
+
 @app.get("/customers/me")
 async def proxy_get_me(request: Request) -> Any:
     auth = request.headers.get("Authorization")
@@ -111,11 +123,59 @@ async def proxy_update_me(payload: dict[str, Any], request: Request) -> Any:
     return await _proxy("PUT", f"{state.downstreams.customer_base}/me", json_body=payload, headers=hdrs)
 
 
+@app.put("/customers/me/password")
+async def proxy_change_password(payload: dict[str, Any], request: Request) -> Any:
+    auth = request.headers.get("Authorization")
+    hdrs = {"Authorization": auth} if auth else None
+    return await _proxy("PUT", f"{state.downstreams.customer_base}/me/password", json_body=payload, headers=hdrs)
+
+
+@app.post("/customers/me/request-otp")
+async def proxy_request_otp(request: Request) -> Any:
+    auth = request.headers.get("Authorization")
+    hdrs = {"Authorization": auth} if auth else None
+    return await _proxy("POST", f"{state.downstreams.customer_base}/me/request-otp", headers=hdrs)
+
+
+@app.delete("/customers/me")
+async def proxy_delete_account(payload: dict[str, Any], request: Request) -> Any:
+    auth = request.headers.get("Authorization")
+    hdrs = {"Authorization": auth} if auth else None
+    return await _proxy("DELETE", f"{state.downstreams.customer_base}/me", json_body=payload, headers=hdrs)
+
+
 # Customer Banking UI (composite)
 @app.get("/customer/transactions")
-async def customer_list_transactions(customer_id: str) -> Any:
-    url = f"{state.downstreams.transaction_base}/transactions?customer_id={customer_id}"
-    return await _proxy("GET", url)
+async def customer_list_transactions(customer_id: str, direction: str = "all") -> Any:
+    url = f"{state.downstreams.transaction_base}/transactions?customer_id={customer_id}&direction={direction}"
+    records = await _proxy("GET", url)
+    if not isinstance(records, list):
+        return records
+
+    # Collect IDs that need name enrichment (missing sender/recipient names)
+    ids_to_fetch: set[str] = set()
+    for r in records:
+        if r.get("direction") == "INCOMING" and not r.get("sender_name") and r.get("customer_id"):
+            ids_to_fetch.add(r["customer_id"])
+        if r.get("direction") == "OUTGOING" and not r.get("recipient_name") and r.get("recipient_customer_id"):
+            ids_to_fetch.add(r["recipient_customer_id"])
+
+    name_cache: dict[str, str] = {}
+    for cid in ids_to_fetch:
+        try:
+            contact = await _proxy("GET", f"{state.downstreams.customer_base}/internal/contact/{cid}")
+            if isinstance(contact, dict) and contact.get("full_name"):
+                name_cache[cid] = contact["full_name"]
+        except Exception:
+            pass
+
+    for r in records:
+        if r.get("direction") == "INCOMING" and not r.get("sender_name") and r.get("customer_id"):
+            r["sender_name"] = name_cache.get(r["customer_id"])
+        if r.get("direction") == "OUTGOING" and not r.get("recipient_name") and r.get("recipient_customer_id"):
+            r["recipient_name"] = name_cache.get(r["recipient_customer_id"])
+
+    return records
 
 
 @app.post("/customer/transactions")

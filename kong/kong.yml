@@ -1,0 +1,42 @@
+_format_version: "3.0"
+_transform: true
+
+services:
+  - name: ftds
+    url: http://nginx:8088
+    routes:
+      # Public: auth endpoints (register, login, OTP) — no JWT required
+      - name: ftds-auth
+        paths:
+          - /api/auth
+        strip_path: false
+
+      # Public: static UI files
+      - name: ftds-ui
+        paths:
+          - /
+        strip_path: false
+
+      # Protected: customer profile, transactions, fraud review — JWT required
+      - name: ftds-protected
+        paths:
+          - /api/customers
+          - /api/customer
+          - /api/fraud
+        strip_path: false
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+          - name: rate-limiting
+            config:
+              minute: 60
+              policy: local
+
+consumers:
+  - username: ftds-customers
+    jwt_secrets:
+      - algorithm: HS256
+        key: ftds-customer-service
+        secret: ftds-dev-secret-change-in-production-32chars

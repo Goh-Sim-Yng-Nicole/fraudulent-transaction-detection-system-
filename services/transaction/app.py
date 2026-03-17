@@ -167,9 +167,14 @@ async def health() -> dict[str, str]:
 
 
 @app.get("/transactions")
-async def list_transactions(customer_id: str = Query(...)) -> list[dict[str, Any]]:
+async def list_transactions(
+    customer_id: str = Query(...),
+    direction: str = Query("all"),
+) -> list[dict[str, Any]]:
+    if direction not in ("all", "outgoing", "incoming"):
+        raise HTTPException(status_code=400, detail="direction must be all, outgoing, or incoming")
     assert state.store is not None
-    records = await state.store.list_by_customer(customer_id)
+    records = await state.store.list_by_customer(customer_id, direction=direction)
     return [r.model_dump(mode="json") for r in records]
 
 

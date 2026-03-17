@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FTDS Banking | Home</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+  <style>
+    body { background: #f0f4f8; }
+    .navbar { background: linear-gradient(135deg, #1a56db 0%, #0e3a8c 100%); }
+    .navbar-brand { font-weight: 700; font-size: 1.2rem; letter-spacing: -.3px; }
+    .card { border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,.07); border: none; }
+    .card-header { background: #fff; border-bottom: 1px solid #e9ecef; border-radius: 12px 12px 0 0 !important; font-weight: 600; }
+    .txn-row { cursor: pointer; transition: background .15s; }
+    .txn-row:hover { background: #f8faff; }
+    .badge-PENDING    { background-color: #e0a820; }
+    .badge-APPROVED   { background-color: #0e7f4e; }
+    .badge-REJECTED   { background-color: #c0392b; }
+    .badge-FLAGGED    { background-color: #d97706; }
+    .badge-RESOLVED   { background-color: #0891b2; }
+    .score-bar { height: 8px; border-radius: 4px; background: #e9ecef; }
+    .score-fill { height: 8px; border-radius: 4px; background: linear-gradient(90deg, #22c55e, #f59e0b, #ef4444); }
+    .section-title { font-size: 1rem; font-weight: 700; color: #374151; margin-bottom: 1rem; }
+    .empty-state { text-align: center; color: #9ca3af; padding: 3rem 0; }
+    .empty-state i { font-size: 2.5rem; display: block; margin-bottom: .5rem; }
+    .poll-indicator { font-size: .78rem; color: #6b7280; }
+    #toastContainer { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 9999; }
+    input[type="password"]::placeholder { color: #c9cdd4; opacity: 1; }
+  </style>
+</head>
+<body>
+
+<!-- NAVBAR -->
+<nav class="navbar navbar-dark px-3 py-2">
+  <span class="navbar-brand"><i class="bi bi-shield-check me-2"></i>FTDS Banking</span>
+  <div class="d-flex align-items-center gap-3">
+    <span class="text-white-50 small" id="navEmail"></span>
+    <span class="text-white fw-semibold" id="navName"></span>
+    <button class="btn btn-sm btn-outline-light" data-bs-toggle="modal" data-bs-target="#accountModal">
+      <i class="bi bi-person-circle me-1"></i>Account
+    </button>
+    <button class="btn btn-sm btn-outline-light" onclick="logout()"><i class="bi bi-box-arrow-right me-1"></i>Logout</button>
+  </div>
+</nav>
+
+<div class="container-fluid py-4 px-4">
+
+  <div class="row g-4 align-items-start">
+
+  <!-- LEFT (wide) / TOP (narrow): New Transaction -->
+    <div class="col-12 col-lg-4">
+      <div class="card">
+        <div class="card-header py-3"><i class="bi bi-send me-2 text-primary"></i>New Transaction</div>
+        <div class="card-body">
+          <div id="txnAlert" class="alert d-none" role="alert"></div>
+
+          <form id="txnForm">
+            <!-- Recipient type toggle -->
+            <div class="mb-3">
+              <div class="btn-group w-100" role="group">
+                <input type="radio" class="btn-check" name="recipientType" id="typeMerchant" value="merchant" checked />
+                <label class="btn btn-outline-secondary btn-sm fw-semibold" for="typeMerchant">
+                  <i class="bi bi-shop me-1"></i>Pay Merchant (UEN)
+                </label>
+                <input type="radio" class="btn-check" name="recipientType" id="typeCustomer" value="customer" />
+                <label class="btn btn-outline-secondary btn-sm fw-semibold" for="typeCustomer">
+                  <i class="bi bi-person-fill me-1"></i>Send via Email / Phone
+                </label>
+              </div>
+            </div>
+
+            <!-- Merchant ID field -->
+            <div class="mb-3" id="merchantField">
+              <label class="form-label fw-semibold small">Merchant ID / UEN</label>
+              <input type="text" class="form-control" id="txnMerchant" placeholder="e.g. 202312345A" />
+            </div>
+
+            <!-- Customer email/phone lookup -->
+            <div class="mb-3 d-none" id="customerField">
+              <label class="form-label fw-semibold small">Recipient Email</label>
+              <div class="input-group">
+                <input type="email" class="form-control" id="recipientQuery"
+                       placeholder="email@example.com" />
+                <button class="btn btn-outline-secondary" type="button" onclick="lookupRecipient()">
+                  <span class="spinner-border spinner-border-sm d-none" id="lookupSpinner"></span>
+                  <i class="bi bi-search" id="lookupIcon"></i>
+                </button>
+              </div>
+              <div class="form-text text-muted" style="font-size:.78rem">
+                Enter the recipient's email address
+              </div>
+              <div id="recipientInfo" class="d-none mt-2 p-2 bg-light border rounded small">
+                <i class="bi bi-person-check-fill text-success me-1"></i>
+                <span id="recipientName" class="fw-semibold"></span>
+                <span class="text-muted ms-1" id="recipientEmailLabel"></span>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold small">Amount</label>
+              <div class="input-group">
+                <span class="input-group-text">$</span>
+                <input type="number" class="form-control" id="txnAmount" min="0.01" step="0.01" placeholder="0.00" required />
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold small">Currency</label>
+              <select class="form-select" id="txnCurrency">
+                <option value="SGD" selected>SGD – Singapore Dollar</option>
+                <option value="USD">USD – US Dollar</option>
+                <option value="EUR">EUR – Euro</option>
+                <option value="GBP">GBP – British Pound</option>
+                <option value="MYR">MYR – Malaysian Ringgit</option>
+                <option value="CNY">CNY – Chinese Yuan</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold small">Card Type</label>
+              <select class="form-select" id="txnCardType">
+                <option value="CREDIT" selected>Credit</option>
+                <option value="DEBIT">Debit</option>
+                <option value="PREPAID">Prepaid</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold small">Country</label>
+              <select class="form-select" id="txnCountry">
+                <option value="SG" selected>🇸🇬 Singapore (SG)</option>
+                <option value="AU">🇦🇺 Australia (AU)</option>
+                <option value="BR">🇧🇷 Brazil (BR)</option>
+                <option value="CA">🇨🇦 Canada (CA)</option>
+                <option value="CN">🇨🇳 China (CN)</option>
+                <option value="DE">🇩🇪 Germany (DE)</option>
+                <option value="FR">🇫🇷 France (FR)</option>
+                <option value="GB">🇬🇧 United Kingdom (GB)</option>
+                <option value="ID">🇮🇩 Indonesia (ID)</option>
+                <option value="IN">🇮🇳 India (IN)</option>
+                <option value="JP">🇯🇵 Japan (JP)</option>
+                <option value="MY">🇲🇾 Malaysia (MY)</option>
+                <option value="NG">🇳🇬 Nigeria (NG)</option>
+                <option value="PH">🇵🇭 Philippines (PH)</option>
+                <option value="PK">🇵🇰 Pakistan (PK)</option>
+                <option value="RU">🇷🇺 Russia (RU)</option>
+                <option value="UA">🇺🇦 Ukraine (UA)</option>
+                <option value="US">🇺🇸 United States (US)</option>
+              </select>
+            </div>
+            <div class="mb-4 p-2 bg-light rounded border small text-muted">
+              <i class="bi bi-clock me-1"></i>Transaction time: <strong id="currentHourDisplay">–</strong>
+            </div>
+            <button type="submit" class="btn btn-primary w-100 fw-semibold" id="txnSubmitBtn">
+              <span class="spinner-border spinner-border-sm d-none me-2" id="txnSpinner"></span>
+              <i class="bi bi-send me-1"></i>Submit Transaction
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+  <!-- RIGHT (wide) / BOTTOM (narrow): My Transactions -->
+    <div class="col-12 col-lg-8">
+      <div class="card">
+        <div class="card-header py-3">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <span><i class="bi bi-list-ul me-2 text-primary"></i>My Transactions</span>
+            <button class="btn btn-sm btn-outline-secondary" onclick="loadTransactions()">
+              <i class="bi bi-arrow-clockwise"></i> Refresh
+            </button>
+          </div>
+          <!-- Direction filter -->
+          <div class="btn-group btn-group-sm w-100" role="group" id="directionFilter">
+            <input type="radio" class="btn-check" name="direction" id="dirAll" value="all" checked />
+            <label class="btn btn-outline-secondary" for="dirAll"><i class="bi bi-collection me-1"></i>All</label>
+            <input type="radio" class="btn-check" name="direction" id="dirOut" value="outgoing" />
+            <label class="btn btn-outline-secondary" for="dirOut"><i class="bi bi-arrow-up-right me-1"></i>Outgoing</label>
+            <input type="radio" class="btn-check" name="direction" id="dirIn" value="incoming" />
+            <label class="btn btn-outline-secondary" for="dirIn"><i class="bi bi-arrow-down-left me-1"></i>Incoming</label>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <div id="txnList">
+            <div class="empty-state">
+              <i class="bi bi-inbox"></i>Loading your transactions…
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end .row -->
+</div>
+
+<!-- TRANSACTION DETAIL MODAL -->
+<div class="modal fade" id="txnDetailModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content" style="border-radius:12px">
+      <div class="modal-header" style="background:#f8faff; border-radius:12px 12px 0 0">
+        <h5 class="modal-title fw-bold"><i class="bi bi-receipt me-2"></i>Transaction Detail</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="txnDetailBody">Loading…</div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button class="btn btn-warning fw-semibold d-none" id="openAppealBtn" onclick="openAppeal()">
+          <i class="bi bi-flag me-1"></i>Submit Appeal
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- APPEAL MODAL -->
+<div class="modal fade" id="appealModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content" style="border-radius:12px">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold"><i class="bi bi-flag me-2"></i>Submit Appeal</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3">Explain why you believe this transaction decision should be reviewed.</p>
+        <div id="appealAlert" class="alert d-none" role="alert"></div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Transaction ID</label>
+          <input type="text" class="form-control" id="appealTxnId" readonly />
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Reason for Appeal</label>
+          <textarea class="form-control" id="appealReason" rows="4"
+                    placeholder="Describe why you are appealing this decision…" required></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-warning fw-semibold" id="appealSubmitBtn" onclick="submitAppeal()">
+          <span class="spinner-border spinner-border-sm d-none me-2" id="appealSpinner"></span>
+          Submit Appeal
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toastContainer"></div>
+
+<!-- ACCOUNT MODAL -->
+<div class="modal fade" id="accountModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content" style="border-radius:12px">
+      <div class="modal-header" style="background:#f8faff;border-radius:12px 12px 0 0">
+        <h5 class="modal-title fw-bold"><i class="bi bi-person-circle me-2"></i>My Account</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <!-- Sub-tabs -->
+        <ul class="nav nav-tabs px-3 pt-3" id="accountTabs">
+          <li class="nav-item"><button class="nav-link active" data-acctab="profile">Profile</button></li>
+          <li class="nav-item"><button class="nav-link" data-acctab="password">Change Password</button></li>
+          <li class="nav-item"><button class="nav-link text-danger" data-acctab="delete">Delete Account</button></li>
+        </ul>
+
+        <div class="p-4">
+
+          <!-- ── PROFILE ── -->
+          <div id="acctProfile">
+            <div id="profileAlert" class="alert d-none mb-3"></div>
+            <div class="row g-3 mb-3">
+              <div class="col-12">
+                <label class="form-label fw-semibold small">Full Name</label>
+                <input class="form-control" id="profName" type="text" />
+              </div>
+              <div class="col-12">
+                <label class="form-label fw-semibold small">Email <span class="text-muted">(read-only)</span></label>
+                <input class="form-control bg-light" id="profEmail" type="email" readonly />
+              </div>
+              <div class="col-12">
+                <label class="form-label fw-semibold small">Phone</label>
+                <input class="form-control" id="profPhone" type="tel" placeholder="+65 xxxx xxxx" />
+              </div>
+            </div>
+            <button class="btn btn-primary fw-semibold" id="saveProfileBtn" onclick="saveProfile()">
+              <span class="spinner-border spinner-border-sm d-none me-1" id="profSpinner"></span>
+              <i class="bi bi-check-circle me-1"></i>Save Changes
+            </button>
+          </div>
+
+          <!-- ── CHANGE PASSWORD ── -->
+          <div id="acctPassword" class="d-none">
+            <div id="pwdAlert" class="alert d-none mb-3"></div>
+            <p class="text-muted small mb-3">
+              An OTP will be sent to your email to confirm the password change.
+              First request the OTP, then fill in all fields.
+            </p>
+            <div class="mb-3">
+              <label class="form-label fw-semibold small">Current Password</label>
+              <input class="form-control" id="pwdCurrent" type="password" placeholder="••••••••" />
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold small">New Password <span class="text-muted">(min 8 chars)</span></label>
+              <input class="form-control" id="pwdNew" type="password" placeholder="••••••••" />
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold small">Email OTP</label>
+              <div class="input-group">
+                <input class="form-control" id="pwdOtp" type="text" maxlength="6" placeholder="6-digit code" style="letter-spacing:6px;font-weight:700" />
+                <button class="btn btn-outline-secondary" id="pwdOtpBtn" type="button" onclick="requestOtp('password')">
+                  <span class="spinner-border spinner-border-sm d-none me-1" id="pwdOtpSpinner"></span>
+                  Send OTP
+                </button>
+              </div>
+            </div>
+            <button class="btn btn-primary fw-semibold" onclick="changePassword()">
+              <span class="spinner-border spinner-border-sm d-none me-1" id="pwdSpinner"></span>
+              <i class="bi bi-key me-1"></i>Change Password
+            </button>
+          </div>
+
+          <!-- ── DELETE ACCOUNT ── -->
+          <div id="acctDelete" class="d-none">
+            <div id="delAlert" class="alert d-none mb-3"></div>
+            <div class="alert alert-danger py-2 small mb-3">
+              <i class="bi bi-exclamation-triangle-fill me-1"></i>
+              This action is <strong>irreversible</strong>. Your account will be deactivated immediately.
+            </div>
+            <p class="text-muted small mb-3">Enter your password and the OTP sent to your email to confirm deletion.</p>
+            <div class="mb-3">
+              <label class="form-label fw-semibold small">Password</label>
+              <input class="form-control" id="delPassword" type="password" placeholder="••••••••" />
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold small">Email OTP</label>
+              <div class="input-group">
+                <input class="form-control" id="delOtp" type="text" maxlength="6" placeholder="6-digit code" style="letter-spacing:6px;font-weight:700" />
+                <button class="btn btn-outline-secondary" type="button" onclick="requestOtp('delete')">
+                  <span class="spinner-border spinner-border-sm d-none me-1" id="delOtpSpinner"></span>
+                  Send OTP
+                </button>
+              </div>
+            </div>
+            <button class="btn btn-danger fw-semibold" onclick="deleteAccount()">
+              <span class="spinner-border spinner-border-sm d-none me-1" id="delSpinner"></span>
+              <i class="bi bi-trash me-1"></i>Delete My Account
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  const API = '/api';
+  let customer = null;
+  let token = null;
+  let pollInterval = null;
+  let selectedTxnId = null;
+  let recipientCustomerId = null;   // set after successful lookup
+
+  // ── Auth guard ──────────────────────────────────────────────────
+  token = localStorage.getItem('ftds_token');
+  customer = JSON.parse(localStorage.getItem('ftds_customer') || 'null');
+  if (!token || !customer) { window.location.href = 'index.html'; }
+
+  document.getElementById('navName').textContent = customer.full_name;
+  document.getElementById('navEmail').textContent = customer.email;
+
+
+  function logout() {
+    localStorage.removeItem('ftds_token');
+    localStorage.removeItem('ftds_customer');
+    window.location.href = 'index.html';
+  }
+
+  function authHeaders() {
+    return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+  }
+
+  // ── Toast helper ────────────────────────────────────────────────
+  function showToast(msg, type = 'success') {
+    const id = 'toast_' + Date.now();
+    const icons = { success: 'check-circle-fill text-success', danger: 'x-circle-fill text-danger', warning: 'exclamation-triangle-fill text-warning' };
+    document.getElementById('toastContainer').insertAdjacentHTML('beforeend', `
+      <div id="${id}" class="toast align-items-center border-0 mb-2" role="alert">
+        <div class="d-flex">
+          <div class="toast-body d-flex align-items-center gap-2">
+            <i class="bi bi-${icons[type] || icons.success}"></i>${msg}
+          </div>
+          <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+      </div>`);
+    const el = document.getElementById(id);
+    new bootstrap.Toast(el, { delay: 4000 }).show();
+    el.addEventListener('hidden.bs.toast', () => el.remove());
+  }
+
+  // ── Status badge ────────────────────────────────────────────────
+  function statusBadge(status) {
+    const icons = {
+      PENDING: 'hourglass-split', APPROVED: 'check-circle-fill',
+      REJECTED: 'x-circle-fill', FLAGGED: 'exclamation-triangle-fill', RESOLVED: 'patch-check-fill'
+    };
+    return `<span class="badge badge-${status} text-white px-2 py-1">
+              <i class="bi bi-${icons[status] || 'circle'} me-1"></i>${status}
+            </span>`;
+  }
+
+  // ── Load transactions ────────────────────────────────────────────
+  function getDirection() {
+    return document.querySelector('input[name="direction"]:checked')?.value || 'all';
+  }
+
+  async function loadTransactions() {
+    try {
+      const dir = getDirection();
+      const res = await fetch(
+        `${API}/customer/transactions?customer_id=${customer.customer_id}&direction=${dir}`,
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+      if (res.status === 401) { logout(); return; }
+      const data = await res.json();
+      renderTransactions(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('loadTransactions error:', err);
+    }
+  }
+
+  // Bind direction filter buttons
+  document.querySelectorAll('input[name="direction"]').forEach(el => {
+    el.addEventListener('change', () => loadTransactions());
+  });
+
+  function directionBadge(t) {
+    if (!t.direction) return '';
+    if (t.direction === 'INCOMING') {
+      return `<span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 small me-1">
+                <i class="bi bi-arrow-down-left"></i> In
+              </span>`;
+    }
+    return `<span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 small me-1">
+              <i class="bi bi-arrow-up-right"></i> Out
+            </span>`;
+  }
+
+  function fmtUtc(dt) {
+    // Format as YYYY-MM-DD HH:MM:SS.mmm UTC
+    return new Date(dt).toISOString().replace('T', ' ').replace('Z', ' UTC');
+  }
+
+  function renderTransactions(list) {
+    const container = document.getElementById('txnList');
+    if (!list.length) {
+      container.innerHTML = `<div class="empty-state"><i class="bi bi-inbox"></i>No transactions found.</div>`;
+      return;
+    }
+    container.innerHTML = `
+      <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle">
+          <thead class="table-light">
+            <tr>
+              <th class="ps-3">Transaction ID</th>
+              <th>Amount</th>
+              <th>${{ all: 'To / From', outgoing: 'To', incoming: 'From' }[getDirection()] || 'To / From'}</th>
+              <th>Status</th>
+              <th>Fraud Score</th>
+              <th>Date (UTC)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${list.map(t => {
+              let toFrom;
+              if (t.recipient_customer_id) {
+                if (t.direction === 'INCOMING') {
+                  const name = t.sender_name || t.customer_id || '—';
+                  toFrom = `<span class="small text-success fw-semibold"><i class="bi bi-arrow-down-left me-1"></i>From: ${name}</span>`;
+                } else {
+                  const name = t.recipient_name || t.recipient_customer_id || '—';
+                  toFrom = `<span class="small text-primary fw-semibold"><i class="bi bi-arrow-up-right me-1"></i>To: ${name}</span>`;
+                }
+              } else {
+                toFrom = `<span class="small text-secondary"><i class="bi bi-shop me-1"></i>To: ${t.merchant_id || '—'}</span>`;
+              }
+              return `
+              <tr class="txn-row" onclick="viewTransaction('${t.transaction_id}')">
+                <td class="ps-3 font-monospace small">${t.transaction_id}</td>
+                <td class="fw-semibold">${t.currency} ${Number(t.amount).toFixed(2)}</td>
+                <td>${toFrom}</td>
+                <td>${statusBadge(t.status)}</td>
+                <td>
+                  ${t.fraud_score !== null
+                    ? `<div class="d-flex align-items-center gap-2">
+                        <div class="score-bar" style="width:80px"><div class="score-fill" style="width:${t.fraud_score}%"></div></div>
+                        <span class="small fw-semibold">${t.fraud_score}</span>
+                       </div>`
+                    : '<span class="text-muted small">Pending…</span>'}
+                </td>
+                <td class="text-muted small font-monospace">${fmtUtc(t.created_at)}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  // ── View transaction detail ──────────────────────────────────────
+  async function viewTransaction(txnId) {
+    selectedTxnId = txnId;
+    const modal = new bootstrap.Modal(document.getElementById('txnDetailModal'));
+    document.getElementById('txnDetailBody').innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div></div>';
+    document.getElementById('openAppealBtn').classList.add('d-none');
+    modal.show();
+
+    try {
+      const [txnRes, decRes] = await Promise.all([
+        fetch(`${API}/customer/transactions/${txnId}`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch(`${API}/customer/transactions/${txnId}/decision`, { headers: { 'Authorization': `Bearer ${token}` } }),
+      ]);
+      const txn = await txnRes.json();
+      const dec = await decRes.json();
+
+      const canAppeal = ['FLAGGED', 'REJECTED'].includes(txn.status);
+      if (canAppeal) document.getElementById('openAppealBtn').classList.remove('d-none');
+
+      const scoreHtml = dec.fraud_score !== null
+        ? `<div class="score-bar mb-1"><div class="score-fill" style="width:${dec.fraud_score}%"></div></div>
+           <div class="small text-muted">${dec.fraud_score}/100 — ${riskLabel(dec.fraud_score)}</div>`
+        : '<span class="text-muted">Not scored yet</span>';
+
+      const transferRows = txn.recipient_customer_id
+        ? `<tr><td class="text-muted">Direction</td><td>${txn.direction || '—'}</td></tr>
+           <tr><td class="text-muted">Recipient</td><td class="font-monospace small">${txn.recipient_customer_id}</td></tr>`
+        : `<tr><td class="text-muted">Merchant</td><td>${txn.merchant_id || '—'}</td></tr>`;
+
+      document.getElementById('txnDetailBody').innerHTML = `
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="p-3 bg-light rounded">
+              <div class="small text-muted mb-2 fw-semibold text-uppercase">Transaction Info</div>
+              <table class="table table-sm table-borderless mb-0 small">
+                <tr><td class="text-muted">ID</td><td class="font-monospace">${txn.transaction_id}</td></tr>
+                <tr><td class="text-muted">Amount</td><td class="fw-semibold">${txn.currency} ${Number(txn.amount).toFixed(2)}</td></tr>
+                <tr><td class="text-muted">Card</td><td>${txn.card_type}</td></tr>
+                <tr><td class="text-muted">Country</td><td>${txn.country}</td></tr>
+                ${transferRows}
+                <tr><td class="text-muted">Hour (UTC)</td><td>${txn.hour_utc}:00</td></tr>
+                <tr><td class="text-muted">Submitted</td><td>${new Date(txn.created_at).toLocaleString()}</td></tr>
+                <tr><td class="text-muted">Updated</td><td>${new Date(txn.updated_at).toLocaleString()}</td></tr>
+              </table>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="p-3 bg-light rounded mb-3">
+              <div class="small text-muted mb-2 fw-semibold text-uppercase">Decision</div>
+              <div class="mb-2">${statusBadge(txn.status)}</div>
+              ${scoreHtml}
+              ${dec.outcome_reason
+                ? `<div class="mt-2 p-2 border-start border-3 border-warning bg-white rounded small">
+                     <i class="bi bi-info-circle me-1 text-warning"></i>${dec.outcome_reason}
+                   </div>`
+                : ''}
+            </div>
+            ${canAppeal ? `
+              <div class="alert alert-warning py-2 small mb-0">
+                <i class="bi bi-exclamation-triangle me-1"></i>
+                You may appeal this decision using the button below.
+              </div>` : ''}
+          </div>
+        </div>`;
+    } catch (err) {
+      document.getElementById('txnDetailBody').innerHTML = `<div class="alert alert-danger">Failed to load: ${err.message}</div>`;
+    }
+  }
+
+  function riskLabel(score) {
+    if (score <= 30) return '🟢 Low risk';
+    if (score <= 60) return '🟡 Medium risk';
+    if (score <= 80) return '🟠 High risk';
+    return '🔴 Very high risk';
+  }
+
+  // ── Open appeal modal ────────────────────────────────────────────
+  function openAppeal() {
+    bootstrap.Modal.getInstance(document.getElementById('txnDetailModal')).hide();
+    document.getElementById('appealTxnId').value = selectedTxnId;
+    document.getElementById('appealReason').value = '';
+    document.getElementById('appealAlert').className = 'alert d-none';
+    new bootstrap.Modal(document.getElementById('appealModal')).show();
+  }
+
+  // ── Submit appeal ────────────────────────────────────────────────
+  async function submitAppeal() {
+    const reason = document.getElementById('appealReason').value.trim();
+    if (!reason) {
+      document.getElementById('appealAlert').className = 'alert alert-danger';
+      document.getElementById('appealAlert').textContent = 'Please provide a reason for your appeal.';
+      return;
+    }
+    const spinner = document.getElementById('appealSpinner');
+    spinner.classList.remove('d-none');
+    document.getElementById('appealSubmitBtn').disabled = true;
+    try {
+      const res = await fetch(`${API}/customer/appeals`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          transaction_id: selectedTxnId,
+          reason_for_appeal: reason,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Appeal submission failed');
+      bootstrap.Modal.getInstance(document.getElementById('appealModal')).hide();
+      showToast('Appeal submitted successfully!');
+      await loadTransactions();
+    } catch (err) {
+      document.getElementById('appealAlert').className = 'alert alert-danger';
+      document.getElementById('appealAlert').textContent = err.message;
+    } finally {
+      spinner.classList.add('d-none');
+      document.getElementById('appealSubmitBtn').disabled = false;
+    }
+  }
+
+  // ── UTC time display (updates every second) ───────────────────────
+  function updateUtcTime() {
+    document.getElementById('currentHourDisplay').textContent =
+      new Date().toISOString().replace('T', ' ').replace('Z', ' UTC');
+  }
+  updateUtcTime();
+  setInterval(updateUtcTime, 1000);
+
+  // ── Recipient type toggle ────────────────────────────────────────
+  document.querySelectorAll('input[name="recipientType"]').forEach(el => {
+    el.addEventListener('change', () => {
+      const isCust = el.value === 'customer';
+      document.getElementById('merchantField').classList.toggle('d-none', isCust);
+      document.getElementById('customerField').classList.toggle('d-none', !isCust);
+      if (!isCust) {
+        recipientCustomerId = null;
+        document.getElementById('recipientInfo').classList.add('d-none');
+        document.getElementById('recipientQuery').value = '';
+      }
+    });
+  });
+
+  // ── Recipient lookup (by email or phone) ─────────────────────────
+  async function lookupRecipient() {
+    const query = document.getElementById('recipientQuery').value.trim();
+    if (!query) { showToast('Enter recipient email address', 'warning'); return; }
+    const spinner = document.getElementById('lookupSpinner');
+    const icon = document.getElementById('lookupIcon');
+    spinner.classList.remove('d-none');
+    icon.classList.add('d-none');
+    recipientCustomerId = null;
+    document.getElementById('recipientInfo').classList.add('d-none');
+    try {
+      const res = await fetch(`${API}/customers/lookup?query=${encodeURIComponent(query)}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Customer not found');
+      recipientCustomerId = data.customer_id;
+      document.getElementById('recipientName').textContent = data.full_name;
+      document.getElementById('recipientEmailLabel').textContent = `(${data.email})`;
+      document.getElementById('recipientInfo').classList.remove('d-none');
+      showToast(`Found: ${data.full_name}`);
+    } catch (err) {
+      showToast(err.message, 'danger');
+    } finally {
+      spinner.classList.add('d-none');
+      icon.classList.remove('d-none');
+    }
+  }
+
+  // ── Submit transaction ───────────────────────────────────────────
+  document.getElementById('txnForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const alertEl = document.getElementById('txnAlert');
+    alertEl.className = 'alert d-none';
+    const isCustomer = document.querySelector('input[name="recipientType"]:checked').value === 'customer';
+
+    if (isCustomer && !recipientCustomerId) {
+      alertEl.className = 'alert alert-danger';
+      alertEl.textContent = 'Please look up and confirm the recipient first.';
+      return;
+    }
+
+    const spinner = document.getElementById('txnSpinner');
+    spinner.classList.remove('d-none');
+    document.getElementById('txnSubmitBtn').disabled = true;
+
+    try {
+      const body = {
+        amount: parseFloat(document.getElementById('txnAmount').value),
+        currency: document.getElementById('txnCurrency').value,
+        card_type: document.getElementById('txnCardType').value,
+        country: document.getElementById('txnCountry').value,
+        merchant_id: isCustomer ? null : document.getElementById('txnMerchant').value,
+        customer_id: customer.customer_id,
+        sender_name: customer.full_name,
+      };
+      if (isCustomer) {
+        body.recipient_customer_id = recipientCustomerId;
+        body.recipient_name = document.getElementById('recipientName').textContent;
+      }
+      const res = await fetch(`${API}/customer/transactions`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail));
+      showToast(`Transaction submitted! ID: ${data.transaction_id.slice(0,8)}…`);
+      document.getElementById('txnForm').reset();
+      recipientCustomerId = null;
+      document.getElementById('recipientInfo').classList.add('d-none');
+      await loadTransactions();
+    } catch (err) {
+      alertEl.className = 'alert alert-danger';
+      alertEl.textContent = err.message;
+    } finally {
+      spinner.classList.add('d-none');
+      document.getElementById('txnSubmitBtn').disabled = false;
+    }
+  });
+
+  // ── Auto-poll every 4s for status updates on pending/flagged transactions ─
+  function startPolling() {
+    pollInterval = setInterval(async () => {
+      const rows = document.querySelectorAll('.txn-row');
+      const hasPending = Array.from(rows).some(r =>
+        r.textContent.includes('PENDING') || r.textContent.includes('FLAGGED')
+      );
+      if (hasPending) await loadTransactions();
+    }, 4000);
+  }
+
+  // ── Init ─────────────────────────────────────────────────────────
+  loadTransactions();
+  startPolling();
+
+  // ── Account modal tab switching ──────────────────────────────────
+  document.querySelectorAll('[data-acctab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-acctab]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      ['acctProfile','acctPassword','acctDelete'].forEach(id =>
+        document.getElementById(id).classList.add('d-none'));
+      const map = { profile:'acctProfile', password:'acctPassword', delete:'acctDelete' };
+      document.getElementById(map[btn.dataset.acctab]).classList.remove('d-none');
+    });
+  });
+
+  // Pre-fill profile fields when modal opens
+  document.getElementById('accountModal').addEventListener('show.bs.modal', () => {
+    document.getElementById('profName').value  = customer.full_name || '';
+    document.getElementById('profEmail').value = customer.email || '';
+    document.getElementById('profPhone').value = customer.phone || '';
+    ['profileAlert','pwdAlert','delAlert'].forEach(id =>
+      document.getElementById(id).className = 'alert d-none');
+  });
+
+  // ── Save profile ──────────────────────────────────────────────────
+  async function saveProfile() {
+    const alertEl = document.getElementById('profileAlert');
+    alertEl.className = 'alert d-none';
+    const spinner = document.getElementById('profSpinner');
+    spinner.classList.remove('d-none');
+    document.getElementById('saveProfileBtn').disabled = true;
+    try {
+      const res = await fetch(`${API}/customers/me`, {
+        method: 'PUT', headers: authHeaders(),
+        body: JSON.stringify({
+          full_name: document.getElementById('profName').value.trim() || null,
+          phone:     document.getElementById('profPhone').value.trim() || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Update failed');
+      customer = { ...customer, ...data };
+      localStorage.setItem('ftds_customer', JSON.stringify(customer));
+      document.getElementById('navName').textContent = customer.full_name;
+      alertEl.className = 'alert alert-success';
+      alertEl.textContent = 'Profile updated successfully!';
+    } catch (err) {
+      alertEl.className = 'alert alert-danger';
+      alertEl.textContent = err.message;
+    } finally {
+      spinner.classList.add('d-none');
+      document.getElementById('saveProfileBtn').disabled = false;
+    }
+  }
+
+  // ── Request OTP for sensitive operations ──────────────────────────
+  async function requestOtp(context) {
+    const spinnerId = context === 'password' ? 'pwdOtpSpinner' : 'delOtpSpinner';
+    document.getElementById(spinnerId).classList.remove('d-none');
+    try {
+      const res = await fetch(`${API}/customers/me/request-otp`, {
+        method: 'POST', headers: authHeaders(),
+      });
+      if (!res.ok) throw new Error('Failed to send OTP');
+      showToast(`OTP sent to ${customer.email}`);
+    } catch (err) {
+      showToast(err.message, 'danger');
+    } finally {
+      document.getElementById(spinnerId).classList.add('d-none');
+    }
+  }
+
+  // ── Change password ───────────────────────────────────────────────
+  async function changePassword() {
+    const alertEl = document.getElementById('pwdAlert');
+    alertEl.className = 'alert d-none';
+    const spinner = document.getElementById('pwdSpinner');
+    spinner.classList.remove('d-none');
+    try {
+      const res = await fetch(`${API}/customers/me/password`, {
+        method: 'PUT', headers: authHeaders(),
+        body: JSON.stringify({
+          current_password: document.getElementById('pwdCurrent').value,
+          new_password:     document.getElementById('pwdNew').value,
+          otp_code:         document.getElementById('pwdOtp').value,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Failed');
+      alertEl.className = 'alert alert-success';
+      alertEl.textContent = 'Password changed! Logging out…';
+      setTimeout(() => logout(), 2500);
+    } catch (err) {
+      alertEl.className = 'alert alert-danger';
+      alertEl.textContent = err.message;
+    } finally {
+      spinner.classList.add('d-none');
+    }
+  }
+
+  // ── Delete account ────────────────────────────────────────────────
+  async function deleteAccount() {
+    const alertEl = document.getElementById('delAlert');
+    alertEl.className = 'alert d-none';
+    const spinner = document.getElementById('delSpinner');
+    spinner.classList.remove('d-none');
+    try {
+      const res = await fetch(`${API}/customers/me`, {
+        method: 'DELETE', headers: authHeaders(),
+        body: JSON.stringify({
+          password: document.getElementById('delPassword').value,
+          otp_code: document.getElementById('delOtp').value,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Failed');
+      alertEl.className = 'alert alert-success';
+      alertEl.textContent = 'Account deleted. Redirecting…';
+      setTimeout(() => logout(), 2000);
+    } catch (err) {
+      alertEl.className = 'alert alert-danger';
+      alertEl.textContent = err.message;
+    } finally {
+      spinner.classList.add('d-none');
+    }
+  }
+</script>
+</body>
+</html>
