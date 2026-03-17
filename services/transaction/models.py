@@ -4,6 +4,7 @@ from datetime import datetime
 
 from sqlalchemy import DateTime, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from typing import Optional
 
 
 class Base(DeclarativeBase):
@@ -21,6 +22,7 @@ class Transaction(Base):
     merchant_id: Mapped[str] = mapped_column(String(64))
     hour_utc: Mapped[int] = mapped_column(Integer)
 
+    customer_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(16), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)

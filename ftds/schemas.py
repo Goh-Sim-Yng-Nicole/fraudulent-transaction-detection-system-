@@ -38,6 +38,7 @@ class TransactionCreateRequest(BaseModel):
     country: str
     merchant_id: str
     hour_utc: int = Field(ge=0, le=23)
+    customer_id: Optional[str] = None
 
 
 class TransactionRecord(TransactionCreateRequest):

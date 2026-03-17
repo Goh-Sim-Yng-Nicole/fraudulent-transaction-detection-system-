@@ -6,7 +6,7 @@ import os
 from contextlib import asynccontextmanager
 from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import RedirectResponse, Response
 
 from ftds import kafka
@@ -164,6 +164,13 @@ async def favicon() -> Response:
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/transactions")
+async def list_transactions(customer_id: str = Query(...)) -> list[dict[str, Any]]:
+    assert state.store is not None
+    records = await state.store.list_by_customer(customer_id)
+    return [r.model_dump(mode="json") for r in records]
 
 
 @app.post("/transactions")

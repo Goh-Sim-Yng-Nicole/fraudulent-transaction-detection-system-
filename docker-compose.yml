@@ -1,4 +1,20 @@
 services:
+  postgres-customer:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_CUSTOMER_DB:-ftds_customer}
+      POSTGRES_USER: ${POSTGRES_CUSTOMER_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_CUSTOMER_PASSWORD:-postgres}
+    ports:
+      - "5435:5432"
+    volumes:
+      - ftds_postgres_customer_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   postgres-transaction:
     image: postgres:16
     environment:
@@ -262,6 +278,33 @@ services:
       kafka-init:
         condition: service_completed_successfully
 
+  customer:
+    build:
+      context: .
+      dockerfile: services/customer/Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_CUSTOMER_USER:-postgres}:${POSTGRES_CUSTOMER_PASSWORD:-postgres}@postgres-customer:5432/${POSTGRES_CUSTOMER_DB:-ftds_customer}
+    ports:
+      - "8005:8005"
+    depends_on:
+      postgres-customer:
+        condition: service_healthy
+      customer-migrate:
+        condition: service_completed_successfully
+
+  customer-migrate:
+    build:
+      context: .
+      dockerfile: services/customer/Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_CUSTOMER_USER:-postgres}:${POSTGRES_CUSTOMER_PASSWORD:-postgres}@postgres-customer:5432/${POSTGRES_CUSTOMER_DB:-ftds_customer}
+    command: ["python", "-m", "services.customer.migrate"]
+    depends_on:
+      postgres-customer:
+        condition: service_healthy
+
   gateway:
     build:
       context: .
@@ -271,6 +314,7 @@ services:
       TRANSACTION_BASE_URL: http://transaction:8000
       FRAUD_REVIEW_BASE_URL: http://fraud-review:8002
       APPEAL_BASE_URL: http://appeal:8003
+      CUSTOMER_BASE_URL: http://customer:8005
     ports:
       - "8004:8004"
     depends_on:
@@ -280,8 +324,23 @@ services:
         condition: service_started
       appeal:
         condition: service_started
+      customer:
+        condition: service_started
+
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      gateway:
+        condition: service_started
+      customer:
+        condition: service_started
 
 volumes:
   ftds_postgres_transaction_data:
   ftds_postgres_appeal_data:
   ftds_postgres_fraud_review_data:
+  ftds_postgres_customer_data:
