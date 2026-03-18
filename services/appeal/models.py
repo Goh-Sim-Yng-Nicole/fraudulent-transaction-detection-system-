@@ -15,6 +15,7 @@ class Appeal(Base):
 
     appeal_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     transaction_id: Mapped[str] = mapped_column(String(36), index=True)
+    customer_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     reason_for_appeal: Mapped[str] = mapped_column(Text)
 
     status: Mapped[str] = mapped_column(String(16), index=True)  # PENDING/RESOLVED

@@ -1,53 +1,36 @@
 # Audit Service
 
-**Type:** Atomic Microservice
-**Port:** None (Kafka worker only)
-**Tech:** Python, aiokafka
+Produces structured JSON audit log entries for every event in the system. Logs are written to stdout and can be captured by a log aggregator.
+
+**Type:** Atomic microservice (Kafka worker only) | **Port:** None
 
 ---
 
-## Responsibility
+## Kafka Events Consumed (all 7)
 
-Maintains an **immutable audit trail** by consuming every significant Kafka event and logging a structured JSON entry to stdout. In production this output would be shipped to a log aggregator (e.g. ELK, Splunk, CloudWatch).
-
-The audit service consumes every event in the system — including transaction creation, scoring, flagging, finalisation, manual review, and appeal lifecycle — ensuring a complete, chronological record of all activity.
-
----
-
-## Kafka Events Consumed
-
-| Topic | Summary logged |
+| Topic | Log summary |
 |---|---|
-| `transaction.created` | Transaction submitted (amount, currency, country) |
-| `transaction.scored` | Fraud score assigned (score) |
-| `transaction.flagged` | Transaction flagged for review (score, reason) |
-| `transaction.finalised` | Transaction finalised (outcome, score, reason) |
-| `transaction.reviewed` | Manual review complete (outcome, reason) |
-| `appeal.created` | Appeal submitted (appeal_id, reason) |
-| `appeal.resolved` | Appeal resolved (outcome, reason) |
+| `transaction.created` | Transaction submitted |
+| `transaction.scored` | Fraud score assigned |
+| `transaction.flagged` | Transaction flagged for review |
+| `transaction.finalised` | Transaction auto-decided (APPROVED/REJECTED) |
+| `transaction.reviewed` | Analyst manual decision |
+| `appeal.created` | Customer submitted appeal |
+| `appeal.resolved` | Appeal resolved by analyst |
 
 ---
 
 ## Log Format
 
-Each audit entry is a single-line JSON object:
+Each entry is printed as `[audit] <JSON>`:
 
 ```json
 {
-  "audit_at": "2026-03-17T12:34:56.789+00:00",
+  "audit_at": "2026-03-18T10:00:00Z",
   "event_type": "transaction.finalised.v1",
-  "summary": "Transaction finalised: REJECTED",
-  "transaction_id": "b654538d-25a6-4851-96c7-d876d9ce0fc2",
-  "outcome": "REJECTED",
-  "rules_score": 85,
-  "reason": "score=85 > 70"
+  "summary": "Transaction abc123 finalised: APPROVED",
+  "transaction_id": "abc123",
+  "outcome": "APPROVED",
+  "rules_score": 32
 }
 ```
-
----
-
-## Environment Variables
-
-| Variable | Description |
-|---|---|
-| `KAFKA_BOOTSTRAP_SERVERS` | Kafka broker address |

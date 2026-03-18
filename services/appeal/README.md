@@ -1,87 +1,57 @@
 # Appeal Service
 
-**Type:** Atomic Microservice
-**Port:** 8003
-**Tech:** Python, FastAPI, SQLAlchemy (asyncpg), PostgreSQL, aiokafka
+Manages the customer appeal lifecycle — stores appeals, listens for resolutions from the fraud review team, and updates appeal status accordingly.
+
+**Port:** 8003 | **Type:** Atomic microservice
 
 ---
 
-## Responsibility
+## Endpoints
 
-Handles the customer-facing appeal workflow. When a customer contests a rejected or flagged transaction, they submit an appeal here. The service persists the appeal, publishes `appeal.created` to Kafka (so the fraud review team can pick it up), and later updates the appeal record when `appeal.resolved` is received.
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/appeals?customer_id=` | List all appeals for a customer |
+| `POST` | `/appeals` | Submit a new appeal |
+| `GET` | `/appeals/{appeal_id}` | Get a single appeal with resolution details |
+
+### POST /appeals body
+```json
+{
+  "transaction_id": "uuid",
+  "reason_for_appeal": "This was a legitimate transaction.",
+  "customer_id": "uuid"
+}
+```
+
+### GET /appeals/{appeal_id} response (resolved)
+```json
+{
+  "appeal": { "appeal_id": "...", "transaction_id": "...", "reason_for_appeal": "..." },
+  "status": "RESOLVED",
+  "resolution": { "manual_outcome": "APPROVED", "outcome_reason": "..." }
+}
+```
 
 ---
 
 ## Kafka
 
-| Direction | Topic | Action |
-|---|---|---|
-| Publishes | `appeal.created` | After a new appeal is stored |
-| Consumes | `appeal.resolved` | Updates the local appeal record with the analyst's decision |
-
----
-
-## HTTP API
-
-| Method | Path | Description |
-|---|---|---|
-| `POST` | `/appeals` | Submit a new appeal |
-| `GET` | `/appeals/{appeal_id}` | Get appeal status and resolution details |
-
-### Submit an appeal
-
-```json
-POST /appeals
-{
-  "transaction_id": "...",
-  "reason_for_appeal": "This transaction was not made by me."
-}
-```
-
-Returns:
-```json
-{ "appeal_id": "...", "status": "PENDING" }
-```
-
-### Get appeal status
-
-Returns full details including resolution once resolved:
-
-```json
-{
-  "appeal": {
-    "appeal_id": "...",
-    "transaction_id": "...",
-    "reason_for_appeal": "..."
-  },
-  "status": "RESOLVED",
-  "resolution": {
-    "manual_outcome": "APPROVED",
-    "outcome_reason": "Verified legitimate transaction"
-  }
-}
-```
+| Direction | Topic |
+|---|---|
+| Produces | `appeal.created` |
+| Consumes | `appeal.resolved` → updates status + outcome in DB |
 
 ---
 
 ## Data Model
 
-**Appeal** (`appeals` table):
-
-| Field | Description |
+**appeals**
+| Field | Notes |
 |---|---|
 | `appeal_id` | UUID PK |
-| `transaction_id` | Related transaction |
-| `reason_for_appeal` | Customer's stated reason |
-| `status` | `PENDING` → `RESOLVED` |
-| `manual_outcome` | `APPROVED` or `REJECTED` (set on resolution) |
-| `outcome_reason` | Analyst's reason (set on resolution) |
-
----
-
-## Environment Variables
-
-| Variable | Description |
-|---|---|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `KAFKA_BOOTSTRAP_SERVERS` | Kafka broker address |
+| `transaction_id` | Related transaction UUID |
+| `customer_id` | UUID of the customer who submitted (nullable for old records) |
+| `reason_for_appeal` | Customer's explanation |
+| `status` | PENDING → RESOLVED |
+| `manual_outcome` | APPROVED / REJECTED (set on resolution) |
+| `outcome_reason` | Analyst's explanation (set on resolution) |

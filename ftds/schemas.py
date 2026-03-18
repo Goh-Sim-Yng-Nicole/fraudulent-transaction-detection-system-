@@ -97,6 +97,7 @@ class TransactionReviewed(BaseModel):
 class AppealCreateRequest(BaseModel):
     transaction_id: str
     reason_for_appeal: str
+    customer_id: str | None = None
 
 
 class AppealCreated(BaseModel):
