@@ -196,6 +196,12 @@ async def customer_get_decision(transaction_id: str) -> Any:
     return await _proxy("GET", url)
 
 
+@app.get("/customer/appeals")
+async def customer_list_appeals(customer_id: str) -> Any:
+    url = f"{state.downstreams.appeal_base}/appeals?customer_id={customer_id}"
+    return await _proxy("GET", url)
+
+
 @app.post("/customer/appeals")
 async def customer_create_appeal(payload: dict[str, Any]) -> Any:
     url = f"{state.downstreams.appeal_base}/appeals"

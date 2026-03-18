@@ -1,37 +1,56 @@
 # Decision Service
 
-**Type:** Atomic Microservice
-**Port:** None (Kafka worker only)
-**Tech:** Python, aiokafka
+Applies threshold logic to a fraud score and emits either `transaction.finalised` (APPROVED/REJECTED) or `transaction.flagged`.
+
+**Type:** Atomic microservice (Kafka worker only) | **Status:** Being replaced by OutSystems
 
 ---
 
-## Responsibility
+## Status
 
-Reads fraud scores from the `transaction.scored` topic and decides the outcome for each transaction based on configurable thresholds:
-
-| Score range | Action | Topic published |
-|---|---|---|
-| `score ≤ APPROVE_MAX_SCORE` (default 40) | Auto-approve | `transaction.finalised` (outcome: `APPROVED`) |
-| `APPROVE_MAX_SCORE < score ≤ FLAG_MAX_SCORE` (default 41–70) | Flag for manual review | `transaction.flagged` |
-| `score > FLAG_MAX_SCORE` (default > 70) | Auto-reject | `transaction.finalised` (outcome: `REJECTED`) |
+The Python worker code is present but will be **commented out** of `docker-compose.yml` once the OutSystems module (`FTDS_Decision`) is live. OutSystems replicates the same logic with an auditable `DecisionQueue` entity in its database.
 
 ---
 
 ## Kafka
 
-| Direction | Topic | Event type |
-|---|---|---|
-| Consumes | `transaction.scored` | `transaction.scored.v1` |
-| Publishes | `transaction.finalised` | `transaction.finalised.v1` |
-| Publishes | `transaction.flagged` | `transaction.flagged.v1` |
+| Direction | Topic                                            |
+| --------- | ------------------------------------------------ |
+| Consumes  | `transaction.scored`                           |
+| Produces  | `transaction.finalised` (APPROVED or REJECTED) |
+| Produces  | `transaction.flagged`                          |
 
 ---
 
-## Environment Variables
+## Threshold Logic
 
-| Variable | Description |
-|---|---|
-| `KAFKA_BOOTSTRAP_SERVERS` | Kafka broker address |
-| `APPROVE_MAX_SCORE` | Upper bound for auto-approval (default: 40) |
-| `FLAG_MAX_SCORE` | Upper bound for flagging; above this = rejected (default: 70) |
+```
+score ≤ APPROVE_MAX_SCORE  →  transaction.finalised { outcome: "APPROVED" }
+score ≤ FLAG_MAX_SCORE     →  transaction.flagged
+score >  FLAG_MAX_SCORE    →  transaction.finalised { outcome: "REJECTED" }
+```
+
+Thresholds are set via environment variables:
+
+| Variable              | Default |
+| --------------------- | ------- |
+| `APPROVE_MAX_SCORE` | `40`  |
+| `FLAG_MAX_SCORE`    | `70`  |
+
+---
+
+## OutSystems Replacement
+
+The OutSystems module `FTDS_Decision` implements (with DB):
+
+```
+Kafka: transaction.scored
+  ↓  Timer: ConsumeScored (every 5s)
+DecisionQueue entity { status = PENDING }
+  ↓  Timer: ProcessDecisions (every 10s)
+Apply Site Property thresholds
+  ↓
+Kafka: transaction.finalised OR transaction.flagged
+  ↓
+DecisionQueue.status = PROCESSED (full audit trail)
+```

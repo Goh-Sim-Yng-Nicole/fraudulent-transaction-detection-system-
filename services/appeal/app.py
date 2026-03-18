@@ -107,6 +107,29 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/appeals")
+async def list_appeals_by_customer(customer_id: str) -> list[dict[str, Any]]:
+    assert state.sessionmaker is not None
+    async with state.sessionmaker() as session:
+        result = await session.execute(
+            select(Appeal).where(Appeal.customer_id == customer_id).order_by(Appeal.created_at.desc())
+        )
+        rows = result.scalars().all()
+    return [
+        {
+            "appeal_id": r.appeal_id,
+            "transaction_id": r.transaction_id,
+            "reason_for_appeal": r.reason_for_appeal,
+            "status": r.status,
+            "manual_outcome": r.manual_outcome,
+            "outcome_reason": r.outcome_reason,
+            "created_at": r.created_at,
+            "updated_at": r.updated_at,
+        }
+        for r in rows
+    ]
+
+
 @app.post("/appeals")
 async def create_appeal(request: AppealCreateRequest) -> dict[str, Any]:
     appeal_id = str(uuid4())
@@ -117,6 +140,7 @@ async def create_appeal(request: AppealCreateRequest) -> dict[str, Any]:
             Appeal(
                 appeal_id=appeal_id,
                 transaction_id=request.transaction_id,
+                customer_id=request.customer_id,
                 reason_for_appeal=request.reason_for_appeal,
                 status="PENDING",
                 manual_outcome=None,

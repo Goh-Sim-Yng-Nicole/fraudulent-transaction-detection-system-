@@ -1,79 +1,58 @@
 # Fraud Score Service
 
-**Type:** Atomic Microservice
-**Port:** 8001
-**Tech:** Node.js, Express, scikit-learn (via pre-trained model file)
+Scores transactions using a pre-trained Random Forest model and returns a fraud risk score from 0 to 100.
+
+**Port:** 8001 | **Type:** Atomic microservice (Node.js / Express)
 
 ---
 
-## Responsibility
-
-Accepts a transaction payload and returns a fraud probability score. The score is produced by a pre-trained machine learning model (loaded from `models/`) with rule-based fallback logic. This service has **no Kafka dependency** — it is called synchronously over HTTP by the Detect Fraud composite service.
-
----
-
-## Key Endpoint
+## Endpoints
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/score` | Score a transaction |
+| `POST` | `/score` | Score a transaction; returns `{ score: 0-100 }` |
+| `POST` | `/api/v1/score` | Versioned alias for `/score` |
+| `GET` | `/health` | Health check |
+| `GET` | `/model` | Model metadata (algorithm, features, trained_at) |
+| `GET` | `/metrics` | Prometheus metrics |
+| `GET` | `/api-docs` | Swagger UI |
+| `GET` | `/api-docs.json` | OpenAPI JSON spec |
 
-### Request Body
+---
+
+## Score Request
 
 ```json
 {
-  "transaction_id": "abc-123",
-  "amount": 1500.00,
-  "currency": "SGD",
-  "card_type": "CREDIT",
-  "country": "SG",
-  "merchant_id": "grab_sg",
-  "hour_utc": 14,
-  "velocity_txn_hour_raw": 3,
+  "amount": 5000.00,
+  "hour_of_day": 2,
+  "is_foreign_transaction": false,
+  "is_high_risk_merchant": false,
+  "transaction_count_1h": 3,
+  "avg_transaction_amount": 200.0,
   "geo_country_high_risk": false
 }
 ```
 
-### Response
+---
+
+## Score Response
 
 ```json
-{
-  "transaction_id": "abc-123",
-  "fraud_probability": 0.23,
-  "rules_score": 23
-}
+{ "score": 72 }
 ```
 
-`rules_score` is the probability scaled to 0–100. The Decision service uses this value against the configured thresholds (`APPROVE_MAX_SCORE`, `FLAG_MAX_SCORE`).
+Score range 0–100:
+- 0–40 → auto APPROVED
+- 41–70 → FLAGGED for review
+- 71–100 → auto REJECTED
+
+(Thresholds set in the decision service / OutSystems.)
 
 ---
 
-## Model Training
+## Model
 
-The ML model is trained offline on `data/synthetic_training_full.csv` using:
-
-```bash
-node scripts/trainOfflineModel.js
-```
-
-The trained model artifact is saved to `models/`. The service loads it on startup and serves predictions in-process.
-
----
-
-## Features Used by the Model
-
-- `amount`
-- `currency`
-- `card_type`
-- `country`
-- `hour_utc`
-- `velocity_txn_hour_raw` (optional enrichment)
-- `geo_country_high_risk` (optional enrichment)
-
----
-
-## Observability
-
-- Prometheus metrics exposed (request count, latency) for scraping
-- Swagger/OpenAPI docs available at `GET /docs` (or `/api-docs`)
-- Correlation ID middleware for request tracing
+- **Algorithm:** Random Forest Classifier (scikit-learn, loaded via Python child process)
+- **Features:** amount, hour_of_day, is_foreign_transaction, is_high_risk_merchant, transaction_count_1h, avg_transaction_amount, geo_country_high_risk
+- Retrain by running the training script and replacing the model file

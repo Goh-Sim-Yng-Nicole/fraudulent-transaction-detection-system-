@@ -1,192 +1,117 @@
-# Fraudulent Transaction Detection System (FTDS)
+# FTDS — Fraudulent Transaction Detection System
 
-A microservices-based banking platform that detects and mitigates fraudulent financial transactions using rule-based and machine learning techniques, real-time Kafka event processing, and human review / appeal workflows. Developed as an academic project.
+A microservices-based banking platform with real-time fraud detection, Kafka event streaming, and three separate UIs for customers, fraud analysts, and banking managers.
 
 ---
 
 ## Architecture Overview
 
 ```
-Customer Banking UI  ──►  Nginx (port 80)  ──►  Gateway (BFF, port 8004)
-                                │
-                                ├──► Customer Service   (port 8005)
-                                ├──► Transaction Service (port 8000)
-                                ├──► Fraud Review Service (port 8002)
-                                └──► Appeal Service      (port 8003)
+Customer UI (banking.html)
+  → Nginx :8088 → Kong :80 → Gateway :8004
+                            → Customer :8005
 
-Transaction Service ──(transaction.created)──► Detect Fraud (composite)
-                                                    │
-                                                    └──► Fraud Score (port 8001)
-                                                    │
-                                              (transaction.scored)
-                                                    │
-                                               Decision Service
-                                              ╱              ╲
-                               (transaction.finalised)  (transaction.flagged)
-                                        │                       │
-                           ┌────────────┴──────────┐   Process Flagged & Appeals
-                       Notification             Transaction       (port 8002)
-                       Audit                   Service           │
-                       Analytics               update status  (transaction.reviewed / appeal.resolved)
+Fraud Review UI (fraud-review.html) → Process Flagged & Appeals :8002
+Manager Dashboard (manager.html)    → Analytics HTTP endpoint
+Grafana :3000                       ← Prometheus :9090 ← cAdvisor
 ```
 
-### Service Classification
+### Event Flow
 
-| Type | Services |
-|---|---|
-| **User Interface** | Customer Banking UI (Nginx) |
-| **Composite Services** | Gateway (BFF), Detect Fraud, Process Flagged & Appeals |
-| **Atomic Microservices** | Customer, Transaction, Fraud Score, Decision, Notification, Audit, Analytics, Appeal |
-| **Infrastructure** | Redpanda (Kafka), PostgreSQL ×4 |
+```
+[Customer] → POST /transaction
+  → transaction.created
+    → detect_fraud (composite)
+        → fraud_score :8001 (ML score)
+        → decision / OutSystems (threshold logic)
+            → transaction.finalised  → transaction, notification, audit, analytics
+            → transaction.flagged    → process_flagged_appeals, notification, audit, analytics
+                → analyst resolves   → transaction.reviewed → transaction, notification, audit, analytics
+                → customer appeals   → appeal.created → process_flagged_appeals, audit, analytics
+                    → analyst resolves appeal → appeal.resolved → appeal, notification, audit, analytics
+```
 
 ---
 
 ## Services
 
-| Service | Port | Tech | Description |
+| Service | Type | Port | Description |
 |---|---|---|---|
-| Customer | 8005 | Python / FastAPI | Registration, login (OTP), JWT auth, profile |
-| Transaction | 8000 | Python / FastAPI | Transaction lifecycle & status tracking |
-| Fraud Score | 8001 | Node.js / Express | ML + rule-based fraud probability scoring |
-| Decision | — | Python worker | Classifies scored transactions (approve / flag / reject) |
-| Detect Fraud | — | Python worker | Composite: receives events, calls Fraud Score, emits score |
-| Process Flagged & Appeals | 8002 | Python / FastAPI | Composite: fraud team review of flagged cases and appeals |
-| Appeal | 8003 | Python / FastAPI | Customer appeal submission and status tracking |
-| Notification | — | Python worker | Emails + SMS to customers on every key event |
-| Audit | — | Python worker | Structured audit trail of every event |
-| Analytics | — | Python worker | In-memory dashboard metrics by outcome |
-| Gateway | 8004 | Python / FastAPI | BFF — composes and proxies all customer-facing API calls |
-| Nginx | 80 | Nginx | Reverse proxy + static file server for the UI |
+| `customer` | Atomic | 8005 | Registration, login, OTP, profile management |
+| `transaction` | Atomic | 8000 | Transaction lifecycle, Kafka status updates |
+| `fraud_score` | Atomic | 8001 | ML fraud scoring via Random Forest |
+| `decision` | Atomic (→ OutSystems) | — | Threshold-based approve/flag/reject (being replaced by OutSystems) |
+| `detect_fraud` | Composite | — | Orchestrates fraud_score + decision |
+| `process_flagged_appeals` | Composite | 8002 | Analyst portal: review flagged transactions and appeals |
+| `appeal` | Atomic | 8003 | Customer appeal lifecycle |
+| `notification` | Atomic | — | Email/SMS notifications on key events |
+| `audit` | Atomic | — | Structured JSON audit log of all events |
+| `analytics` | Atomic | — | In-memory dashboard metrics |
+| `gateway` | Composite | 8004 | Customer-facing API aggregation and enrichment |
 
 ---
 
-## Event Flow (Kafka Topics)
+## UIs
 
-```
-transaction.created   → Detect Fraud → transaction.scored
-transaction.scored    → Decision     → transaction.finalised  (score ≤ 40)
-                                     → transaction.flagged    (40 < score ≤ 70)
-                                     → transaction.finalised  (score > 70, REJECTED)
-
-transaction.flagged   → Process Flagged & Appeals (create manual review case)
-                      → Notification, Audit, Analytics
-
-transaction.finalised → Transaction (update status)
-                      → Notification (notify sender + P2P recipient if APPROVED)
-                      → Audit, Analytics
-
-transaction.reviewed  → Transaction (update status to RESOLVED)
-                      → Notification, Audit, Analytics
-
-appeal.created        → Process Flagged & Appeals (add to review inbox)
-                      → Audit
-
-appeal.resolved       → Transaction (update status to RESOLVED)
-                      → Appeal (update local record)
-                      → Notification, Audit, Analytics
-```
+| UI | File | Audience | Access |
+|---|---|---|---|
+| Banking Portal | `ui/banking.html` | Customers | `http://localhost:8088/banking.html` |
+| Fraud Review Portal | `ui/fraud-review.html` | Fraud analysts | `http://localhost:8088/fraud-review.html` |
+| Manager Dashboard | `ui/manager.html` | Banking managers | `http://localhost:8088/manager.html` |
 
 ---
 
-## Quickstart (Docker)
+## Infrastructure
 
-**Prerequisites:** Docker Desktop
+| Component | Port | Purpose |
+|---|---|---|
+| Nginx | 8088 | Static UI files + reverse proxy |
+| Kong | 80 (proxy), 8090 (admin) | API gateway, JWT auth, rate limiting |
+| Redpanda (Kafka) | 19092 (external), 9092 (internal) | Event streaming |
+| Grafana | 3000 | Monitoring dashboards |
+| Prometheus | 9090 | Metrics scraping |
+
+---
+
+## Kafka Topics
+
+| Topic | Produced by | Consumed by |
+|---|---|---|
+| `transaction.created` | transaction | detect_fraud, audit |
+| `transaction.scored` | detect_fraud | decision / OutSystems |
+| `transaction.flagged` | decision / OutSystems | transaction, process_flagged_appeals, notification, audit, analytics |
+| `transaction.finalised` | decision / OutSystems | transaction, notification, audit, analytics |
+| `transaction.reviewed` | process_flagged_appeals | transaction, notification, audit, analytics |
+| `appeal.created` | appeal | process_flagged_appeals, audit, analytics |
+| `appeal.resolved` | process_flagged_appeals | appeal, notification, audit, analytics |
+
+---
+
+## Decision Thresholds (configurable in `.env`)
+
+| Score | Decision |
+|---|---|
+| 0 – `APPROVE_MAX_SCORE` (default 40) | Auto APPROVED |
+| 41 – `FLAG_MAX_SCORE` (default 70) | FLAGGED for manual review |
+| 71 – 100 | Auto REJECTED |
+
+---
+
+## Credentials (managed in `.env`)
+
+| Portal | Default Username | Default Password |
+|---|---|---|
+| Fraud Review | `analyst` | `analyst123` |
+| Manager Dashboard | `manager` | `manager123` |
+| Grafana | `admin` | `admin123` |
+
+---
+
+## Quick Start
 
 ```bash
-# 1. Copy environment file
-cp .env.example .env
-# Fill in TWILIO_* and SMTP_* values if you want real SMS/email.
-
-# 2. Start all services
-docker compose up --build
-
-# 3. Open the customer portal
-open http://localhost
+cp .env.example .env   # fill in secrets
+docker compose up -d --build
 ```
 
-### Databases
-
-Each service has its own isolated PostgreSQL instance:
-
-| Database | External Port | Default DB |
-|---|---|---|
-| Transaction | 5432 | `ftds_transaction` |
-| Appeal | 5433 | `ftds_appeal` |
-| Fraud Review | 5434 | `ftds_fraud_review` |
-| Customer | 5435 | `ftds_customer` |
-
-Default credentials: `postgres` / `postgres`. Tables are auto-created by dedicated `*-migrate` containers on first start.
-
----
-
-## Environment Variables
-
-Key variables in `.env` (see `.env.example` for full list):
-
-| Variable | Description |
-|---|---|
-| `TWILIO_ACCOUNT_SID` | Twilio account SID for SMS (optional — logs to console if unset) |
-| `TWILIO_AUTH_TOKEN` | Twilio auth token |
-| `TWILIO_FROM_NUMBER` | Twilio sender phone number |
-| `SMTP_HOST` / `SMTP_PORT` | SMTP server for OTP and notification emails |
-| `SMTP_USER` / `SMTP_PASSWORD` | SMTP credentials |
-| `JWT_SECRET` | Secret for signing customer JWT tokens |
-| `APPROVE_MAX_SCORE` | Fraud score threshold below which transactions are auto-approved (default: 40) |
-| `FLAG_MAX_SCORE` | Fraud score threshold below which transactions are flagged (default: 70; above → rejected) |
-
----
-
-## Key Scenarios
-
-### Scenario 1 — Auto approve / reject
-1. Customer submits a transaction via the UI
-2. Detect Fraud requests a fraud score from Fraud Score
-3. Decision publishes `transaction.finalised` (APPROVED or REJECTED)
-4. Transaction service updates status; Notification emails the customer
-
-### Scenario 2 — Flagged for manual review
-1. Fraud score falls in the middle range → Decision publishes `transaction.flagged`
-2. Process Flagged & Appeals stores the case for the fraud team
-3. Fraud analyst reviews and resolves via the Fraud Review Team UI
-4. `transaction.reviewed` is published; Transaction status becomes RESOLVED
-
-### Scenario 3 — Customer appeal
-1. Customer submits an appeal for a rejected/flagged transaction
-2. `appeal.created` is consumed by Process Flagged & Appeals
-3. Fraud analyst resolves the appeal; `appeal.resolved` is published
-4. Transaction and Appeal services update their records; customer is notified
-
----
-
-## Repository Layout
-
-```
-├── ftds/                        # Shared Python library (schemas, Kafka helpers, notifications)
-├── services/
-│   ├── analytics/               # Kafka worker — dashboard metrics
-│   ├── appeal/                  # Atomic service — appeal CRUD + Kafka
-│   ├── audit/                   # Kafka worker — structured audit trail
-│   ├── customer/                # Atomic service — auth, profile
-│   ├── decision/                # Kafka worker — score → approve/flag/reject
-│   ├── detect_fraud/            # Composite worker — orchestrates fraud scoring
-│   ├── fraud_score/             # Node.js ML scoring API
-│   ├── gateway/                 # BFF — composes downstream calls
-│   ├── notification/            # Kafka worker — email + SMS
-│   ├── process_flagged_appeals/ # Composite service — fraud team review UI backend
-│   └── transaction/             # Atomic service — transaction lifecycle
-├── ui/                          # Vanilla JS + Bootstrap 5 frontend
-├── nginx/                       # Reverse proxy config + Dockerfile
-├── kong/                        # Kong gateway setup scripts (optional)
-├── docker-compose.yml
-├── requirements.txt
-└── .env.example
-```
-
----
-
-## Notes
-
-- Kafka is exposed externally on `localhost:19092` (internal: `redpanda:9092`).
-- Event contracts (schemas) are defined in `ftds/schemas.py`.
-- Notification falls back to console logging when SMTP/Twilio is not configured.
-- The `ftds/` package is copied into every Python service container — it is the single source of truth for shared types and helpers.
+Access the banking portal at `http://localhost:8088`.

@@ -190,6 +190,25 @@
     </div>
 
   </div><!-- end .row -->
+
+  <!-- My Appeals -->
+  <div class="row mt-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
+          <span><i class="bi bi-flag me-2 text-warning"></i>My Appeals</span>
+          <button class="btn btn-sm btn-outline-secondary" onclick="loadAppeals()">
+            <i class="bi bi-arrow-clockwise"></i> Refresh
+          </button>
+        </div>
+        <div class="card-body p-0">
+          <div id="appealList">
+            <div class="empty-state"><i class="bi bi-inbox"></i> Loading your appeals…</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- TRANSACTION DETAIL MODAL -->
@@ -609,19 +628,68 @@
         body: JSON.stringify({
           transaction_id: selectedTxnId,
           reason_for_appeal: reason,
+          customer_id: customer.customer_id,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'Appeal submission failed');
       bootstrap.Modal.getInstance(document.getElementById('appealModal')).hide();
       showToast('Appeal submitted successfully!');
-      await loadTransactions();
+      await Promise.all([loadTransactions(), loadAppeals()]);
     } catch (err) {
       document.getElementById('appealAlert').className = 'alert alert-danger';
       document.getElementById('appealAlert').textContent = err.message;
     } finally {
       spinner.classList.add('d-none');
       document.getElementById('appealSubmitBtn').disabled = false;
+    }
+  }
+
+  // ── Load appeals ────────────────────────────────────────────────
+  async function loadAppeals() {
+    const el = document.getElementById('appealList');
+    el.innerHTML = '<div class="empty-state"><i class="bi bi-hourglass-split"></i> Loading…</div>';
+    try {
+      const res = await fetch(`${API}/customer/appeals?customer_id=${customer.customer_id}`, {
+        headers: authHeaders(),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Failed to load appeals');
+      if (!data.length) {
+        el.innerHTML = '<div class="empty-state"><i class="bi bi-flag"></i> No appeals submitted yet.</div>';
+        return;
+      }
+      const outcomeColor = { APPROVED: 'success', REJECTED: 'danger' };
+      el.innerHTML = `
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0 small">
+            <thead class="table-light">
+              <tr>
+                <th>Appeal ID</th>
+                <th>Transaction ID</th>
+                <th>Reason</th>
+                <th>Status</th>
+                <th>Outcome</th>
+                <th>Outcome Reason</th>
+                <th>Submitted</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${data.map(a => `
+                <tr>
+                  <td class="font-monospace text-muted" style="font-size:.75rem">${a.appeal_id.slice(0,8)}…</td>
+                  <td class="font-monospace text-muted" style="font-size:.75rem">${a.transaction_id.slice(0,8)}…</td>
+                  <td style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${a.reason_for_appeal}">${a.reason_for_appeal}</td>
+                  <td>${statusBadge(a.status)}</td>
+                  <td>${a.manual_outcome ? `<span class="badge bg-${outcomeColor[a.manual_outcome] || 'secondary'}">${a.manual_outcome}</span>` : '<span class="text-muted">—</span>'}</td>
+                  <td>${a.outcome_reason || '<span class="text-muted">—</span>'}</td>
+                  <td class="text-muted">${new Date(a.created_at).toLocaleString()}</td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    } catch (err) {
+      el.innerHTML = `<div class="empty-state text-danger"><i class="bi bi-exclamation-triangle"></i> ${err.message}</div>`;
     }
   }
 
@@ -741,6 +809,7 @@
 
   // ── Init ─────────────────────────────────────────────────────────
   loadTransactions();
+  loadAppeals();
   startPolling();
 
   // ── Account modal tab switching ──────────────────────────────────

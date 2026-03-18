@@ -1,38 +1,28 @@
 # Detect Fraud Service
 
-**Type:** Composite Service (orchestrator worker)
-**Port:** None (Kafka worker only)
-**Tech:** Python, aiokafka, httpx
+Composite service that orchestrates fraud scoring by consuming `transaction.created` events, calling the fraud_score HTTP API, and publishing `transaction.scored`.
+
+**Type:** Composite service (Kafka worker + HTTP client) | **Port:** None
 
 ---
 
-## Responsibility
+## Flow
 
-Orchestrates the fraud scoring step. It bridges the event-driven pipeline and the synchronous Fraud Score API:
-
-1. Consumes `transaction.created` from Kafka
-2. Calls the **Fraud Score Service** via HTTP (`POST /score`) with the transaction details
-3. Converts the returned probability into a 0–100 integer score
-4. Publishes `transaction.scored` to Kafka for the Decision service to act on
-
-This is a **composite service** because it coordinates two protocols: Kafka (async events) and HTTP (sync RPC to Fraud Score).
+```
+transaction.created
+  → fetch transaction details from transaction service
+  → POST /score to fraud_score service
+  → publish transaction.scored { transaction_id, rules_score }
+```
 
 ---
 
 ## Kafka
 
-| Direction | Topic | Event type |
-|---|---|---|
-| Consumes | `transaction.created` | `transaction.created.v1` |
-| Publishes | `transaction.scored` | `transaction.scored.v1` |
-
----
-
-## Score Conversion
-
-The Fraud Score service may return either:
-- `rules_score` (already 0–100) — used directly
-- `fraud_probability` (0.0–1.0) — multiplied by 100 and rounded
+| Direction | Topic |
+|---|---|
+| Consumes | `transaction.created` |
+| Produces | `transaction.scored` |
 
 ---
 
@@ -40,5 +30,5 @@ The Fraud Score service may return either:
 
 | Variable | Description |
 |---|---|
+| `FRAUD_SCORE_URL` | URL of fraud_score `/score` endpoint (default `http://fraud-score:8001/score`) |
 | `KAFKA_BOOTSTRAP_SERVERS` | Kafka broker address |
-| `FRAUD_SCORE_URL` | Full URL of the Fraud Score endpoint (default: `http://fraud-score:8001/score`) |
