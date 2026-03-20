@@ -39,6 +39,18 @@ export function buildRoutes({
     });
   });
 
+  router.get("/api/v1/health/live", (_req, res) => {
+    res.json({ status: "ok" });
+  });
+
+  router.get("/api/v1/health/ready", (_req, res) => {
+    const ready = supportedVersions.some((v) => models.has(v));
+    res.status(ready ? 200 : 503).json({
+      status: ready ? "ok" : "degraded",
+      loaded_versions: [...models.keys()],
+    });
+  });
+
   router.get("/model", (req, res) => {
     const { error: qErr, value: q } = modelQuerySchema.validate(req.query);
     if (qErr) throw new AppError("invalid query", 400, "VALIDATION_ERROR", qErr.message);

@@ -1,15 +1,13 @@
-FROM python:3.11-slim
+FROM node:20-alpine
 
 WORKDIR /app
 
-COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
+COPY services/transaction/package.json ./package.json
+RUN npm install --omit=dev
 
-COPY ftds /app/ftds
-COPY services/__init__.py /app/services/__init__.py
-COPY services/transaction /app/services/transaction
+COPY services/transaction/src ./src
 
-ENV PYTHONPATH=/app
+ENV PORT=8000
+EXPOSE 8000
 
-CMD ["python", "-m", "uvicorn", "services.transaction.app:app", "--host", "0.0.0.0", "--port", "8000"]
-
+CMD ["node", "src/index.js"]

@@ -1,0 +1,47 @@
+{
+  "name": "fraud-detection-notification-service",
+  "version": "1.0.0",
+  "description": "Enterprise notification service with retry logic and DLQ handling",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js"
+  },
+  "keywords": [
+    "notifications",
+    "kafka",
+    "email",
+    "sms",
+    "alerts"
+  ],
+  "author": "ESD G05 T05",
+  "license": "SMU",
+  "dependencies": {
+    "@opentelemetry/auto-instrumentations-node": "^0.70.1",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.212.0",
+    "@opentelemetry/resources": "^2.5.1",
+    "@opentelemetry/sdk-node": "^0.212.0",
+    "@opentelemetry/semantic-conventions": "^1.40.0",
+    "compression": "^1.7.4",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-async-errors": "^3.1.1",
+    "handlebars": "^4.7.8",
+    "helmet": "^7.1.0",
+    "kafkajs": "^2.2.4",
+    "nodemailer": "^6.9.7",
+    "prom-client": "^15.1.0",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
+    "twilio": "^4.19.0",
+    "uuid": "^9.0.1",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

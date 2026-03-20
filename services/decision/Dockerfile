@@ -1,15 +1,28 @@
-FROM python:3.11-slim
+FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
+COPY package*.json ./
+RUN npm ci --only=production && npm cache clean --force
 
-COPY ftds /app/ftds
-COPY services/__init__.py /app/services/__init__.py
-COPY services/decision /app/services/decision
+COPY . .
+FROM node:18-alpine
 
-ENV PYTHONPATH=/app
+RUN apk add --no-cache dumb-init && \
+    addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
 
-CMD ["python", "-m", "services.decision.worker"]
+WORKDIR /app
 
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
+COPY --chown=nodejs:nodejs . .
+
+USER nodejs
+
+EXPOSE 8009
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
+    CMD node -e "require('http').get('http://localhost:8009/api/v1/health/live', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["node", "src/index.js"]

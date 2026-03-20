@@ -1,42 +1,100 @@
 # Notification Service
 
-Sends email and SMS notifications to customers when key events occur in their transaction or appeal lifecycle.
+This service consumes fraud decision events and sends notifications by email or SMS.
 
-**Type:** Atomic microservice (Kafka worker only) | **Port:** None
+## Supported Providers
 
----
+- Email: `mock`, `smtp`
+- SMS: `mock`, `twilio`
 
-## Kafka Events Consumed
+For local runs, the project uses `mock` mode by default. Real providers are configured in the project root `.env`.
 
-| Topic | Handler | Notification sent |
-|---|---|---|
-| `transaction.flagged` | `_on_flagged` | Tells sender their transaction is under review |
-| `transaction.finalised` | `_on_finalised` | Tells sender of APPROVED/REJECTED outcome; also notifies P2P recipient if APPROVED |
-| `transaction.reviewed` | `_on_reviewed` | Tells sender of manual review outcome (APPROVED/REJECTED) |
-| `appeal.resolved` | `_on_appeal_resolved` | Tells customer of appeal outcome (APPROVED/REJECTED) |
+## Important Environment Variables
 
----
+### SMTP email
 
-## Notification Channels
+```env
+EMAIL_ENABLED=true
+EMAIL_PROVIDER=smtp
+EMAIL_SMTP_HOST=smtp.gmail.com
+EMAIL_SMTP_PORT=587
+EMAIL_SMTP_SECURE=false
+EMAIL_SMTP_USER=your-account@example.com
+EMAIL_SMTP_PASSWORD=your-app-password
+EMAIL_FROM_ADDRESS=your-account@example.com
+EMAIL_FROM_NAME=Fraud Detection System
+```
 
-- **Email** — via Gmail SMTP (aiosmtplib), HTML-formatted
-- **SMS** — via Twilio REST API (httpx); falls back to console log if credentials not set
+### Twilio SMS
 
----
+```env
+SMS_ENABLED=true
+SMS_PROVIDER=twilio
+TWILIO_ACCOUNT_SID=your-account-sid
+TWILIO_AUTH_TOKEN=your-auth-token
+TWILIO_PHONE_NUMBER=+1xxxxxxxxxx
+```
 
-## Dependencies
+### Fallback recipients
 
-For each event, the service fetches:
-1. Transaction details from the transaction service (`TRANSACTION_BASE_URL`)
-2. Customer contact (email + phone) from the customer service (`CUSTOMER_BASE_URL`)
+```env
+NOTIFICATION_CUSTOMER_FALLBACK_EMAIL=real-customer@example.com
+NOTIFICATION_CUSTOMER_FALLBACK_PHONE=+1xxxxxxxxxx
+NOTIFICATION_FRAUD_TEAM_EMAIL=fraud-team@example.com
+NOTIFICATION_FRAUD_TEAM_PHONE=+1xxxxxxxxxx
+```
 
----
+## Start
 
-## Environment Variables
+From the project root:
 
-| Variable | Description |
-|---|---|
-| `TRANSACTION_BASE_URL` | e.g. `http://transaction:8000` |
-| `CUSTOMER_BASE_URL` | e.g. `http://customer:8005` |
-| `SMTP_HOST/PORT/USER/PASSWORD/FROM` | Gmail SMTP |
-| `TWILIO_ACCOUNT_SID/AUTH_TOKEN/FROM_NUMBER` | Twilio SMS |
+```bash
+docker compose up --build -d
+```
+
+If you only changed notification credentials:
+
+```bash
+docker compose up --build -d notification-service
+```
+
+## Verify
+
+Health endpoint:
+
+```powershell
+Invoke-RestMethod http://localhost:3006/api/v1/health | ConvertTo-Json -Depth 6
+```
+
+Check these fields:
+
+- `dependencies.email.mode`
+- `dependencies.sms.mode`
+- `notificationProviders.realProviderEnabled`
+
+Proof script:
+
+```bash
+cd testing
+npm run proof:notification
+```
+
+To require a real external provider:
+
+```powershell
+cd testing
+$env:REQUIRE_REAL_NOTIFICATION_PROVIDER='true'
+npm run proof:notification
+```
+
+## API Docs
+
+- Swagger UI: `http://localhost:3006/api-docs`
+- Health endpoint: `http://localhost:3006/api/v1/health`
+
+## Notes
+
+- The service consumes `transaction.finalised` and `transaction.flagged`.
+- If event contact details are missing, the service falls back to the values in `.env`.
+- Gmail usually requires an app password for SMTP.
+- Twilio trial accounts can only send to verified numbers.

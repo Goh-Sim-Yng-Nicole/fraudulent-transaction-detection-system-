@@ -63,6 +63,38 @@ services:
       timeout: 5s
       retries: 10
 
+  postgres-decision:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DECISION_DB:-ftds_decision}
+      POSTGRES_USER: ${POSTGRES_DECISION_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_DECISION_PASSWORD:-postgres}
+    ports:
+      - "5436:5432"
+    volumes:
+      - ftds_postgres_decision_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres-audit:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_AUDIT_DB:-ftds_audit}
+      POSTGRES_USER: ${POSTGRES_AUDIT_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_AUDIT_PASSWORD:-postgres}
+    ports:
+      - "5437:5432"
+    volumes:
+      - ftds_postgres_audit_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   redpanda:
     image: docker.redpanda.com/redpandadata/redpanda:latest
     command:
@@ -134,7 +166,7 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_TRANSACTION_USER:-postgres}:${POSTGRES_TRANSACTION_PASSWORD:-postgres}@postgres-transaction:5432/${POSTGRES_TRANSACTION_DB:-ftds_transaction}
-    command: ["python", "-m", "services.transaction.migrate"]
+    command: ["node", "src/db/migrate.js"]
     depends_on:
       postgres-transaction:
         condition: service_healthy
@@ -155,6 +187,8 @@ services:
     environment:
       KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
       FRAUD_SCORE_URL: http://fraud-score:8001/score
+    ports:
+      - "8008:8008"
     depends_on:
       redpanda:
         condition: service_healthy
@@ -163,23 +197,42 @@ services:
       fraud-score:
         condition: service_started
 
-  # decision: #moved to outsystems
-  #   build:
-  #     context: .
-  #     dockerfile: services/decision/Dockerfile
-  #   env_file: .env
-  #   environment:
-  #     KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
-  #   depends_on:
-  #     redpanda:
-  #       condition: service_healthy
-  #     kafka-init:
-  #       condition: service_completed_successfully
+  decision:
+    build:
+      context: ./services/decision
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      DATABASE_URL: postgresql://${POSTGRES_DECISION_USER:-postgres}:${POSTGRES_DECISION_PASSWORD:-postgres}@postgres-decision:5432/${POSTGRES_DECISION_DB:-ftds_decision}
+    ports:
+      - "8009:8009"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      postgres-decision:
+        condition: service_healthy
+      decision-migrate:
+        condition: service_completed_successfully
+
+  decision-migrate:
+    build:
+      context: ./services/decision
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_DECISION_USER:-postgres}:${POSTGRES_DECISION_PASSWORD:-postgres}@postgres-decision:5432/${POSTGRES_DECISION_DB:-ftds_decision}
+    command: ["npm", "run", "migrate"]
+    depends_on:
+      postgres-decision:
+        condition: service_healthy
 
   fraud-review:
     build:
-      context: .
-      dockerfile: services/process_flagged_appeals/Dockerfile
+      context: ./services/process_flagged_appeals
+      dockerfile: Dockerfile
     env_file: .env
     environment:
       KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
@@ -187,6 +240,7 @@ services:
       ANALYST_USERNAME: ${ANALYST_USERNAME:-analyst}
       ANALYST_PASSWORD: ${ANALYST_PASSWORD:-analyst123}
       ANALYST_JWT_SECRET: ${ANALYST_JWT_SECRET:-analyst-dev-secret-change-in-prod}
+      APPEAL_BASE_URL: http://appeal:8003
     ports:
       - "8002:8002"
     depends_on:
@@ -201,24 +255,25 @@ services:
 
   fraud-review-migrate:
     build:
-      context: .
-      dockerfile: services/process_flagged_appeals/Dockerfile
+      context: ./services/process_flagged_appeals
+      dockerfile: Dockerfile
     env_file: .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_FRAUD_REVIEW_USER:-postgres}:${POSTGRES_FRAUD_REVIEW_PASSWORD:-postgres}@postgres-fraud-review:5432/${POSTGRES_FRAUD_REVIEW_DB:-ftds_fraud_review}
-    command: ["python", "-m", "services.process_flagged_appeals.migrate"]
+      DATABASE_URL: postgresql://${POSTGRES_FRAUD_REVIEW_USER:-postgres}:${POSTGRES_FRAUD_REVIEW_PASSWORD:-postgres}@postgres-fraud-review:5432/${POSTGRES_FRAUD_REVIEW_DB:-ftds_fraud_review}
+    command: ["npm", "run", "migrate"]
     depends_on:
       postgres-fraud-review:
         condition: service_healthy
 
   appeal:
     build:
-      context: .
-      dockerfile: services/appeal/Dockerfile
+      context: ./services/appeal
+      dockerfile: Dockerfile
     env_file: .env
     environment:
       KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_APPEAL_USER:-postgres}:${POSTGRES_APPEAL_PASSWORD:-postgres}@postgres-appeal:5432/${POSTGRES_APPEAL_DB:-ftds_appeal}
+      DATABASE_URL: postgresql://${POSTGRES_APPEAL_USER:-postgres}:${POSTGRES_APPEAL_PASSWORD:-postgres}@postgres-appeal:5432/${POSTGRES_APPEAL_DB:-ftds_appeal}
+      TRANSACTION_BASE_URL: http://transaction:8000
     ports:
       - "8003:8003"
     depends_on:
@@ -233,25 +288,27 @@ services:
 
   appeal-migrate:
     build:
-      context: .
-      dockerfile: services/appeal/Dockerfile
+      context: ./services/appeal
+      dockerfile: Dockerfile
     env_file: .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_APPEAL_USER:-postgres}:${POSTGRES_APPEAL_PASSWORD:-postgres}@postgres-appeal:5432/${POSTGRES_APPEAL_DB:-ftds_appeal}
-    command: ["python", "-m", "services.appeal.migrate"]
+      DATABASE_URL: postgresql://${POSTGRES_APPEAL_USER:-postgres}:${POSTGRES_APPEAL_PASSWORD:-postgres}@postgres-appeal:5432/${POSTGRES_APPEAL_DB:-ftds_appeal}
+    command: ["npm", "run", "migrate"]
     depends_on:
       postgres-appeal:
         condition: service_healthy
 
   notification:
     build:
-      context: .
-      dockerfile: services/notification/Dockerfile
+      context: ./services/notification
+      dockerfile: Dockerfile
     env_file: .env
     environment:
       KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
       TRANSACTION_BASE_URL: http://transaction:8000
       CUSTOMER_BASE_URL: http://customer:8005
+    ports:
+      - "8010:8010"
     depends_on:
       redpanda:
         condition: service_healthy
@@ -264,27 +321,47 @@ services:
 
   audit:
     build:
-      context: .
-      dockerfile: services/audit/Dockerfile
+      context: ./services/audit
+      dockerfile: Dockerfile
     env_file: .env
     environment:
       KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      DATABASE_URL: postgresql://${POSTGRES_AUDIT_USER:-postgres}:${POSTGRES_AUDIT_PASSWORD:-postgres}@postgres-audit:5432/${POSTGRES_AUDIT_DB:-ftds_audit}
+    ports:
+      - "8007:8007"
     depends_on:
       redpanda:
         condition: service_healthy
       kafka-init:
         condition: service_completed_successfully
+      postgres-audit:
+        condition: service_healthy
+      audit-migrate:
+        condition: service_completed_successfully
+
+  audit-migrate:
+    build:
+      context: ./services/audit
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_AUDIT_USER:-postgres}:${POSTGRES_AUDIT_PASSWORD:-postgres}@postgres-audit:5432/${POSTGRES_AUDIT_DB:-ftds_audit}
+    command: ["npm", "run", "migrate"]
+    depends_on:
+      postgres-audit:
+        condition: service_healthy
 
   analytics:
     build:
-      context: .
-      dockerfile: services/analytics/Dockerfile
+      context: ./services/analytics
+      dockerfile: Dockerfile
     env_file: .env
     environment:
       KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
       MANAGER_USERNAME: ${MANAGER_USERNAME:-manager}
       MANAGER_PASSWORD: ${MANAGER_PASSWORD:-manager123}
       MANAGER_JWT_SECRET: ${MANAGER_JWT_SECRET:-manager-dev-secret-change-in-prod}
+      REDIS_DISABLED: "true"
     ports:
       - "8006:8006"
     depends_on:
@@ -322,14 +399,15 @@ services:
 
   gateway:
     build:
-      context: .
-      dockerfile: services/gateway/Dockerfile
+      context: ./services/gateway
+      dockerfile: Dockerfile
     env_file: .env
     environment:
       TRANSACTION_BASE_URL: http://transaction:8000
       FRAUD_REVIEW_BASE_URL: http://fraud-review:8002
       APPEAL_BASE_URL: http://appeal:8003
       CUSTOMER_BASE_URL: http://customer:8005
+      REDIS_DISABLED: "true"
     ports:
       - "8004:8004"
     depends_on:
@@ -340,6 +418,8 @@ services:
       appeal:
         condition: service_started
       customer:
+        condition: service_started
+      decision:
         condition: service_started
 
   nginx:
@@ -418,5 +498,7 @@ volumes:
   ftds_postgres_appeal_data:
   ftds_postgres_fraud_review_data:
   ftds_postgres_customer_data:
+  ftds_postgres_decision_data:
+  ftds_postgres_audit_data:
   ftds_prometheus_data:
   ftds_grafana_data:

@@ -1,0 +1,10 @@
+{
+  "name": "ftds-platform-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "smoke": "node ./smoke-health.mjs",
+    "e2e": "node ./e2e-platform.mjs",
+    "verify": "node ./smoke-health.mjs && node ./e2e-platform.mjs"
+  }
+}

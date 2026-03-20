@@ -233,6 +233,16 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/health/live")
+async def health_live() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/health/ready")
+async def health_ready() -> dict[str, str]:
+    return {"status": "ok"}
+
+
 # ─── Auth ─────────────────────────────────────────────────────────────────────
 
 @app.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
