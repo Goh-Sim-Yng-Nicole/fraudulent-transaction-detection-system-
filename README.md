@@ -1,34 +1,36 @@
-# FTDS — Fraudulent Transaction Detection System
+# FTDS - Fraudulent Transaction Detection System
 
-A microservices-based banking platform with real-time fraud detection, Kafka event streaming, and three separate UIs for customers, fraud analysts, and banking managers.
+A microservices-based banking platform with real-time fraud detection, Kafka event streaming, and separate user interfaces for customers, fraud analysts, and banking managers.
 
 ---
 
 ## Architecture Overview
 
-```
+```text
 Customer UI (banking.html)
-  → Nginx :8088 → Kong :80 → Gateway :8004
-                            → Customer :8005
+  -> Nginx :8088 -> Kong :80 -> Gateway :8004
+                               -> Customer :8005
 
-Fraud Review UI (fraud-review.html) → Process Flagged & Appeals :8002
-Manager Dashboard (manager.html)    → Analytics HTTP endpoint
-Grafana :3000                       ← Prometheus :9090 ← cAdvisor
+Fraud Review UI (fraud-review.html) -> Process Flagged & Appeals :8002
+Manager Dashboard (manager.html)    -> Analytics HTTP endpoint
+Grafana :3000                       <- Prometheus :9090 <- cAdvisor
 ```
 
 ### Event Flow
 
-```
-[Customer] → POST /transaction
-  → transaction.created
-    → detect_fraud (composite)
-        → fraud_score :8001 (ML score)
-        → decision / OutSystems (threshold logic)
-            → transaction.finalised  → transaction, notification, audit, analytics
-            → transaction.flagged    → process_flagged_appeals, notification, audit, analytics
-                → analyst resolves   → transaction.reviewed → transaction, notification, audit, analytics
-                → customer appeals   → appeal.created → process_flagged_appeals, audit, analytics
-                    → analyst resolves appeal → appeal.resolved → appeal, notification, audit, analytics
+```text
+[Customer] -> POST /transaction
+  -> transaction.created
+    -> detect_fraud
+        -> fraud_score :8001
+        -> publish transaction.scored
+        -> hand off scored payload to OutSystems (optional)
+        -> if OutSystems is not configured, local fallback emits:
+            -> transaction.finalised -> transaction, notification, audit, analytics
+            -> transaction.flagged   -> transaction, process_flagged_appeals, notification, audit, analytics
+                -> analyst resolves  -> transaction.reviewed -> transaction, notification, audit, analytics
+                -> customer appeals  -> appeal.created -> process_flagged_appeals, audit, analytics
+                    -> analyst resolves appeal -> appeal.resolved -> appeal, notification, audit, analytics
 ```
 
 ---
@@ -38,15 +40,14 @@ Grafana :3000                       ← Prometheus :9090 ← cAdvisor
 | Service | Type | Port | Description |
 |---|---|---|---|
 | `customer` | Atomic | 8005 | Registration, login, OTP, profile management |
-| `transaction` | Atomic | 8000 | Transaction lifecycle, Kafka status updates |
+| `transaction` | Atomic | 8000 | Transaction lifecycle and Kafka-driven status updates |
 | `fraud_score` | Atomic | 8001 | ML fraud scoring via Random Forest |
-| `decision` | Atomic (→ OutSystems) | — | Threshold-based approve/flag/reject (being replaced by OutSystems) |
-| `detect_fraud` | Composite | — | Orchestrates fraud_score + decision |
-| `process_flagged_appeals` | Composite | 8002 | Analyst portal: review flagged transactions and appeals |
+| `detect_fraud` | Composite | 8008 | Orchestrates fraud scoring, publishes `transaction.scored`, and integrates with OutSystems plus a local fallback |
+| `process_flagged_appeals` | Composite | 8002 | Analyst portal for flagged transactions and appeals |
 | `appeal` | Atomic | 8003 | Customer appeal lifecycle |
-| `notification` | Atomic | — | Email/SMS notifications on key events |
-| `audit` | Atomic | — | Structured JSON audit log of all events |
-| `analytics` | Atomic | — | In-memory dashboard metrics |
+| `notification` | Atomic | 8010 | Email and SMS notifications on key events |
+| `audit` | Atomic | 8007 | Structured audit log of platform events |
+| `analytics` | Atomic | 8006 | In-memory dashboard metrics and manager endpoints |
 | `gateway` | Composite | 8004 | Customer-facing API aggregation and enrichment |
 
 ---
@@ -65,7 +66,7 @@ Grafana :3000                       ← Prometheus :9090 ← cAdvisor
 
 | Component | Port | Purpose |
 |---|---|---|
-| Nginx | 8088 | Static UI files + reverse proxy |
+| Nginx | 8088 | Static UI files and reverse proxy |
 | Kong | 80 (proxy), 8090 (admin) | API gateway, JWT auth, rate limiting |
 | Redpanda (Kafka) | 19092 (external), 9092 (internal) | Event streaming |
 | Grafana | 3000 | Monitoring dashboards |
@@ -78,26 +79,28 @@ Grafana :3000                       ← Prometheus :9090 ← cAdvisor
 | Topic | Produced by | Consumed by |
 |---|---|---|
 | `transaction.created` | transaction | detect_fraud, audit |
-| `transaction.scored` | detect_fraud | decision / OutSystems |
-| `transaction.flagged` | decision / OutSystems | transaction, process_flagged_appeals, notification, audit, analytics |
-| `transaction.finalised` | decision / OutSystems | transaction, notification, audit, analytics |
+| `transaction.scored` | detect_fraud | OutSystems decision flow, audit |
+| `transaction.flagged` | OutSystems or detect_fraud local fallback | transaction, process_flagged_appeals, notification, audit, analytics |
+| `transaction.finalised` | OutSystems or detect_fraud local fallback | transaction, notification, audit, analytics |
 | `transaction.reviewed` | process_flagged_appeals | transaction, notification, audit, analytics |
 | `appeal.created` | appeal | process_flagged_appeals, audit, analytics |
 | `appeal.resolved` | process_flagged_appeals | appeal, notification, audit, analytics |
 
 ---
 
-## Decision Thresholds (configurable in `.env`)
+## Decision Thresholds
+
+These thresholds are applied by OutSystems in production, or by the `detect_fraud` local fallback during Docker development and automated testing when `OUTSYSTEMS_DECISION_URL` is unset.
 
 | Score | Decision |
 |---|---|
-| 0 – `APPROVE_MAX_SCORE` (default 40) | Auto APPROVED |
-| 41 – `FLAG_MAX_SCORE` (default 70) | FLAGGED for manual review |
-| 71 – 100 | Auto REJECTED |
+| 0 - `THRESHOLD_APPROVE_MAX` (default 49) | Auto APPROVED |
+| `THRESHOLD_FLAG_MIN` - `THRESHOLD_FLAG_MAX` (default 50-79) | FLAGGED for manual review |
+| `THRESHOLD_DECLINE_MIN` - 100 (default 80-100) | Auto REJECTED |
 
 ---
 
-## Credentials (managed in `.env`)
+## Credentials
 
 | Portal | Default Username | Default Password |
 |---|---|---|
@@ -110,7 +113,7 @@ Grafana :3000                       ← Prometheus :9090 ← cAdvisor
 ## Quick Start
 
 ```bash
-cp .env.example .env   # fill in secrets
+cp .env.example .env
 docker compose up -d --build
 ```
 

@@ -63,22 +63,6 @@ services:
       timeout: 5s
       retries: 10
 
-  postgres-decision:
-    image: postgres:16
-    environment:
-      POSTGRES_DB: ${POSTGRES_DECISION_DB:-ftds_decision}
-      POSTGRES_USER: ${POSTGRES_DECISION_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_DECISION_PASSWORD:-postgres}
-    ports:
-      - "5436:5432"
-    volumes:
-      - ftds_postgres_decision_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
   postgres-audit:
     image: postgres:16
     environment:
@@ -196,38 +180,6 @@ services:
         condition: service_completed_successfully
       fraud-score:
         condition: service_started
-
-  decision:
-    build:
-      context: ./services/decision
-      dockerfile: Dockerfile
-    env_file: .env
-    environment:
-      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
-      DATABASE_URL: postgresql://${POSTGRES_DECISION_USER:-postgres}:${POSTGRES_DECISION_PASSWORD:-postgres}@postgres-decision:5432/${POSTGRES_DECISION_DB:-ftds_decision}
-    ports:
-      - "8009:8009"
-    depends_on:
-      redpanda:
-        condition: service_healthy
-      kafka-init:
-        condition: service_completed_successfully
-      postgres-decision:
-        condition: service_healthy
-      decision-migrate:
-        condition: service_completed_successfully
-
-  decision-migrate:
-    build:
-      context: ./services/decision
-      dockerfile: Dockerfile
-    env_file: .env
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_DECISION_USER:-postgres}:${POSTGRES_DECISION_PASSWORD:-postgres}@postgres-decision:5432/${POSTGRES_DECISION_DB:-ftds_decision}
-    command: ["npm", "run", "migrate"]
-    depends_on:
-      postgres-decision:
-        condition: service_healthy
 
   fraud-review:
     build:
@@ -419,8 +371,6 @@ services:
         condition: service_started
       customer:
         condition: service_started
-      decision:
-        condition: service_started
 
   nginx:
     build:
@@ -498,7 +448,6 @@ volumes:
   ftds_postgres_appeal_data:
   ftds_postgres_fraud_review_data:
   ftds_postgres_customer_data:
-  ftds_postgres_decision_data:
   ftds_postgres_audit_data:
   ftds_prometheus_data:
   ftds_grafana_data:

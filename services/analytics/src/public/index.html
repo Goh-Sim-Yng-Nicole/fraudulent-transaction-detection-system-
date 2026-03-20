@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fraud Detection Analytics</title>
+  <link rel="stylesheet" href="/css/dracula.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="page-shell">
+    <nav class="topbar">
+      <div class="brand-block">
+        <div class="brand-badge">FD</div>
+        <div>
+          <div class="brand-title">Fraud Detection</div>
+          <div class="brand-subtitle">Analytics Monitor</div>
+        </div>
+      </div>
+
+      <div class="topbar-links">
+        <a class="nav-link" href="#overview">Overview</a>
+        <a class="nav-link active" href="#monitor">Monitor</a>
+        <a class="nav-link" href="#leaders">Leaders</a>
+      </div>
+
+      <div class="topbar-meta">
+        <span class="status-pill">Streaming telemetry</span>
+        <span class="socket-label">Socket <span class="ws-status js-ws-status connected">Connected</span></span>
+      </div>
+    </nav>
+
+    <main class="container">
+      <section class="hero-panel" id="overview">
+        <div class="hero-copy">
+          <p class="eyebrow">Monitor</p>
+          <h1>Fraud Detection Analytics <span class="realtime-badge">LIVE</span></h1>
+          <p class="hero-description">
+            Real-time transaction monitoring, decision quality, analyst review throughput,
+            and appeals impact in a Jaeger-inspired dark console.
+          </p>
+        </div>
+
+        <div class="hero-controls">
+          <div class="control-panel control-panel-wide">
+            <span class="control-label">Timeframe</span>
+            <div class="time-selector">
+              <button class="time-btn" data-range="1h" onclick="setTimeRange('1h', this)">Last Hour</button>
+              <button class="time-btn active" data-range="24h" onclick="setTimeRange('24h', this)">Last 24 Hours</button>
+              <button class="time-btn" data-range="7d" onclick="setTimeRange('7d', this)">Last 7 Days</button>
+              <button class="time-btn" data-range="30d" onclick="setTimeRange('30d', this)">Last 30 Days</button>
+            </div>
+          </div>
+
+          <div class="control-panel">
+            <span class="control-label">Realtime feed</span>
+            <span class="control-value">WebSocket <span class="ws-status js-ws-status connected">Connected</span></span>
+          </div>
+        </div>
+      </section>
+
+      <section class="dashboard-section" id="monitor">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Live Stream</p>
+            <h2>Realtime decision flow</h2>
+          </div>
+          <p class="section-note">Rolling five-minute snapshot</p>
+        </div>
+
+        <div class="stats-grid" id="realtime-stats">
+          <div class="stat-card cyan">
+            <div class="stat-label">Total Transactions</div>
+            <div class="stat-value cyan" id="rt-total">0</div>
+            <div class="stat-change">Last 5 minutes</div>
+          </div>
+
+          <div class="stat-card green">
+            <div class="stat-label">Approved</div>
+            <div class="stat-value green" id="rt-approved">0</div>
+            <div class="stat-change">Auto-approved</div>
+          </div>
+
+          <div class="stat-card red">
+            <div class="stat-label">Declined</div>
+            <div class="stat-value red" id="rt-declined">0</div>
+            <div class="stat-change">Fraud detected</div>
+          </div>
+
+          <div class="stat-card orange">
+            <div class="stat-label">Flagged</div>
+            <div class="stat-value orange" id="rt-flagged">0</div>
+            <div class="stat-change">Manual review</div>
+          </div>
+
+          <div class="stat-card purple">
+            <div class="stat-label">Avg Risk Score</div>
+            <div class="stat-value purple" id="rt-avg-score">0</div>
+            <div class="stat-change">Out of 100</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="dashboard-section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Overview</p>
+            <h2>Decision metrics</h2>
+          </div>
+          <p class="section-note">Across the selected time range</p>
+        </div>
+
+        <div class="stats-grid" id="overview-stats">
+          <div class="stat-card">
+            <div class="stat-label">Total Decisions</div>
+            <div class="stat-value" id="total-transactions">Loading...</div>
+            <div class="stat-change">Selected time range</div>
+          </div>
+
+          <div class="stat-card green">
+            <div class="stat-label">Approval Rate</div>
+            <div class="stat-value green" id="approval-rate">--%</div>
+            <div class="stat-change" id="approved-count">0 approved</div>
+          </div>
+
+          <div class="stat-card red">
+            <div class="stat-label">Decline Rate</div>
+            <div class="stat-value red" id="decline-rate">--%</div>
+            <div class="stat-change" id="declined-count">0 declined</div>
+          </div>
+
+          <div class="stat-card orange">
+            <div class="stat-label">Flag Rate</div>
+            <div class="stat-value orange" id="flag-rate">--%</div>
+            <div class="stat-change" id="flagged-count">0 flagged</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="dashboard-section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Human Review</p>
+            <h2>Analyst impact</h2>
+          </div>
+          <p class="section-note">Flagged cases handled by reviewers</p>
+        </div>
+
+        <div class="stats-grid" id="analyst-impact-stats">
+          <div class="stat-card cyan">
+            <div class="stat-label">Manual Reviews</div>
+            <div class="stat-value cyan" id="manual-reviews-total">0</div>
+            <div class="stat-change">Flagged cases reviewed by analyst</div>
+          </div>
+
+          <div class="stat-card green">
+            <div class="stat-label">Approved After Review</div>
+            <div class="stat-value green" id="review-approved-rate">0%</div>
+            <div class="stat-change" id="review-approved-count">0 approved</div>
+          </div>
+
+          <div class="stat-card red">
+            <div class="stat-label">Declined After Review</div>
+            <div class="stat-value red" id="review-declined-rate">0%</div>
+            <div class="stat-change" id="review-declined-count">0 declined</div>
+          </div>
+
+          <div class="stat-card orange">
+            <div class="stat-label">Avg Review Turnaround</div>
+            <div class="stat-value orange" id="review-turnaround-mins">0m</div>
+            <div class="stat-change" id="review-turnaround-secs">0 seconds</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="dashboard-section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Appeals</p>
+            <h2>Appeal outcomes</h2>
+          </div>
+          <p class="section-note">Open cases and reversal rates</p>
+        </div>
+
+        <div class="stats-grid" id="appeal-impact-stats">
+          <div class="stat-card cyan">
+            <div class="stat-label">Appeals Created</div>
+            <div class="stat-value cyan" id="appeals-created">0</div>
+            <div class="stat-change">Within selected time range</div>
+          </div>
+
+          <div class="stat-card orange">
+            <div class="stat-label">Appeals Pending</div>
+            <div class="stat-value orange" id="appeals-pending">0</div>
+            <div class="stat-change">Open or under review now</div>
+          </div>
+
+          <div class="stat-card green">
+            <div class="stat-label">Reversed Appeals</div>
+            <div class="stat-value green" id="appeals-reversed-rate">0%</div>
+            <div class="stat-change" id="appeals-reversed-count">0 reversed</div>
+          </div>
+
+          <div class="stat-card purple">
+            <div class="stat-label">Upheld Appeals</div>
+            <div class="stat-value purple" id="appeals-upheld-rate">0%</div>
+            <div class="stat-change" id="appeals-upheld-count">0 upheld</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="dashboard-section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Trends</p>
+            <h2>Operational analytics</h2>
+          </div>
+          <p class="section-note">Live charting for traffic, decisions, and latency</p>
+        </div>
+
+        <div class="charts-grid">
+          <div class="chart-card">
+            <div class="chart-title">Decisions Over Time</div>
+            <div class="chart-container">
+              <canvas id="timeSeriesChart"></canvas>
+            </div>
+          </div>
+
+          <div class="chart-card">
+            <div class="chart-title">Decision Distribution</div>
+            <div class="chart-container">
+              <canvas id="decisionPieChart"></canvas>
+            </div>
+          </div>
+
+          <div class="chart-card">
+            <div class="chart-title">Risk Score Distribution</div>
+            <div class="chart-container">
+              <canvas id="riskScoreChart"></canvas>
+            </div>
+          </div>
+
+          <div class="chart-card">
+            <div class="chart-title">Processing Performance</div>
+            <div class="chart-container">
+              <canvas id="performanceChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="dashboard-section" id="leaders">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Leaders</p>
+            <h2>High-volume entities</h2>
+          </div>
+          <p class="section-note">Transaction concentration and risk hotspots</p>
+        </div>
+
+        <div class="tables-grid">
+          <div class="table-card">
+            <div class="chart-title">Top Customers by Transaction Volume</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Customer ID</th>
+                  <th>Transactions</th>
+                  <th>Declined</th>
+                  <th>Flagged</th>
+                  <th>Avg Risk Score</th>
+                </tr>
+              </thead>
+              <tbody id="top-customers-body">
+                <tr><td colspan="5" class="loading"><div class="spinner"></div></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="table-card">
+            <div class="chart-title">Top Merchants by Transaction Volume</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Merchant ID</th>
+                  <th>Transactions</th>
+                  <th>Declined</th>
+                  <th>Avg Risk Score</th>
+                </tr>
+              </thead>
+              <tbody id="top-merchants-body">
+                <tr><td colspan="4" class="loading"><div class="spinner"></div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <p>Fraud Detection Analytics Dashboard</p>
+        <p>Realtime feed: <span class="ws-status js-ws-status connected">Connected</span></p>
+      </footer>
+    </main>
+  </div>
+
+  <script src="/js/dashboard.js"></script>
+</body>
+</html>

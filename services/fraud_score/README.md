@@ -2,7 +2,8 @@
 
 Scores transactions using a pre-trained Random Forest model and returns a fraud risk score from 0 to 100.
 
-**Port:** 8001 | **Type:** Atomic microservice (Node.js / Express)
+**Port:** 8001  
+**Type:** Atomic microservice (Node.js / Express)
 
 ---
 
@@ -24,7 +25,7 @@ Scores transactions using a pre-trained Random Forest model and returns a fraud 
 
 ```json
 {
-  "amount": 5000.00,
+  "amount": 5000.0,
   "hour_of_day": 2,
   "is_foreign_transaction": false,
   "is_high_risk_merchant": false,
@@ -42,12 +43,7 @@ Scores transactions using a pre-trained Random Forest model and returns a fraud 
 { "score": 72 }
 ```
 
-Score range 0–100:
-- 0–40 → auto APPROVED
-- 41–70 → FLAGGED for review
-- 71–100 → auto REJECTED
-
-(Thresholds set in the decision service / OutSystems.)
+The score range is 0-100. The final decision thresholds are applied by OutSystems in production, or by the local `detect_fraud` fallback during Docker development and automated testing.
 
 ---
 

@@ -175,9 +175,9 @@ expectArrayContains(
 );
 
 await poll(
-  'decision service flagged decision for transaction one',
-  () => request(`${platform.decisionBase}/api/v1/decisions/${transactionOneId}`),
-  (result) => result.status === 200 && result.body?.data?.decision === 'FLAGGED',
+  'customer decision endpoint reflects flagged status for transaction one',
+  () => getCustomerDecision(customerA.token, transactionOneId),
+  (result) => result.status === 200 && result.body?.status === 'FLAGGED' && Number.isFinite(Number(result.body?.fraud_score)),
   { timeoutMs: 120000, intervalMs: 2500 }
 );
 
@@ -275,9 +275,9 @@ assertStatus(resolveAppealResult, 200, 'resolve appeal');
 await waitForTransactionStatus(customerA.token, transactionTwoId, 'APPROVED');
 
 await poll(
-  'decision service updated transaction two after appeal resolution',
-  () => request(`${platform.decisionBase}/api/v1/decisions/${transactionTwoId}`),
-  (result) => result.status === 200 && result.body?.data?.decision === 'APPROVED',
+  'customer decision endpoint reflects approved appeal outcome',
+  () => getCustomerDecision(customerA.token, transactionTwoId),
+  (result) => result.status === 200 && result.body?.status === 'APPROVED',
   { timeoutMs: 120000, intervalMs: 2500 }
 );
 

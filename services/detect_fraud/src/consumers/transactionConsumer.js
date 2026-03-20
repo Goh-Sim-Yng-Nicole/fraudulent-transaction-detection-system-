@@ -2,6 +2,7 @@ const { Kafka, CompressionTypes } = require('kafkajs');
 const config = require('../config');
 const logger = require('../config/logger');
 const fraudDetectionService = require('../services/fraudDetectionService');
+const decisionPublisher = require('../services/decisionPublisher');
 
 let consumer = null;
 let producer = null;
@@ -83,6 +84,13 @@ const start = async () => {
               }
             }
           ]
+        });
+
+        await decisionPublisher.process({
+          producer,
+          transaction,
+          fraudAnalysis,
+          correlationId: payload.correlationId || payload.trace_id || transaction.id
         });
       } catch (error) {
         logger.error('Fraud detection consumer failed to process transaction', {
