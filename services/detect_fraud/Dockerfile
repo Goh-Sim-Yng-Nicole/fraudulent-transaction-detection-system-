@@ -1,15 +1,13 @@
-FROM python:3.11-slim
+FROM node:20-alpine
 
 WORKDIR /app
 
-COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
+COPY services/detect_fraud/package.json ./package.json
+RUN npm install --omit=dev
 
-COPY ftds /app/ftds
-COPY services/__init__.py /app/services/__init__.py
-COPY services/detect_fraud /app/services/detect_fraud
+COPY services/detect_fraud/src ./src
 
-ENV PYTHONPATH=/app
+ENV PORT=8008
+EXPOSE 8008
 
-CMD ["python", "-m", "services.detect_fraud.worker"]
-
+CMD ["node", "src/index.js"]

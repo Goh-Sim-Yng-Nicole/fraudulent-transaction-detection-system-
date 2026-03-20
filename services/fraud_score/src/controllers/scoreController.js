@@ -1,6 +1,27 @@
 import { AppError } from "../errors.js";
 import { scoreRequestSchema, modelQuerySchema } from "../validation.js";
 
+function normalizeFeatureInput(body) {
+  if (body?.transaction) {
+    const transaction = body.transaction ?? {};
+    const createdAt = transaction.createdAt ? new Date(transaction.createdAt) : new Date();
+    const hourUtc = Number.isNaN(createdAt.getTime()) ? new Date().getUTCHours() : createdAt.getUTCHours();
+
+    return {
+      amount: transaction.amount,
+      currency: transaction.currency,
+      card_type: transaction.cardType ?? transaction.card_type ?? "CREDIT",
+      country: transaction.location?.country ?? transaction.country ?? "SG",
+      hour_utc: hourUtc,
+      merchant_id: transaction.merchantId ?? transaction.merchant_id,
+      velocity_txn_hour_raw: body.ruleResults?.riskFactors?.velocity?.countLastHour ?? 0,
+      geo_country_high_risk: body.ruleResults?.riskFactors?.geography?.highRiskCountry ?? false,
+    };
+  }
+
+  return body;
+}
+
 export function createScoreController({
   models,
   defaultModelVersion,
@@ -35,6 +56,7 @@ export function createScoreController({
 
     const explainRaw = String(req.query.explain ?? "").trim().toLowerCase();
     const explain = explainRaw === "1" || explainRaw === "true" || explainRaw === "yes";
+    const featureInput = normalizeFeatureInput(body);
 
     let probability;
     let fallback_used = false;
@@ -42,11 +64,11 @@ export function createScoreController({
     try {
       const model = models.get(versionToUse);
       if (!model) throw new Error("model not ready");
-      probability = model.predictProbability(body);
-      if (explain) explanation = model.explain(body);
+      probability = model.predictProbability(featureInput);
+      if (explain) explanation = model.explain(featureInput);
     } catch (_e) {
       fallback_used = true;
-      probability = fallbackProbability(body);
+      probability = fallbackProbability(featureInput);
     }
 
     const rules_score = Math.round(probability * 100);
@@ -58,6 +80,12 @@ export function createScoreController({
       model_version: versionToUse,
       fallback_used,
       rules_score,
+      success: true,
+      data: {
+        score: rules_score,
+        confidence: fallback_used ? null : Number((1 - Math.abs(0.5 - probability)).toFixed(4)),
+        modelVersion: versionToUse,
+      },
     };
     if (explain && explanation) payload.explanation = explanation;
     return res.json(payload);
