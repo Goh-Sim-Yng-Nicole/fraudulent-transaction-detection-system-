@@ -1,47 +1,52 @@
 const axios = require('axios');
 const config = require('./index');
 
+const docsUrl = (baseUrl) => {
+  if (!baseUrl) return null;
+  return `${baseUrl.replace(/\/$/, '')}/api-docs.json`;
+};
+
 const services = [
   {
     name: 'transaction-service',
     enabled: config.routeToggles.transactions,
-    url: `${config.services.transaction.replace(/\/$/, '')}/api-docs.json`,
+    url: docsUrl(config.services.transaction),
     includePrefixes: ['/api/v1/transactions'],
   },
   {
     name: 'user-service',
     enabled: config.routeToggles.auth,
-    url: `${config.services.user.replace(/\/$/, '')}/api-docs.json`,
+    url: docsUrl(config.services.user),
     includePrefixes: ['/api/v1/auth'],
   },
   {
     name: 'decision-engine-service',
     enabled: config.routeToggles.decisions,
-    url: `${config.services.decisionEngine.replace(/\/$/, '')}/api-docs.json`,
+    url: docsUrl(config.services.decisionEngine),
     includePrefixes: ['/api/v1/decisions', '/api/v1/thresholds'],
   },
   {
     name: 'audit-service',
     enabled: config.routeToggles.audit,
-    url: `${config.services.audit.replace(/\/$/, '')}/api-docs.json`,
+    url: docsUrl(config.services.audit),
     includePrefixes: ['/api/v1/audit'],
   },
   {
     name: 'analytics-service',
     enabled: config.routeToggles.analytics,
-    url: `${config.services.analytics.replace(/\/$/, '')}/api-docs.json`,
+    url: docsUrl(config.services.analytics),
     includePrefixes: ['/api/v1/analytics'],
   },
   {
     name: 'human-verification-service',
     enabled: config.routeToggles.humanVerification,
-    url: `${config.services.humanVerification.replace(/\/$/, '')}/api-docs.json`,
+    url: docsUrl(config.services.humanVerification),
     includePrefixes: ['/api/v1/reviews'],
   },
   {
     name: 'appeal-service',
     enabled: config.routeToggles.appeals,
-    url: `${config.services.appeal.replace(/\/$/, '')}/api-docs.json`,
+    url: docsUrl(config.services.appeal),
     includePrefixes: ['/api/v1/appeals'],
   },
 ];
@@ -109,7 +114,7 @@ async function aggregateSwaggerSpecs() {
   Object.assign(mergedSpec.paths, gatewayPaths);
 
   for (const service of services) {
-    if (service.enabled === false) {
+    if (service.enabled === false || !service.url) {
       continue;
     }
 

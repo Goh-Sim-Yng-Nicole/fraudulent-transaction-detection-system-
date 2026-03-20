@@ -5,6 +5,12 @@ const flagEnabled = (value, fallback = true) => {
   return String(value).toLowerCase() === 'true';
 };
 
+const externalDecisionUrl = (
+  process.env.DECISION_ENGINE_SERVICE_URL
+  || process.env.DECISION_BASE_URL
+  || ''
+).trim();
+
 module.exports = {
   env: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT, 10) || 8004,
@@ -41,7 +47,7 @@ module.exports = {
   services: {
     user: process.env.USER_SERVICE_URL || process.env.CUSTOMER_BASE_URL || 'http://customer:8005',
     transaction: process.env.TRANSACTION_SERVICE_URL || process.env.TRANSACTION_BASE_URL || 'http://transaction:8000',
-    decisionEngine: process.env.DECISION_ENGINE_SERVICE_URL || process.env.DECISION_BASE_URL || 'http://decision:8009',
+    decisionEngine: externalDecisionUrl || null,
     mlScoring: process.env.ML_SCORING_SERVICE_URL || process.env.FRAUD_SCORE_URL || 'http://fraud-score:8001',
     audit: process.env.AUDIT_SERVICE_URL || process.env.AUDIT_BASE_URL || 'http://audit:8007',
     analytics: process.env.ANALYTICS_SERVICE_URL || process.env.ANALYTICS_BASE_URL || 'http://analytics:8006',
@@ -51,7 +57,7 @@ module.exports = {
   routeToggles: {
     auth: flagEnabled(process.env.ENABLE_AUTH_ROUTES),
     transactions: flagEnabled(process.env.ENABLE_TRANSACTION_ROUTES),
-    decisions: flagEnabled(process.env.ENABLE_DECISION_ROUTES),
+    decisions: Boolean(externalDecisionUrl) && flagEnabled(process.env.ENABLE_DECISION_ROUTES, true),
     audit: flagEnabled(process.env.ENABLE_AUDIT_ROUTES),
     analytics: flagEnabled(process.env.ENABLE_ANALYTICS_ROUTES),
     humanVerification: flagEnabled(process.env.ENABLE_HUMAN_VERIFICATION_ROUTES),

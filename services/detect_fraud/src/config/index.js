@@ -1,5 +1,32 @@
 require('dotenv').config();
 
+const parseBoolean = (value, fallback = false) => {
+  if (value == null || value === '') return fallback;
+  return ['1', 'true', 'yes', 'on'].includes(String(value).trim().toLowerCase());
+};
+
+const parseInteger = (value, fallback) => {
+  const parsed = parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const parseNumber = (value, fallback) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const externalDecisionUrl = (
+  process.env.OUTSYSTEMS_DECISION_URL
+  || process.env.DECISION_ENGINE_SERVICE_URL
+  || process.env.DECISION_BASE_URL
+  || ''
+).trim();
+
+const approveMax = parseInteger(process.env.THRESHOLD_APPROVE_MAX || process.env.APPROVE_MAX_SCORE, 49);
+const flagMin = parseInteger(process.env.THRESHOLD_FLAG_MIN, approveMax + 1);
+const flagMax = parseInteger(process.env.THRESHOLD_FLAG_MAX || process.env.FLAG_MAX_SCORE, 79);
+const declineMin = parseInteger(process.env.THRESHOLD_DECLINE_MIN, flagMax + 1);
+
 module.exports = {
   env: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT, 10) || 8008,
@@ -10,7 +37,9 @@ module.exports = {
   kafka: {
     brokers: (process.env.KAFKA_BROKERS || process.env.KAFKA_BOOTSTRAP_SERVERS || 'localhost:9092').split(','),
     inputTopic: process.env.KAFKA_INPUT_TOPIC || process.env.TOPIC_TRANSACTION_CREATED || 'transaction.created',
-    outputTopic: process.env.KAFKA_OUTPUT_TOPIC || process.env.TOPIC_TRANSACTION_SCORED || 'transaction.scored'
+    outputTopic: process.env.KAFKA_OUTPUT_TOPIC || process.env.TOPIC_TRANSACTION_SCORED || 'transaction.scored',
+    flaggedTopic: process.env.KAFKA_OUTPUT_TOPIC_FLAGGED || process.env.TOPIC_TRANSACTION_FLAGGED || 'transaction.flagged',
+    finalisedTopic: process.env.KAFKA_OUTPUT_TOPIC_FINALISED || process.env.TOPIC_TRANSACTION_FINALISED || 'transaction.finalised',
   },
 
   mlScoring: {
@@ -38,5 +67,49 @@ module.exports = {
     rulesWeight: parseFloat(process.env.COMBINATION_RULES_WEIGHT || '0.45'),
     mlWeight: parseFloat(process.env.COMBINATION_ML_WEIGHT || '0.55'),
     mlFlagThreshold: parseFloat(process.env.ML_FLAG_THRESHOLD || '70')
+  },
+
+  decision: {
+    outsystemsUrl: externalDecisionUrl || null,
+    timeoutMs: parseInteger(process.env.OUTSYSTEMS_DECISION_TIMEOUT_MS, 5000),
+    localFallbackEnabled: parseBoolean(
+      process.env.ENABLE_LOCAL_DECISION_FALLBACK,
+      !externalDecisionUrl
+    ),
+    thresholds: {
+      approveMax,
+      flagMin,
+      flagMax,
+      declineMin,
+      rulesFlaggedAutoDecline: parseBoolean(process.env.THRESHOLD_RULES_FLAGGED_AUTO_DECLINE, false),
+      certaintyAutoDeclineEnabled: parseBoolean(process.env.THRESHOLD_CERTAINTY_AUTO_DECLINE_ENABLED, false),
+      certaintyDeclineMinScore: parseInteger(process.env.THRESHOLD_CERTAINTY_DECLINE_MIN_SCORE, 70),
+      certaintyDeclineMinConfidence: parseNumber(process.env.THRESHOLD_CERTAINTY_DECLINE_MIN_CONFIDENCE, 0.9),
+      highConfidenceApprove: parseNumber(process.env.THRESHOLD_HIGH_CONFIDENCE_APPROVE, 0.95),
+      lowConfidenceFlag: parseNumber(process.env.THRESHOLD_LOW_CONFIDENCE_FLAG, 0.6),
+      highValueAmount: parseNumber(
+        process.env.THRESHOLD_HIGH_VALUE_AMOUNT || process.env.SUSPICIOUS_AMOUNT_THRESHOLD,
+        10000
+      ),
+      highValueAutoFlag: parseBoolean(process.env.THRESHOLD_HIGH_VALUE_AUTO_FLAG, false),
+    },
+    businessRules: {
+      autoApproveWhitelist: (process.env.AUTO_APPROVE_WHITELIST_CUSTOMERS || '')
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean),
+      autoDeclineBlacklist: (process.env.AUTO_DECLINE_BLACKLIST_CUSTOMERS || '')
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean),
+      requireManualReviewCountries: (
+        process.env.REQUIRE_MANUAL_REVIEW_COUNTRIES
+        || process.env.HIGH_RISK_COUNTRIES
+        || 'NG,RU,CN,PK'
+      )
+        .split(',')
+        .map((value) => value.trim().toUpperCase())
+        .filter(Boolean),
+    },
   }
 };

@@ -14,7 +14,6 @@ export const platform = {
   appealBase: process.env.APPEAL_BASE_URL || 'http://localhost:8003',
   analyticsBase: process.env.ANALYTICS_BASE_URL || 'http://localhost:8006',
   auditBase: process.env.AUDIT_BASE_URL || 'http://localhost:8007',
-  decisionBase: process.env.DECISION_BASE_URL || 'http://localhost:8009',
   notificationBase: process.env.NOTIFICATION_BASE_URL || 'http://localhost:8010',
 };
 
@@ -34,7 +33,6 @@ export const healthChecks = [
   { name: 'transaction', url: `${platform.transactionBase}/health/ready` },
   { name: 'fraud-score', url: `${platform.fraudScoreBase}/api/v1/health/ready` },
   { name: 'detect-fraud', url: `${platform.detectFraudBase}/api/v1/health/ready` },
-  { name: 'decision', url: `${platform.decisionBase}/api/v1/health/ready` },
   { name: 'fraud-review', url: `${platform.fraudReviewBase}/api/v1/health` },
   { name: 'appeal', url: `${platform.appealBase}/health` },
   { name: 'analytics', url: `${platform.analyticsBase}/health` },
