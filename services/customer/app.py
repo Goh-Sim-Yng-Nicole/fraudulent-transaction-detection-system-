@@ -5,7 +5,7 @@ import re
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer

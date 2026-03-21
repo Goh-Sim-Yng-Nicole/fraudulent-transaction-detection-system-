@@ -15,11 +15,11 @@ services:
       POSTGRES_USER: ${POSTGRES_CUSTOMER_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_CUSTOMER_PASSWORD:-postgres}
     ports:
-      - "5435:5432"
+      - '5435:5432'
     volumes:
       - ftds_postgres_customer_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
       interval: 5s
       timeout: 5s
       retries: 10
@@ -31,11 +31,11 @@ services:
       POSTGRES_USER: ${POSTGRES_TRANSACTION_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_TRANSACTION_PASSWORD:-postgres}
     ports:
-      - "5432:5432"
+      - '5432:5432'
     volumes:
       - ftds_postgres_transaction_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
       interval: 5s
       timeout: 5s
       retries: 10
@@ -47,11 +47,11 @@ services:
       POSTGRES_USER: ${POSTGRES_APPEAL_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_APPEAL_PASSWORD:-postgres}
     ports:
-      - "5433:5432"
+      - '5433:5432'
     volumes:
       - ftds_postgres_appeal_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
       interval: 5s
       timeout: 5s
       retries: 10
@@ -63,11 +63,11 @@ services:
       POSTGRES_USER: ${POSTGRES_FRAUD_REVIEW_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_FRAUD_REVIEW_PASSWORD:-postgres}
     ports:
-      - "5434:5432"
+      - '5434:5432'
     volumes:
       - ftds_postgres_fraud_review_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
       interval: 5s
       timeout: 5s
       retries: 10
@@ -79,11 +79,11 @@ services:
       POSTGRES_USER: ${POSTGRES_AUDIT_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_AUDIT_PASSWORD:-postgres}
     ports:
-      - "5437:5432"
+      - '5437:5432'
     volumes:
       - ftds_postgres_audit_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
       interval: 5s
       timeout: 5s
       retries: 10
@@ -95,22 +95,22 @@ services:
       - start
       - --overprovisioned
       - --smp
-      - "1"
+      - '1'
       - --memory
       - 1G
       - --reserve-memory
       - 0M
       - --node-id
-      - "0"
+      - '0'
       - --check=false
       - --kafka-addr
       - internal://0.0.0.0:9092,external://0.0.0.0:19092
       - --advertise-kafka-addr
       - internal://redpanda:9092,external://localhost:19092
     ports:
-      - "19092:19092"
+      - '19092:19092'
     healthcheck:
-      test: ["CMD-SHELL", "rpk cluster info --brokers localhost:9092 >/dev/null 2>&1"]
+      test: ['CMD-SHELL', 'rpk cluster info --brokers localhost:9092 >/dev/null 2>&1']
       interval: 5s
       timeout: 5s
       retries: 20
@@ -118,18 +118,18 @@ services:
   mailpit:
     image: axllent/mailpit:v1.26
     ports:
-      - "1025:1025"
-      - "8025:8025"
+      - '1025:1025'
+      - '8025:8025'
     environment:
-      MP_SMTP_AUTH_ACCEPT_ANY: "1"
-      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+      MP_SMTP_AUTH_ACCEPT_ANY: '1'
+      MP_SMTP_AUTH_ALLOW_INSECURE: '1'
 
   kafka-init:
     image: docker.redpanda.com/redpandadata/redpanda:latest
     depends_on:
       redpanda:
         condition: service_healthy
-    entrypoint: ["/bin/sh", "-c"]
+    entrypoint: ['/bin/sh', '-c']
     command: >
       rpk topic create transaction.created --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true;
       rpk topic create transaction.scored --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true;
@@ -150,7 +150,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_TRANSACTION_USER:-postgres}:${POSTGRES_TRANSACTION_PASSWORD:-postgres}@postgres-transaction:5432/${POSTGRES_TRANSACTION_DB:-ftds_transaction}
       CUSTOMER_BASE_URL: http://customer:8005
     ports:
-      - "8000:8000"
+      - '8000:8000'
     depends_on:
       redpanda:
         condition: service_healthy
@@ -168,7 +168,7 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_TRANSACTION_USER:-postgres}:${POSTGRES_TRANSACTION_PASSWORD:-postgres}@postgres-transaction:5432/${POSTGRES_TRANSACTION_DB:-ftds_transaction}
-    command: ["node", "src/db/migrate.js"]
+    command: ['node', 'src/db/migrate.js']
     restart: on-failure
     depends_on:
       postgres-transaction:
@@ -180,7 +180,7 @@ services:
       dockerfile: services/fraud_score/Dockerfile
     env_file: .env
     ports:
-      - "8001:8001"
+      - '8001:8001'
 
   detect-fraud:
     build:
@@ -191,7 +191,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
       FRAUD_SCORE_URL: http://fraud-score:8001/score
     ports:
-      - "8008:8008"
+      - '8008:8008'
     depends_on:
       redpanda:
         condition: service_healthy
@@ -215,7 +215,7 @@ services:
       ANALYST_JWT_SECRET: ${ANALYST_JWT_SECRET:-analyst-dev-secret-change-in-prod}
       APPEAL_BASE_URL: http://appeal:8003
     ports:
-      - "8002:8002"
+      - '8002:8002'
     depends_on:
       redpanda:
         condition: service_healthy
@@ -233,7 +233,7 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_FRAUD_REVIEW_USER:-postgres}:${POSTGRES_FRAUD_REVIEW_PASSWORD:-postgres}@postgres-fraud-review:5432/${POSTGRES_FRAUD_REVIEW_DB:-ftds_fraud_review}
-    command: ["npm", "run", "migrate"]
+    command: ['npm', 'run', 'migrate']
     depends_on:
       postgres-fraud-review:
         condition: service_healthy
@@ -250,7 +250,7 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_APPEAL_USER:-postgres}:${POSTGRES_APPEAL_PASSWORD:-postgres}@postgres-appeal:5432/${POSTGRES_APPEAL_DB:-ftds_appeal}
       TRANSACTION_BASE_URL: http://transaction:8000
     ports:
-      - "8003:8003"
+      - '8003:8003'
     depends_on:
       redpanda:
         condition: service_healthy
@@ -268,7 +268,7 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_APPEAL_USER:-postgres}:${POSTGRES_APPEAL_PASSWORD:-postgres}@postgres-appeal:5432/${POSTGRES_APPEAL_DB:-ftds_appeal}
-    command: ["npm", "run", "migrate"]
+    command: ['npm', 'run', 'migrate']
     depends_on:
       postgres-appeal:
         condition: service_healthy
@@ -294,10 +294,10 @@ services:
       EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:-alerts@ftds.local}
       EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-FTDS Notifications}
       SMS_ENABLED: ${SMS_ENABLED:-false}
-      NOTIFY_ON_FLAGGED: "true"
-      FLAGGED_NOTIFY_FRAUD_TEAM_EMAIL: "true"
+      NOTIFY_ON_FLAGGED: 'true'
+      FLAGGED_NOTIFY_FRAUD_TEAM_EMAIL: 'true'
     ports:
-      - "8010:8010"
+      - '8010:8010'
     depends_on:
       redpanda:
         condition: service_healthy
@@ -321,7 +321,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
       DATABASE_URL: postgresql://${POSTGRES_AUDIT_USER:-postgres}:${POSTGRES_AUDIT_PASSWORD:-postgres}@postgres-audit:5432/${POSTGRES_AUDIT_DB:-ftds_audit}
     ports:
-      - "8007:8007"
+      - '8007:8007'
     depends_on:
       redpanda:
         condition: service_healthy
@@ -339,7 +339,7 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_AUDIT_USER:-postgres}:${POSTGRES_AUDIT_PASSWORD:-postgres}@postgres-audit:5432/${POSTGRES_AUDIT_DB:-ftds_audit}
-    command: ["npm", "run", "migrate"]
+    command: ['npm', 'run', 'migrate']
     depends_on:
       postgres-audit:
         condition: service_healthy
@@ -356,9 +356,9 @@ services:
       MANAGER_USERNAME: ${MANAGER_USERNAME:-manager}
       MANAGER_PASSWORD: ${MANAGER_PASSWORD:-manager123}
       MANAGER_JWT_SECRET: ${MANAGER_JWT_SECRET:-manager-dev-secret-change-in-prod}
-      REDIS_DISABLED: "true"
+      REDIS_DISABLED: 'true'
     ports:
-      - "8006:8006"
+      - '8006:8006'
     depends_on:
       redpanda:
         condition: service_healthy
@@ -379,7 +379,7 @@ services:
       SMTP_FROM: ${CUSTOMER_SMTP_FROM:-banking@ftds.local}
       SMTP_STARTTLS: ${CUSTOMER_SMTP_STARTTLS:-false}
     ports:
-      - "8005:8005"
+      - '8005:8005'
     depends_on:
       postgres-customer:
         condition: service_healthy
@@ -393,7 +393,7 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_CUSTOMER_USER:-postgres}:${POSTGRES_CUSTOMER_PASSWORD:-postgres}@postgres-customer:5432/${POSTGRES_CUSTOMER_DB:-ftds_customer}
-    command: ["python", "-m", "services.customer.migrate"]
+    command: ['python', '-m', 'services.customer.migrate']
     depends_on:
       postgres-customer:
         condition: service_healthy
@@ -410,11 +410,11 @@ services:
       FRAUD_REVIEW_BASE_URL: http://fraud-review:8002
       APPEAL_BASE_URL: http://appeal:8003
       CUSTOMER_BASE_URL: http://customer:8005
-      REDIS_DISABLED: "true"
-      METRICS_ENABLED: "true"
+      REDIS_DISABLED: 'true'
+      METRICS_ENABLED: 'true'
       METRICS_PORT: 9090
     ports:
-      - "8004:8004"
+      - '8004:8004'
     depends_on:
       transaction:
         condition: service_started
@@ -430,7 +430,7 @@ services:
       context: .
       dockerfile: nginx/Dockerfile
     ports:
-      - "8088:8088"
+      - '8088:8088'
     depends_on:
       gateway:
         condition: service_started
@@ -440,38 +440,38 @@ services:
   kong:
     image: kong:3.6
     environment:
-      KONG_DATABASE: "off"
+      KONG_DATABASE: 'off'
       KONG_DECLARATIVE_CONFIG: /etc/kong/kong.yml
-      KONG_PROXY_LISTEN: "0.0.0.0:8000"
-      KONG_ADMIN_LISTEN: "0.0.0.0:8001"
+      KONG_PROXY_LISTEN: '0.0.0.0:8000'
+      KONG_ADMIN_LISTEN: '0.0.0.0:8001'
       KONG_LOG_LEVEL: warn
     volumes:
       - ./kong/kong.yml:/etc/kong/kong.yml:ro
     ports:
-      - "80:8000"
-      - "8090:8001"
+      - '80:8000'
+      - '8090:8001'
     depends_on:
       nginx:
         condition: service_started
     healthcheck:
-      test: ["CMD", "kong", "health"]
+      test: ['CMD', 'kong', 'health']
       interval: 10s
       timeout: 10s
       retries: 10
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.121.0
-    command: ["--config=/etc/otel-collector-config.yml"]
+    command: ['--config=/etc/otel-collector-config.yml']
     volumes:
       - ./otel-collector-config.yml:/etc/otel-collector-config.yml:ro
     ports:
-      - "4317:4317"
-      - "4318:4318"
-      - "13133:13133"
+      - '4317:4317'
+      - '4318:4318'
+      - '13133:13133'
     depends_on:
       - jaeger
     healthcheck:
-      test: ["CMD", "/otelcol-contrib", "validate", "--config=/etc/otel-collector-config.yml"]
+      test: ['CMD', '/otelcol-contrib', 'validate', '--config=/etc/otel-collector-config.yml']
       interval: 15s
       timeout: 5s
       retries: 3
@@ -485,12 +485,12 @@ services:
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
     ports:
-      - "9091:8080"
+      - '9091:8080'
 
   prometheus:
     image: prom/prometheus:latest
     ports:
-      - "9090:9090"
+      - '9090:9090'
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ftds_prometheus_data:/prometheus
@@ -504,28 +504,28 @@ services:
   jaeger:
     image: cr.jaegertracing.io/jaegertracing/jaeger:2.14.0
     ports:
-      - "16686:16686"
+      - '16686:16686'
     command:
-      - "--set=extensions.jaeger_query.ui.config_file=/etc/jaeger/ui-config.json"
-      - "--set=extensions.jaeger_storage.metric_backends.prometheus_backend.prometheus.endpoint=http://prometheus:9090"
-      - "--set=extensions.jaeger_storage.metric_backends.prometheus_backend.prometheus.normalize_calls=true"
-      - "--set=extensions.jaeger_storage.metric_backends.prometheus_backend.prometheus.normalize_duration=true"
-      - "--set=extensions.jaeger_storage.metric_backends.prometheus_backend.prometheus.metric_namespace="
-      - "--set=extensions.jaeger_storage.metric_backends.prometheus_backend.prometheus.latency_unit=ms"
-      - "--set=extensions.jaeger_query.storage.metrics=prometheus_backend"
+      - '--set=extensions.jaeger_query.ui.config_file=/etc/jaeger/ui-config.json'
+      - '--set=extensions.jaeger_storage.metric_backends.prometheus_backend.prometheus.endpoint=http://prometheus:9090'
+      - '--set=extensions.jaeger_storage.metric_backends.prometheus_backend.prometheus.normalize_calls=true'
+      - '--set=extensions.jaeger_storage.metric_backends.prometheus_backend.prometheus.normalize_duration=true'
+      - '--set=extensions.jaeger_storage.metric_backends.prometheus_backend.prometheus.metric_namespace='
+      - '--set=extensions.jaeger_storage.metric_backends.prometheus_backend.prometheus.latency_unit=ms'
+      - '--set=extensions.jaeger_query.storage.metrics=prometheus_backend'
     volumes:
       - ./jaeger/ui-config.json:/etc/jaeger/ui-config.json:ro
 
   grafana:
     image: grafana/grafana:latest
     ports:
-      - "3000:3000"
+      - '3000:3000'
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin123}
-      GF_USERS_ALLOW_SIGN_UP: "false"
-      GF_AUTH_ANONYMOUS_ENABLED: "true"
-      GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_AUTH_ANONYMOUS_ENABLED: 'true'
+      GF_AUTH_ANONYMOUS_ORG_ROLE: 'Viewer'
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/fraud-detection.json
     volumes:
       - ftds_grafana_data:/var/lib/grafana

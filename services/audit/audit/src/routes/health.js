@@ -1,6 +1,5 @@
 const router = require('express').Router();
 const { query } = require('../db/pool');
-const logger = require('../config/logger');
 
 /**
  * @openapi

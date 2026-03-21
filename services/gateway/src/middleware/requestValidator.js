@@ -1,4 +1,3 @@
-const Joi = require('joi');
 const { v4: uuidv4 } = require('uuid');
 const { BadRequestError } = require('../utils/errors');
 const { REQUEST_ID_HEADER, CORRELATION_ID_HEADER, IDEMPOTENCY_KEY_HEADER } = require('../utils/constants');

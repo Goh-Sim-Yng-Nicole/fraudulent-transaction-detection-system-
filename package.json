@@ -2,9 +2,21 @@
   "name": "fraudulent-transaction-detection-system",
   "private": true,
   "scripts": {
+    "lint:js": "eslint \"services/**/*.js\" \"testing/**/*.mjs\" \"eslint.config.mjs\" --max-warnings=0",
+    "lint:py": "python -m ruff check services/customer",
+    "lint": "npm run lint:js && npm run lint:py",
+    "format:check": "prettier --check \"README.md\" \"package.json\" \"testing/package.json\" \"docker-compose.yml\" \"otel-collector-config.yml\" \".github/workflows/*.{yml,yaml}\" \"grafana/provisioning/**/*.yml\" \"kong/**/*.yml\" \"prometheus/**/*.yml\" \"jaeger/**/*.json\" \".prettierrc.json\"",
+    "format:write": "prettier --write \"README.md\" \"package.json\" \"testing/package.json\" \"docker-compose.yml\" \"otel-collector-config.yml\" \".github/workflows/*.{yml,yaml}\" \"grafana/provisioning/**/*.yml\" \"kong/**/*.yml\" \"prometheus/**/*.yml\" \"jaeger/**/*.json\" \".prettierrc.json\"",
+    "quality": "npm run lint && npm run format:check",
     "test:smoke": "node ./testing/smoke-health.mjs",
     "test:contracts": "node ./testing/service-contracts.mjs",
     "test:e2e": "node ./testing/e2e-platform.mjs",
     "test:verify": "node ./testing/smoke-health.mjs && node ./testing/service-contracts.mjs && node ./testing/e2e-platform.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.21.0",
+    "eslint": "^9.21.0",
+    "globals": "^15.15.0",
+    "prettier": "^3.5.3"
   }
 }
