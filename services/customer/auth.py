@@ -10,9 +10,21 @@ from email.mime.text import MIMEText
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
+from ftds.notifications import send_transfer_notification
+
 ALGORITHM = "HS256"
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+__all__ = [
+    "create_access_token",
+    "decode_access_token",
+    "generate_otp_code",
+    "hash_password",
+    "send_otp_email",
+    "send_transfer_notification",
+    "verify_password",
+]
 
 
 def _get_jwt_secret() -> str:
@@ -135,5 +147,3 @@ async def send_otp_email(to_email: str, full_name: str, code: str, purpose: str 
 
     await aiosmtplib.send(msg, **send_kwargs)
 
-
-from ftds.notifications import send_transfer_notification  # noqa: F401  (re-exported for callers)

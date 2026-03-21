@@ -53,58 +53,58 @@ Observability
 
 ## Services
 
-| Service | Type | Port | Description |
-|---|---|---|---|
-| `customer` | Atomic | 8005 | Registration, login, OTP, profile management |
-| `transaction` | Atomic | 8000 | Transaction lifecycle and Kafka-driven status updates |
-| `fraud_score` | Atomic | 8001 | ML fraud scoring via Random Forest |
-| `detect_fraud` | Composite | 8008 | Orchestrates fraud scoring, publishes `transaction.scored`, hands off to OutSystems when configured, and provides a Docker-safe local decision fallback |
-| `process_flagged_appeals` | Composite | 8002 | Fraud review service with legacy analyst routes, modern `/api/v1/review-cases` and `/api/v1/reviews` APIs, and the analyst dashboard |
-| `appeal` | Atomic | 8003 | Customer appeal lifecycle |
-| `notification` | Atomic | 8010 | Event-driven notifications with local Mailpit SMTP by default in Docker, plus optional external SMTP/Twilio integrations |
-| `audit` | Atomic | 8007 | Structured audit log with query APIs, Prometheus metrics, and chain-integrity verification |
-| `analytics` | Atomic | 8006 | Real-time manager analytics with dashboard APIs, WebSocket updates, and in-memory fallback when Redis is disabled |
-| `gateway` | Composite | 8004 | Customer-facing API aggregation with legacy customer routes, modern `/api/v1` proxies, and optional external decision proxying |
+| Service                   | Type      | Port | Description                                                                                                                                             |
+| ------------------------- | --------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `customer`                | Atomic    | 8005 | Registration, login, OTP, profile management                                                                                                            |
+| `transaction`             | Atomic    | 8000 | Transaction lifecycle and Kafka-driven status updates                                                                                                   |
+| `fraud_score`             | Atomic    | 8001 | ML fraud scoring via Random Forest                                                                                                                      |
+| `detect_fraud`            | Composite | 8008 | Orchestrates fraud scoring, publishes `transaction.scored`, hands off to OutSystems when configured, and provides a Docker-safe local decision fallback |
+| `process_flagged_appeals` | Composite | 8002 | Fraud review service with legacy analyst routes, modern `/api/v1/review-cases` and `/api/v1/reviews` APIs, and the analyst dashboard                    |
+| `appeal`                  | Atomic    | 8003 | Customer appeal lifecycle                                                                                                                               |
+| `notification`            | Atomic    | 8010 | Event-driven notifications with local Mailpit SMTP by default in Docker, plus optional external SMTP/Twilio integrations                                |
+| `audit`                   | Atomic    | 8007 | Structured audit log with query APIs, Prometheus metrics, and chain-integrity verification                                                              |
+| `analytics`               | Atomic    | 8006 | Real-time manager analytics with dashboard APIs, WebSocket updates, and in-memory fallback when Redis is disabled                                       |
+| `gateway`                 | Composite | 8004 | Customer-facing API aggregation with legacy customer routes, modern `/api/v1` proxies, and optional external decision proxying                          |
 
 ---
 
 ## UIs
 
-| UI | File | Audience | Access |
-|---|---|---|---|
-| Banking Portal | `ui/banking.html` | Customers | `http://localhost:8088/banking.html` |
-| Fraud Review Portal | `ui/fraud-review.html` | Fraud analysts | `http://localhost:8088/fraud-review.html` |
-| Manager Dashboard | `ui/manager.html` | Banking managers | `http://localhost:8088/manager.html` |
+| UI                  | File                   | Audience         | Access                                    |
+| ------------------- | ---------------------- | ---------------- | ----------------------------------------- |
+| Banking Portal      | `ui/banking.html`      | Customers        | `http://localhost:8088/banking.html`      |
+| Fraud Review Portal | `ui/fraud-review.html` | Fraud analysts   | `http://localhost:8088/fraud-review.html` |
+| Manager Dashboard   | `ui/manager.html`      | Banking managers | `http://localhost:8088/manager.html`      |
 
 ---
 
 ## Infrastructure
 
-| Component | Port | Purpose |
-|---|---|---|
-| Nginx | 8088 | Static UI files and reverse proxy |
-| Kong | 80 (proxy), 8090 (admin) | API gateway, JWT auth, rate limiting |
-| Redpanda (Kafka) | 19092 (external), 9092 (internal) | Event streaming |
-| Grafana | 3000 | Monitoring dashboards |
-| Prometheus | 9090 | Metrics scraping |
-| Jaeger | 16686 | Distributed tracing UI |
-| OpenTelemetry Collector | 4317 (gRPC), 4318 (HTTP), 13133 (health) | Trace ingestion and span-to-metrics pipeline |
-| Mailpit | 8025 (UI), 1025 (SMTP) | Local email inbox and SMTP server for notifications and OTP mail |
-| cAdvisor | 9091 | Container metrics for Prometheus and Grafana |
+| Component               | Port                                     | Purpose                                                          |
+| ----------------------- | ---------------------------------------- | ---------------------------------------------------------------- |
+| Nginx                   | 8088                                     | Static UI files and reverse proxy                                |
+| Kong                    | 80 (proxy), 8090 (admin)                 | API gateway, JWT auth, rate limiting                             |
+| Redpanda (Kafka)        | 19092 (external), 9092 (internal)        | Event streaming                                                  |
+| Grafana                 | 3000                                     | Monitoring dashboards                                            |
+| Prometheus              | 9090                                     | Metrics scraping                                                 |
+| Jaeger                  | 16686                                    | Distributed tracing UI                                           |
+| OpenTelemetry Collector | 4317 (gRPC), 4318 (HTTP), 13133 (health) | Trace ingestion and span-to-metrics pipeline                     |
+| Mailpit                 | 8025 (UI), 1025 (SMTP)                   | Local email inbox and SMTP server for notifications and OTP mail |
+| cAdvisor                | 9091                                     | Container metrics for Prometheus and Grafana                     |
 
 ---
 
 ## Kafka Topics
 
-| Topic | Produced by | Consumed by |
-|---|---|---|
-| `transaction.created` | transaction | detect_fraud, audit |
-| `transaction.scored` | detect_fraud | OutSystems decision flow, audit |
-| `transaction.flagged` | OutSystems or detect_fraud local fallback | transaction, process_flagged_appeals, notification, audit, analytics |
-| `transaction.finalised` | OutSystems or detect_fraud local fallback | transaction, notification, audit, analytics |
-| `transaction.reviewed` | process_flagged_appeals | transaction, notification, audit, analytics |
-| `appeal.created` | appeal | process_flagged_appeals, audit, analytics |
-| `appeal.resolved` | process_flagged_appeals | appeal, notification, audit, analytics |
+| Topic                   | Produced by                               | Consumed by                                                          |
+| ----------------------- | ----------------------------------------- | -------------------------------------------------------------------- |
+| `transaction.created`   | transaction                               | detect_fraud, audit                                                  |
+| `transaction.scored`    | detect_fraud                              | OutSystems decision flow, audit                                      |
+| `transaction.flagged`   | OutSystems or detect_fraud local fallback | transaction, process_flagged_appeals, notification, audit, analytics |
+| `transaction.finalised` | OutSystems or detect_fraud local fallback | transaction, notification, audit, analytics                          |
+| `transaction.reviewed`  | process_flagged_appeals                   | transaction, notification, audit, analytics                          |
+| `appeal.created`        | appeal                                    | process_flagged_appeals, audit, analytics                            |
+| `appeal.resolved`       | process_flagged_appeals                   | appeal, notification, audit, analytics                               |
 
 ---
 
@@ -127,21 +127,21 @@ Decision APIs are not hosted in this repo. The decision step belongs to OutSyste
 
 These thresholds are applied by OutSystems in production, or by the `detect_fraud` local fallback during Docker development and automated testing when `OUTSYSTEMS_DECISION_URL` is unset.
 
-| Score | Decision |
-|---|---|
-| 0 - `THRESHOLD_APPROVE_MAX` (default 49) | Auto APPROVED |
+| Score                                                       | Decision                  |
+| ----------------------------------------------------------- | ------------------------- |
+| 0 - `THRESHOLD_APPROVE_MAX` (default 49)                    | Auto APPROVED             |
 | `THRESHOLD_FLAG_MIN` - `THRESHOLD_FLAG_MAX` (default 50-79) | FLAGGED for manual review |
-| `THRESHOLD_DECLINE_MIN` - 100 (default 80-100) | Auto REJECTED |
+| `THRESHOLD_DECLINE_MIN` - 100 (default 80-100)              | Auto REJECTED             |
 
 ---
 
 ## Credentials
 
-| Portal | Default Username | Default Password |
-|---|---|---|
-| Fraud Review | `analyst` | `analyst123` |
-| Manager Dashboard | `manager` | `manager123` |
-| Grafana | `admin` | `admin123` |
+| Portal            | Default Username | Default Password |
+| ----------------- | ---------------- | ---------------- |
+| Fraud Review      | `analyst`        | `analyst123`     |
+| Manager Dashboard | `manager`        | `manager123`     |
+| Grafana           | `admin`          | `admin123`       |
 
 ---
 
@@ -178,12 +178,12 @@ Local Docker defaults worth knowing:
 
 The repo includes three automated validation layers under `testing/`:
 
-| Command | Purpose |
-|---|---|
-| `npm run test:smoke` | Fast availability check across the main service surfaces |
-| `npm run test:contracts` | Direct service and infrastructure validation across APIs, dashboards, Kafka, and observability |
-| `npm run test:e2e` | Full customer-to-analyst-to-appeal flow with OTP, manual review, analytics, audit, and notification verification |
-| `npm run test:verify` | Runs `smoke -> contracts -> e2e` in sequence |
+| Command                  | Purpose                                                                                                          |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `npm run test:smoke`     | Fast availability check across the main service surfaces                                                         |
+| `npm run test:contracts` | Direct service and infrastructure validation across APIs, dashboards, Kafka, and observability                   |
+| `npm run test:e2e`       | Full customer-to-analyst-to-appeal flow with OTP, manual review, analytics, audit, and notification verification |
+| `npm run test:verify`    | Runs `smoke -> contracts -> e2e` in sequence                                                                     |
 
 On Windows PowerShell, use `npm.cmd` if `npm` is blocked by execution policy:
 
@@ -210,6 +210,9 @@ The repo now includes a GitHub Actions workflow at [`.github/workflows/ci.yml`](
 On every push, pull request, or manual dispatch, CI will:
 
 - copy `.env.example` to `.env` for a clean runner bootstrap
+- install the shared root linting and formatting toolchain
+- install `ruff` for Python quality checks
+- run `npm run quality`
 - validate the Docker Compose configuration
 - build the full application stack
 - start the stack in Docker
@@ -218,6 +221,40 @@ On every push, pull request, or manual dispatch, CI will:
 - upload Docker logs automatically if the run fails
 
 This keeps the submitted/demo version reproducible and catches cross-service regressions before they reach your main branch.
+
+---
+
+## Code Quality
+
+The repo now has a shared root-level quality gate so the mixed Node and Python services follow one baseline.
+
+Available commands:
+
+- `npm run lint:js` for repo-wide JavaScript and test-script linting with ESLint
+- `npm run lint:py` for the Python customer service with Ruff
+- `npm run lint` to run both lint layers
+- `npm run format:check` to validate shared repo config and documentation formatting with Prettier
+- `npm run format:write` to apply the standard formatting to those files
+- `npm run quality` to run the full code-quality gate locally
+
+For Python quality checks, install the local dev dependency once:
+
+```powershell
+python -m pip install -r requirements-dev.txt
+```
+
+For Node quality checks, install the root dev dependencies once:
+
+```powershell
+npm.cmd install
+```
+
+The shared standards are defined in:
+
+- [`.editorconfig`](C:/Users/Naren/Documents/SMU/y2s2/ESD/project2/fraudulent-transaction-detection-system-/.editorconfig)
+- [`eslint.config.mjs`](C:/Users/Naren/Documents/SMU/y2s2/ESD/project2/fraudulent-transaction-detection-system-/eslint.config.mjs)
+- [`.prettierrc.json`](C:/Users/Naren/Documents/SMU/y2s2/ESD/project2/fraudulent-transaction-detection-system-/.prettierrc.json)
+- [`pyproject.toml`](C:/Users/Naren/Documents/SMU/y2s2/ESD/project2/fraudulent-transaction-detection-system-/pyproject.toml)
 
 ---
 

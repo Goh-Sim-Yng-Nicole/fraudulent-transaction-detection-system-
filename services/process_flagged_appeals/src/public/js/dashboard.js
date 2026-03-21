@@ -57,7 +57,7 @@ const updateDataStats = (reviewCount, appealCount, visibleReviewRows) => {
 };
 
 const updateFilterUI = () => {
-  clearFilterBtn.disabled = !Boolean(filterInput.value.trim());
+  clearFilterBtn.disabled = !filterInput.value.trim();
 };
 
 const updateQueueFilterUI = () => {

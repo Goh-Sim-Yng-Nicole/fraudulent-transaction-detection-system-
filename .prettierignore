@@ -1,0 +1,7 @@
+node_modules/
+coverage/
+dist/
+build/
+services/**/node_modules/
+services/**/package-lock.json
+grafana/dashboards/*.json

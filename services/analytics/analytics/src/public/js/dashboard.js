@@ -24,6 +24,12 @@ if (window.Chart) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.time-btn').forEach((button) => {
+    button.addEventListener('click', () => {
+      setTimeRange(button.dataset.range || '24h', button);
+    });
+  });
+
   initWebSocket();
   loadDashboard();
   setInterval(() => loadDashboard(), 60000);

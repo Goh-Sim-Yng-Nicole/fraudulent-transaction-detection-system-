@@ -27,13 +27,6 @@ const send = async (req, res, method, target, options, transform) => {
   return res.status(response.status).json(payload);
 };
 
-const unwrapData = (payload) => {
-  if (payload && typeof payload === 'object' && 'data' in payload) {
-    return payload.data;
-  }
-  return payload;
-};
-
 router.post('/auth/register', async (req, res) => {
   await send(
     req,

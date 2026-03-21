@@ -1,6 +1,4 @@
 const client = require('prom-client');
-const config = require('../config');
-const logger = require('../config/logger');
 const register = new client.Registry();
 client.collectDefaultMetrics({ register });
 const httpRequestDuration = new client.Histogram({
