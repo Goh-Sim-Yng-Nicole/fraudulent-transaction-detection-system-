@@ -26,6 +26,8 @@ export const platform = {
   kongAdminBase: process.env.KONG_ADMIN_BASE_URL || 'http://localhost:8090',
   prometheusBase: process.env.PROMETHEUS_BASE_URL || 'http://localhost:9090',
   grafanaBase: process.env.GRAFANA_BASE_URL || 'http://localhost:3000',
+  jaegerBase: process.env.JAEGER_BASE_URL || 'http://localhost:16686',
+  mailpitBase: process.env.MAILPIT_BASE_URL || 'http://localhost:8025',
   cadvisorBase: process.env.CADVISOR_BASE_URL || 'http://localhost:9091',
 };
 
@@ -83,6 +85,13 @@ export function logStep(message) {
 export function authHeaders(token, extraHeaders = {}) {
   return {
     Authorization: `Bearer ${token}`,
+    ...extraHeaders,
+  };
+}
+
+export function basicAuthHeaders(username, password, extraHeaders = {}) {
+  return {
+    Authorization: `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`,
     ...extraHeaders,
   };
 }

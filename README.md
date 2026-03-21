@@ -28,6 +28,8 @@ Fraud scoring and decisions
 
 Observability
   -> Grafana :3000 <- Prometheus :9090 <- cAdvisor :9091
+  -> Jaeger :16686 <- OpenTelemetry Collector :4317/:4318
+  -> Mailpit :8025 (local email inbox) / :1025 (local SMTP)
 ```
 
 ### Event Flow
@@ -59,7 +61,7 @@ Observability
 | `detect_fraud` | Composite | 8008 | Orchestrates fraud scoring, publishes `transaction.scored`, hands off to OutSystems when configured, and provides a Docker-safe local decision fallback |
 | `process_flagged_appeals` | Composite | 8002 | Fraud review service with legacy analyst routes, modern `/api/v1/review-cases` and `/api/v1/reviews` APIs, and the analyst dashboard |
 | `appeal` | Atomic | 8003 | Customer appeal lifecycle |
-| `notification` | Atomic | 8010 | Event-driven notifications with mock email enabled in local Docker and optional SMTP/Twilio integrations |
+| `notification` | Atomic | 8010 | Event-driven notifications with local Mailpit SMTP by default in Docker, plus optional external SMTP/Twilio integrations |
 | `audit` | Atomic | 8007 | Structured audit log with query APIs, Prometheus metrics, and chain-integrity verification |
 | `analytics` | Atomic | 8006 | Real-time manager analytics with dashboard APIs, WebSocket updates, and in-memory fallback when Redis is disabled |
 | `gateway` | Composite | 8004 | Customer-facing API aggregation with legacy customer routes, modern `/api/v1` proxies, and optional external decision proxying |
@@ -85,6 +87,9 @@ Observability
 | Redpanda (Kafka) | 19092 (external), 9092 (internal) | Event streaming |
 | Grafana | 3000 | Monitoring dashboards |
 | Prometheus | 9090 | Metrics scraping |
+| Jaeger | 16686 | Distributed tracing UI |
+| OpenTelemetry Collector | 4317 (gRPC), 4318 (HTTP), 13133 (health) | Trace ingestion and span-to-metrics pipeline |
+| Mailpit | 8025 (UI), 1025 (SMTP) | Local email inbox and SMTP server for notifications and OTP mail |
 | cAdvisor | 9091 | Container metrics for Prometheus and Grafana |
 
 ---
@@ -154,14 +159,18 @@ Default local access points:
 - Manager dashboard: `http://localhost:8088/manager.html`
 - Public edge through Kong: `http://localhost/`
 - Kong admin: `http://localhost:8090/status`
-- Grafana: `http://localhost:3000`
+- Grafana: `http://localhost:3000` (opens directly to the `Fraud Detection Platform` dashboard in local Docker)
 - Prometheus: `http://localhost:9090`
+- Jaeger: `http://localhost:16686`
+- Mailpit inbox: `http://localhost:8025`
 
 Local Docker defaults worth knowing:
 
 - `analytics` runs with `REDIS_DISABLED=true`, so projections use the in-memory fallback store in local Docker
-- `notification` enables mock email for flagged-event readiness in local Docker
+- `notification` uses Mailpit-backed SMTP by default in local Docker, so flagged-event emails are delivered to the local inbox instead of being mocked
+- `customer` OTP emails can also be delivered to Mailpit in local Docker via the `CUSTOMER_SMTP_*` settings
 - OutSystems decisioning is optional locally; when `OUTSYSTEMS_DECISION_URL` is blank, `detect_fraud` performs the local fallback decision flow
+- Grafana auto-provisions the `Fraud Detection Platform` and `Tracing Operations` dashboards on startup, and the root Grafana URL opens the platform dashboard by default
 
 ---
 
@@ -212,7 +221,7 @@ npm.cmd run test:verify
 - Audit: `/api/v1/audit/transaction/:transactionId`, `/api/v1/audit/customer/:customerId`, `/api/v1/audit/stats`, `/api/v1/audit/verify`, `/api/v1/metrics`
 - Notification: health, readiness, metrics, Kafka-consumption evidence through counters
 - Gateway: health, `/api/v1/auth/login`, `/api/v1/transactions/customer/:customerId`, `/api-docs.json`
-- Edge and infra: public edge, `banking.html`, `fraud-review.html`, `manager.html`, Kong admin status, Prometheus readiness, Grafana health, cAdvisor health
+- Edge and infra: public edge, `banking.html`, `fraud-review.html`, `manager.html`, Kong admin status, Prometheus readiness, Grafana health plus provisioned dashboards, Jaeger UI, Mailpit UI, and cAdvisor health
 - Kafka: required topics exist and all core consumer groups settle with `TOTAL-LAG 0`
 
 ### End To End

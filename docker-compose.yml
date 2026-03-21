@@ -1,3 +1,12 @@
+x-otel-env: &otel-env
+  OTEL_ENABLED: ${OTEL_ENABLED:-true}
+  OTEL_SERVICE_NAMESPACE: ${OTEL_SERVICE_NAMESPACE:-ftds-platform}
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
+  OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}
+  OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
+  OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-1.0}
+  OTEL_PROPAGATORS: ${OTEL_PROPAGATORS:-tracecontext,baggage}
+
 services:
   postgres-customer:
     image: postgres:16
@@ -106,6 +115,15 @@ services:
       timeout: 5s
       retries: 20
 
+  mailpit:
+    image: axllent/mailpit:v1.26
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+
   kafka-init:
     image: docker.redpanda.com/redpandadata/redpanda:latest
     depends_on:
@@ -151,6 +169,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_TRANSACTION_USER:-postgres}:${POSTGRES_TRANSACTION_PASSWORD:-postgres}@postgres-transaction:5432/${POSTGRES_TRANSACTION_DB:-ftds_transaction}
     command: ["node", "src/db/migrate.js"]
+    restart: on-failure
     depends_on:
       postgres-transaction:
         condition: service_healthy
@@ -187,6 +206,8 @@ services:
       dockerfile: Dockerfile
     env_file: .env
     environment:
+      <<: *otel-env
+      OTEL_SERVICE_NAME: fraud-review
       KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_FRAUD_REVIEW_USER:-postgres}:${POSTGRES_FRAUD_REVIEW_PASSWORD:-postgres}@postgres-fraud-review:5432/${POSTGRES_FRAUD_REVIEW_DB:-ftds_fraud_review}
       ANALYST_USERNAME: ${ANALYST_USERNAME:-analyst}
@@ -223,6 +244,8 @@ services:
       dockerfile: Dockerfile
     env_file: .env
     environment:
+      <<: *otel-env
+      OTEL_SERVICE_NAME: appeal
       KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
       DATABASE_URL: postgresql://${POSTGRES_APPEAL_USER:-postgres}:${POSTGRES_APPEAL_PASSWORD:-postgres}@postgres-appeal:5432/${POSTGRES_APPEAL_DB:-ftds_appeal}
       TRANSACTION_BASE_URL: http://transaction:8000
@@ -256,11 +279,21 @@ services:
       dockerfile: Dockerfile
     env_file: .env
     environment:
+      <<: *otel-env
+      OTEL_SERVICE_NAME: notification
       KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
       TRANSACTION_BASE_URL: http://transaction:8000
       CUSTOMER_BASE_URL: http://customer:8005
-      EMAIL_ENABLED: "true"
-      EMAIL_PROVIDER: "mock"
+      EMAIL_ENABLED: ${EMAIL_ENABLED:-true}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-smtp}
+      EMAIL_SMTP_HOST: ${EMAIL_SMTP_HOST:-mailpit}
+      EMAIL_SMTP_PORT: ${EMAIL_SMTP_PORT:-1025}
+      EMAIL_SMTP_SECURE: ${EMAIL_SMTP_SECURE:-false}
+      EMAIL_SMTP_USER: ${EMAIL_SMTP_USER:-}
+      EMAIL_SMTP_PASSWORD: ${EMAIL_SMTP_PASSWORD:-}
+      EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:-alerts@ftds.local}
+      EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-FTDS Notifications}
+      SMS_ENABLED: ${SMS_ENABLED:-false}
       NOTIFY_ON_FLAGGED: "true"
       FLAGGED_NOTIFY_FRAUD_TEAM_EMAIL: "true"
     ports:
@@ -274,6 +307,8 @@ services:
         condition: service_started
       customer:
         condition: service_started
+      mailpit:
+        condition: service_started
 
   audit:
     build:
@@ -281,6 +316,8 @@ services:
       dockerfile: Dockerfile
     env_file: .env
     environment:
+      <<: *otel-env
+      OTEL_SERVICE_NAME: audit
       KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
       DATABASE_URL: postgresql://${POSTGRES_AUDIT_USER:-postgres}:${POSTGRES_AUDIT_PASSWORD:-postgres}@postgres-audit:5432/${POSTGRES_AUDIT_DB:-ftds_audit}
     ports:
@@ -313,6 +350,8 @@ services:
       dockerfile: Dockerfile
     env_file: .env
     environment:
+      <<: *otel-env
+      OTEL_SERVICE_NAME: analytics
       KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
       MANAGER_USERNAME: ${MANAGER_USERNAME:-manager}
       MANAGER_PASSWORD: ${MANAGER_PASSWORD:-manager123}
@@ -333,6 +372,12 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_CUSTOMER_USER:-postgres}:${POSTGRES_CUSTOMER_PASSWORD:-postgres}@postgres-customer:5432/${POSTGRES_CUSTOMER_DB:-ftds_customer}
+      SMTP_HOST: ${CUSTOMER_SMTP_HOST:-mailpit}
+      SMTP_PORT: ${CUSTOMER_SMTP_PORT:-1025}
+      SMTP_USER: ${CUSTOMER_SMTP_USER:-}
+      SMTP_PASSWORD: ${CUSTOMER_SMTP_PASSWORD:-}
+      SMTP_FROM: ${CUSTOMER_SMTP_FROM:-banking@ftds.local}
+      SMTP_STARTTLS: ${CUSTOMER_SMTP_STARTTLS:-false}
     ports:
       - "8005:8005"
     depends_on:
@@ -359,11 +404,15 @@ services:
       dockerfile: Dockerfile
     env_file: .env
     environment:
+      <<: *otel-env
+      OTEL_SERVICE_NAME: gateway
       TRANSACTION_BASE_URL: http://transaction:8000
       FRAUD_REVIEW_BASE_URL: http://fraud-review:8002
       APPEAL_BASE_URL: http://appeal:8003
       CUSTOMER_BASE_URL: http://customer:8005
       REDIS_DISABLED: "true"
+      METRICS_ENABLED: "true"
+      METRICS_PORT: 9090
     ports:
       - "8004:8004"
     depends_on:
@@ -410,6 +459,23 @@ services:
       timeout: 10s
       retries: 10
 
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.121.0
+    command: ["--config=/etc/otel-collector-config.yml"]
+    volumes:
+      - ./otel-collector-config.yml:/etc/otel-collector-config.yml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "13133:13133"
+    depends_on:
+      - jaeger
+    healthcheck:
+      test: ["CMD", "/otelcol-contrib", "validate", "--config=/etc/otel-collector-config.yml"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.47.2
     privileged: true
@@ -433,6 +499,22 @@ services:
       - '--storage.tsdb.path=/prometheus'
     depends_on:
       - cadvisor
+      - otel-collector
+
+  jaeger:
+    image: cr.jaegertracing.io/jaegertracing/jaeger:2.14.0
+    ports:
+      - "16686:16686"
+    command:
+      - "--set=extensions.jaeger_query.ui.config_file=/etc/jaeger/ui-config.json"
+      - "--set=extensions.jaeger_storage.metric_backends.prometheus_backend.prometheus.endpoint=http://prometheus:9090"
+      - "--set=extensions.jaeger_storage.metric_backends.prometheus_backend.prometheus.normalize_calls=true"
+      - "--set=extensions.jaeger_storage.metric_backends.prometheus_backend.prometheus.normalize_duration=true"
+      - "--set=extensions.jaeger_storage.metric_backends.prometheus_backend.prometheus.metric_namespace="
+      - "--set=extensions.jaeger_storage.metric_backends.prometheus_backend.prometheus.latency_unit=ms"
+      - "--set=extensions.jaeger_query.storage.metrics=prometheus_backend"
+    volumes:
+      - ./jaeger/ui-config.json:/etc/jaeger/ui-config.json:ro
 
   grafana:
     image: grafana/grafana:latest
@@ -440,10 +522,15 @@ services:
       - "3000:3000"
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin123}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/fraud-detection.json
     volumes:
       - ftds_grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
       - prometheus
 

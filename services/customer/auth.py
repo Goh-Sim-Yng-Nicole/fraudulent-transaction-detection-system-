@@ -84,6 +84,7 @@ async def send_otp_email(to_email: str, full_name: str, code: str, purpose: str 
     smtp_password = os.getenv("SMTP_PASSWORD", "").strip()
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
     smtp_from = os.getenv("SMTP_FROM", smtp_user or "noreply@ftds.local")
+    smtp_starttls = os.getenv("SMTP_STARTTLS", "true").strip().lower() in {"1", "true", "yes", "on"}
 
     subject_map = {
         "login": "Your FTDS login verification code",
@@ -110,7 +111,7 @@ async def send_otp_email(to_email: str, full_name: str, code: str, purpose: str 
     </div>
     """
 
-    if not smtp_host or not smtp_user:
+    if not smtp_host:
         # Dev mode — print to container logs
         print(f"[OTP DEV] ✉  To: {to_email} | Code: {code} | Purpose: {purpose}", flush=True)
         return
@@ -123,14 +124,16 @@ async def send_otp_email(to_email: str, full_name: str, code: str, purpose: str 
     msg["To"] = to_email
     msg.attach(MIMEText(html_body, "html"))
 
-    await aiosmtplib.send(
-        msg,
-        hostname=smtp_host,
-        port=smtp_port,
-        username=smtp_user,
-        password=smtp_password,
-        start_tls=True,
-    )
+    send_kwargs = {
+        "hostname": smtp_host,
+        "port": smtp_port,
+        "start_tls": smtp_starttls,
+    }
+    if smtp_user and smtp_password:
+        send_kwargs["username"] = smtp_user
+        send_kwargs["password"] = smtp_password
+
+    await aiosmtplib.send(msg, **send_kwargs)
 
 
 from ftds.notifications import send_transfer_notification  # noqa: F401  (re-exported for callers)

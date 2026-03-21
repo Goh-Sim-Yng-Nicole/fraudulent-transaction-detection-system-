@@ -1,8 +1,48 @@
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
+  external_labels:
+    platform: fraudulent-transaction-detection-system
+
+rule_files: []
 
 scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ['prometheus:9090']
+
   - job_name: cadvisor
     static_configs:
       - targets: ['cadvisor:8080']
+
+  - job_name: gateway
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['gateway:9090']
+
+  - job_name: fraud-score
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['fraud-score:8001']
+
+  - job_name: audit
+    metrics_path: /api/v1/metrics
+    static_configs:
+      - targets: ['audit:8007']
+
+  - job_name: notification
+    metrics_path: /api/v1/metrics
+    static_configs:
+      - targets: ['notification:8010']
+
+  - job_name: otel-collector
+    static_configs:
+      - targets: ['otel-collector:8888']
+
+  - job_name: otel-spanmetrics
+    static_configs:
+      - targets: ['otel-collector:8889']
+
+  - job_name: jaeger
+    static_configs:
+      - targets: ['jaeger:8888']

@@ -1,5 +1,6 @@
 const { createPool, query, closePool } = require('./pool');
 const logger = require('../config/logger');
+const { setTimeout: delay } = require('node:timers/promises');
 
 const ddl = `
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -45,9 +46,47 @@ CREATE TRIGGER trg_transactions_updated_at
   FOR EACH ROW EXECUTE FUNCTION set_transaction_updated_at();
 `;
 
+const isTransientDatabaseError = (error) => {
+  const message = String(error?.message || '');
+  return [
+    'ECONNREFUSED',
+    'ETIMEDOUT',
+    'ENOTFOUND',
+    'EAI_AGAIN',
+  ].includes(error?.code) || /database system is starting up|connect ECONNREFUSED|Connection terminated unexpectedly/i.test(message);
+};
+
+const waitForDatabase = async () => {
+  const maxAttempts = 30;
+  const delayMs = 2000;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      await query('SELECT 1');
+      if (attempt > 1) {
+        logger.info('Transaction database became reachable', { attempt, maxAttempts });
+      }
+      return;
+    } catch (error) {
+      if (!isTransientDatabaseError(error) || attempt === maxAttempts) {
+        throw error;
+      }
+
+      logger.warn('Transaction database not ready yet, retrying migration', {
+        attempt,
+        maxAttempts,
+        delayMs,
+        error: error.message,
+      });
+      await delay(delayMs);
+    }
+  }
+};
+
 const main = async () => {
   createPool();
   try {
+    await waitForDatabase();
     await query(ddl);
     logger.info('Transaction migrations applied');
   } catch (error) {

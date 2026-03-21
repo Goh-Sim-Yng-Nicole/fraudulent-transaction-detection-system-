@@ -5,6 +5,7 @@ import {
   assertKafkaTopicsPresent,
   assertStatus,
   authHeaders,
+  basicAuthHeaders,
   buildFlaggedTransactionPayload,
   checkHtmlPage,
   credentials,
@@ -150,6 +151,35 @@ assertStatus(prometheusReady, 200, 'prometheus ready');
 const grafanaHealth = await request(`${platform.grafanaBase}/api/health`);
 assertStatus(grafanaHealth, 200, 'grafana health');
 assert.equal(grafanaHealth.body?.database, 'ok', 'grafana database health should be ok');
+
+const grafanaHomeDashboard = await request(`${platform.grafanaBase}/api/dashboards/home`);
+assertStatus(grafanaHomeDashboard, 200, 'grafana home dashboard');
+assert.equal(
+  grafanaHomeDashboard.body?.dashboard?.title,
+  'Fraud Detection Platform',
+  'grafana root should land on the Fraud Detection Platform dashboard'
+);
+
+const grafanaDashboards = await request(`${platform.grafanaBase}/api/search?type=dash-db`, {
+  headers: basicAuthHeaders(
+    process.env.GRAFANA_USER || 'admin',
+    process.env.GRAFANA_PASSWORD || 'admin123',
+  ),
+});
+assertStatus(grafanaDashboards, 200, 'grafana dashboards list');
+assert.ok(Array.isArray(grafanaDashboards.body), 'grafana dashboards list should return an array');
+assert.ok(grafanaDashboards.body.length >= 2, 'grafana should provision at least two dashboards');
+
+await checkHtmlPage(`${platform.jaegerBase}/`, 'jaeger ui');
+await checkHtmlPage(`${platform.mailpitBase}/`, 'mailpit ui');
+const baselineMailpitMessages = await request(`${platform.mailpitBase}/api/v1/messages`);
+assertStatus(baselineMailpitMessages, 200, 'mailpit messages baseline');
+const baselineMailpitCount = Number(
+  baselineMailpitMessages.body?.total
+  ?? baselineMailpitMessages.body?.messages_count
+  ?? baselineMailpitMessages.body?.count
+  ?? 0
+);
 
 const cadvisorHealth = await request(`${platform.cadvisorBase}/healthz`);
 assertStatus(cadvisorHealth, 200, 'cadvisor health');
@@ -571,6 +601,19 @@ const notificationMetrics = await poll(
   { timeoutMs: 120000, intervalMs: 2500 }
 );
 
+const mailpitMessages = await poll(
+  'mailpit captured outbound emails',
+  () => request(`${platform.mailpitBase}/api/v1/messages`),
+  (result) => result.status === 200
+    && Number(
+      result.body?.total
+      ?? result.body?.messages_count
+      ?? result.body?.count
+      ?? 0
+    ) > baselineMailpitCount,
+  { timeoutMs: 120000, intervalMs: 2500 }
+);
+
 const settledConsumerGroups = await waitForConsumerGroupsSettled();
 
 logStep('Service-contract verification completed successfully');
@@ -594,6 +637,15 @@ console.log(JSON.stringify({
     customerEventCount: customerAudit.body?.data?.eventCount,
   },
   notificationMetricsChecked: notificationMetrics.status === 200,
+  mailpit: {
+    baselineMessages: baselineMailpitCount,
+    finalMessages: Number(
+      mailpitMessages.body?.total
+      ?? mailpitMessages.body?.messages_count
+      ?? mailpitMessages.body?.count
+      ?? 0
+    ),
+  },
   consumerGroups: Object.fromEntries(
     Object.entries(settledConsumerGroups).map(([group, details]) => [
       group,
