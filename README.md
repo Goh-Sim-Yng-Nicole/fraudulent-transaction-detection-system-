@@ -203,6 +203,24 @@ npm.cmd run test:verify
 
 ---
 
+## Continuous Integration
+
+The repo now includes a GitHub Actions workflow at [`.github/workflows/ci.yml`](C:/Users/Naren/Documents/SMU/y2s2/ESD/project2/fraudulent-transaction-detection-system-/.github/workflows/ci.yml).
+
+On every push, pull request, or manual dispatch, CI will:
+
+- copy `.env.example` to `.env` for a clean runner bootstrap
+- validate the Docker Compose configuration
+- build the full application stack
+- start the stack in Docker
+- run `test:smoke`, `test:contracts`, and `test:e2e` as separate gates
+- print `docker compose ps`
+- upload Docker logs automatically if the run fails
+
+This keeps the submitted/demo version reproducible and catches cross-service regressions before they reach your main branch.
+
+---
+
 ## Test Coverage
 
 ### Smoke
