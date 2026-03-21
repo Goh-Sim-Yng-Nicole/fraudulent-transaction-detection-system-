@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "smoke": "node ./smoke-health.mjs",
+    "contracts": "node ./service-contracts.mjs",
     "e2e": "node ./e2e-platform.mjs",
-    "verify": "node ./smoke-health.mjs && node ./e2e-platform.mjs"
+    "verify": "node ./smoke-health.mjs && node ./service-contracts.mjs && node ./e2e-platform.mjs"
   }
 }

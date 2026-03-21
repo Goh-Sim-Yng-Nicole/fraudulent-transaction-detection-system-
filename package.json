@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "test:smoke": "node ./testing/smoke-health.mjs",
+    "test:contracts": "node ./testing/service-contracts.mjs",
     "test:e2e": "node ./testing/e2e-platform.mjs",
-    "test:verify": "node ./testing/smoke-health.mjs && node ./testing/e2e-platform.mjs"
+    "test:verify": "node ./testing/smoke-health.mjs && node ./testing/service-contracts.mjs && node ./testing/e2e-platform.mjs"
   }
 }

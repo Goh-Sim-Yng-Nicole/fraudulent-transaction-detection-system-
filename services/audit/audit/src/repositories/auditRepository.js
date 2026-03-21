@@ -268,12 +268,12 @@ class AuditRepository {
 
   // Handles calculate hash.
   _calculateHash(payload, previousHash) {
-    const data = JSON.stringify(payload) + (previousHash || '');
+    const data = this._stableSerialize(payload) + (previousHash || '');
     return crypto.createHash('sha256').update(data).digest('hex');
   }
 
   _calculateDedupeKey(eventData) {
-    const payload = JSON.stringify(eventData.payload ?? {});
+    const payload = this._stableSerialize(eventData.payload ?? {});
     const identity = [
       eventData.eventType || '',
       eventData.transactionId || '',
@@ -283,6 +283,22 @@ class AuditRepository {
     ].join('|');
 
     return crypto.createHash('sha256').update(identity).digest('hex');
+  }
+
+  _stableSerialize(value) {
+    if (value === null || typeof value !== 'object') {
+      return JSON.stringify(value);
+    }
+
+    if (Array.isArray(value)) {
+      return `[${value.map((item) => this._stableSerialize(item)).join(',')}]`;
+    }
+
+    const pairs = Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${this._stableSerialize(value[key])}`);
+
+    return `{${pairs.join(',')}}`;
   }
 }
 

@@ -1,10 +1,18 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import { execFile } from 'node:child_process';
+import path from 'node:path';
 import process from 'node:process';
 import { setTimeout as delay } from 'node:timers/promises';
+import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
+
+const execFileAsync = promisify(execFile);
+const workspaceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 export const platform = {
   publicBase: process.env.PUBLIC_BASE_URL || 'http://localhost',
+  nginxBase: process.env.NGINX_BASE_URL || 'http://localhost:8088',
   gatewayBase: process.env.GATEWAY_BASE_URL || 'http://localhost:8004',
   customerBase: process.env.CUSTOMER_BASE_URL || 'http://localhost:8005',
   transactionBase: process.env.TRANSACTION_BASE_URL || 'http://localhost:8000',
@@ -15,6 +23,10 @@ export const platform = {
   analyticsBase: process.env.ANALYTICS_BASE_URL || 'http://localhost:8006',
   auditBase: process.env.AUDIT_BASE_URL || 'http://localhost:8007',
   notificationBase: process.env.NOTIFICATION_BASE_URL || 'http://localhost:8010',
+  kongAdminBase: process.env.KONG_ADMIN_BASE_URL || 'http://localhost:8090',
+  prometheusBase: process.env.PROMETHEUS_BASE_URL || 'http://localhost:9090',
+  grafanaBase: process.env.GRAFANA_BASE_URL || 'http://localhost:3000',
+  cadvisorBase: process.env.CADVISOR_BASE_URL || 'http://localhost:9091',
 };
 
 export const credentials = {
@@ -26,6 +38,27 @@ export const credentials = {
     username: process.env.MANAGER_USERNAME || 'manager',
     password: process.env.MANAGER_PASSWORD || 'manager123',
   },
+};
+
+export const kafka = {
+  broker: process.env.REDPANDA_BROKER || 'redpanda:9092',
+  requiredTopics: [
+    'transaction.created',
+    'transaction.scored',
+    'transaction.flagged',
+    'transaction.finalised',
+    'transaction.reviewed',
+    'appeal.created',
+    'appeal.resolved',
+  ],
+  consumerGroups: [
+    'detect-fraud-group',
+    'transaction-service',
+    'human-verification-group',
+    'analytics-group',
+    'audit-group',
+    'notification-group',
+  ],
 };
 
 export const healthChecks = [
@@ -64,6 +97,31 @@ export function makeCustomer(prefix) {
   };
 }
 
+export function buildFlaggedTransactionPayload({
+  customerId,
+  senderName,
+  recipientCustomerId,
+  recipientName,
+  amount,
+}) {
+  return {
+    customer_id: customerId,
+    sender_name: senderName,
+    recipient_customer_id: recipientCustomerId,
+    recipient_name: recipientName,
+    amount,
+    currency: 'USD',
+    card_type: 'PREPAID',
+    country: 'NG',
+    merchant_id: 'FTDS_E2E_MERCHANT',
+  };
+}
+
+export function assertArrayContains(items, predicate, message) {
+  assert.ok(Array.isArray(items), `${message}: expected array payload`);
+  assert.ok(items.some(predicate), message);
+}
+
 export async function request(url, options = {}) {
   const {
     method = 'GET',
@@ -73,7 +131,7 @@ export async function request(url, options = {}) {
   } = options;
 
   const requestHeaders = { ...headers };
-  let requestBody = undefined;
+  let requestBody;
 
   if (body !== undefined) {
     requestHeaders['Content-Type'] = requestHeaders['Content-Type'] || 'application/json';
@@ -95,7 +153,7 @@ export async function request(url, options = {}) {
   if (text) {
     try {
       parsed = JSON.parse(text);
-    } catch (_error) {
+    } catch {
       parsed = text;
     }
   }
@@ -116,6 +174,13 @@ export function assertStatus(result, expectedStatus, label) {
     `${label}: expected status ${expected.join(' or ')}, got ${result.status} with body ${JSON.stringify(result.body)}`
   );
   return result;
+}
+
+export function assertTextIncludes(result, expectedText, label) {
+  assert.ok(
+    typeof result.text === 'string' && result.text.includes(expectedText),
+    `${label}: expected response text to include ${JSON.stringify(expectedText)}`
+  );
 }
 
 export async function waitForUrl(name, url, options = {}) {
@@ -186,4 +251,193 @@ export async function poll(name, fn, predicate, options = {}) {
   }
 
   throw new Error(`${name}: timed out waiting for expected state. Last value: ${JSON.stringify(lastValue?.body ?? lastValue)}`);
+}
+
+function formatCommandError(error, command, args) {
+  const stdout = error.stdout ? `\nSTDOUT:\n${error.stdout}` : '';
+  const stderr = error.stderr ? `\nSTDERR:\n${error.stderr}` : '';
+  return new Error(`Command failed: ${command} ${args.join(' ')}${stdout}${stderr}`);
+}
+
+export async function runCommand(command, args = [], options = {}) {
+  try {
+    return await execFileAsync(command, args, {
+      cwd: options.cwd || workspaceRoot,
+      timeout: options.timeoutMs || 120000,
+      maxBuffer: options.maxBuffer || 10 * 1024 * 1024,
+      env: {
+        ...process.env,
+        ...options.env,
+      },
+      windowsHide: true,
+    });
+  } catch (error) {
+    throw formatCommandError(error, command, args);
+  }
+}
+
+export async function dockerCompose(args, options = {}) {
+  return runCommand('docker', ['compose', ...args], options);
+}
+
+export async function dockerComposeExec(service, commandArgs, options = {}) {
+  return dockerCompose(['exec', '-T', service, ...commandArgs], options);
+}
+
+function escapeSqlLiteral(value) {
+  return String(value).replace(/'/g, "''");
+}
+
+export async function fetchLatestOtpForEmail(email) {
+  const user = process.env.POSTGRES_CUSTOMER_USER || 'postgres';
+  const database = process.env.POSTGRES_CUSTOMER_DB || 'ftds_customer';
+  const sql = [
+    'SELECT o.code',
+    'FROM otp_codes o',
+    'JOIN customers c ON c.customer_id::text = o.customer_id',
+    `WHERE c.email = '${escapeSqlLiteral(email)}'`,
+    'AND o.used = false',
+    'ORDER BY o.created_at DESC, o.id DESC',
+    'LIMIT 1;',
+  ].join(' ');
+
+  const { stdout } = await dockerComposeExec('postgres-customer', [
+    'psql',
+    '-U',
+    user,
+    '-d',
+    database,
+    '-t',
+    '-A',
+    '-c',
+    sql,
+  ]);
+
+  return stdout.trim();
+}
+
+export async function waitForLatestOtp(email, options = {}) {
+  return poll(
+    `latest OTP for ${email}`,
+    () => fetchLatestOtpForEmail(email),
+    (otp) => /^\d{6}$/.test(String(otp || '').trim()),
+    {
+      timeoutMs: options.timeoutMs || 60000,
+      intervalMs: options.intervalMs || 1500,
+    }
+  );
+}
+
+export async function checkHtmlPage(url, label, expectedText) {
+  const result = await request(url);
+  assertStatus(result, 200, label);
+  assert.ok(result.text?.includes('<html') || result.text?.includes('<!DOCTYPE html'), `${label}: expected HTML page`);
+  if (expectedText) {
+    assertTextIncludes(result, expectedText, label);
+  }
+  return result;
+}
+
+export async function listKafkaTopics() {
+  const { stdout } = await dockerComposeExec('redpanda', [
+    'rpk',
+    'topic',
+    'list',
+    '--brokers',
+    kafka.broker,
+  ]);
+
+  const lines = stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  return lines
+    .slice(1)
+    .map((line) => line.split(/\s+/)[0])
+    .filter(Boolean);
+}
+
+export async function assertKafkaTopicsPresent(expectedTopics = kafka.requiredTopics) {
+  const topics = await listKafkaTopics();
+  for (const topic of expectedTopics) {
+    assert.ok(topics.includes(topic), `Kafka topic ${topic} should exist. Found: ${topics.join(', ')}`);
+  }
+  return topics;
+}
+
+function parseLagValue(raw) {
+  if (!raw || raw === '-') {
+    return 0;
+  }
+
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : 0;
+}
+
+export function parseConsumerGroupDescribe(text) {
+  const totalLagMatch = text.match(/TOTAL-LAG\s+([^\s]+)/);
+  const stateMatch = text.match(/STATE\s+([^\s]+)/);
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter(Boolean);
+
+  const tableStart = lines.findIndex((line) => line.startsWith('TOPIC'));
+  const partitions = tableStart === -1
+    ? []
+    : lines.slice(tableStart + 1).map((line) => {
+      const [topic, partition, currentOffset, logStartOffset, logEndOffset, lag, memberId, clientId, host] = line.split(/\s{2,}/);
+      return {
+        topic,
+        partition: Number(partition),
+        currentOffset,
+        logStartOffset,
+        logEndOffset,
+        lag: parseLagValue(lag),
+        memberId,
+        clientId,
+        host,
+      };
+    });
+
+  return {
+    state: stateMatch?.[1] || 'UNKNOWN',
+    totalLag: parseLagValue(totalLagMatch?.[1]),
+    partitions,
+    raw: text,
+  };
+}
+
+export async function describeConsumerGroup(group) {
+  const { stdout } = await dockerComposeExec('redpanda', [
+    'rpk',
+    'group',
+    'describe',
+    group,
+    '--brokers',
+    kafka.broker,
+  ]);
+
+  return parseConsumerGroupDescribe(stdout);
+}
+
+export async function waitForConsumerGroupSettled(group, options = {}) {
+  return poll(
+    `consumer group ${group} settled`,
+    () => describeConsumerGroup(group),
+    (result) => result.state === 'Stable' && result.totalLag === 0,
+    {
+      timeoutMs: options.timeoutMs || 120000,
+      intervalMs: options.intervalMs || 2000,
+    }
+  );
+}
+
+export async function waitForConsumerGroupsSettled(groups = kafka.consumerGroups, options = {}) {
+  const settled = {};
+  for (const group of groups) {
+    settled[group] = await waitForConsumerGroupSettled(group, options);
+  }
+  return settled;
 }
