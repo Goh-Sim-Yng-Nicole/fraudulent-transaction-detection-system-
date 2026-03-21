@@ -10,9 +10,12 @@
     "evaluate:model": "node scripts/generateEvaluationReport.js"
   },
   "dependencies": {
-    "csv-parse": "^5.5.6",
+    "@opentelemetry/auto-instrumentations-node": "^0.70.1",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.212.0",
+    "@opentelemetry/sdk-node": "^0.212.0",
     "compression": "^1.7.4",
     "cors": "^2.8.5",
+    "csv-parse": "^5.5.6",
     "express": "^4.19.2",
     "helmet": "^7.1.0",
     "joi": "^17.13.3",

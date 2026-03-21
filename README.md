@@ -173,6 +173,7 @@ Local Docker defaults worth knowing:
 - `customer` OTP emails can also be delivered to Mailpit in local Docker via the `CUSTOMER_SMTP_*` settings
 - OutSystems decisioning is optional locally; when `OUTSYSTEMS_DECISION_URL` is blank, `detect_fraud` performs the local fallback decision flow
 - Grafana auto-provisions the `Fraud Detection Platform` and `Tracing Operations` dashboards on startup, and the root Grafana URL opens the platform dashboard by default
+- Jaeger receives traces from the full application path in local Docker, including `customer`, `transaction`, `fraud-score`, `detect-fraud`, `fraud-review`, `appeal`, `notification`, `audit`, `analytics`, and `gateway`
 
 ---
 
@@ -196,6 +197,8 @@ Key points:
 ## Automated Testing
 
 The repo includes three automated validation layers under `testing/`:
+
+The contracts layer also verifies Jaeger's `/api/services` output so missing traced services are caught automatically.
 
 | Command                  | Purpose                                                                                                          |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------- |

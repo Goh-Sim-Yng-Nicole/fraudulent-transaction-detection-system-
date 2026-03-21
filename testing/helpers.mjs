@@ -31,6 +31,21 @@ export const platform = {
   cadvisorBase: process.env.CADVISOR_BASE_URL || 'http://localhost:9091',
 };
 
+export const tracing = {
+  expectedServices: [
+    'analytics',
+    'appeal',
+    'audit',
+    'customer',
+    'detect-fraud',
+    'fraud-review',
+    'fraud-score',
+    'gateway',
+    'notification',
+    'transaction',
+  ],
+};
+
 export const credentials = {
   analyst: {
     username: process.env.ANALYST_USERNAME || 'analyst',
@@ -449,4 +464,23 @@ export async function waitForConsumerGroupsSettled(groups = kafka.consumerGroups
     settled[group] = await waitForConsumerGroupSettled(group, options);
   }
   return settled;
+}
+
+export async function listJaegerServices() {
+  const result = await request(`${platform.jaegerBase}/api/services`);
+  assertStatus(result, 200, 'jaeger services');
+  assert.ok(Array.isArray(result.body?.data), 'jaeger services should return an array');
+  return result.body.data;
+}
+
+export async function waitForJaegerServices(expectedServices = tracing.expectedServices, options = {}) {
+  return poll(
+    'jaeger services include expected application services',
+    () => listJaegerServices(),
+    (services) => expectedServices.every((service) => services.includes(service)),
+    {
+      timeoutMs: options.timeoutMs || 120000,
+      intervalMs: options.intervalMs || 2500,
+    }
+  );
 }
