@@ -143,6 +143,8 @@ These thresholds are applied by OutSystems in production, or by the `detect_frau
 | Manager Dashboard | `manager`        | `manager123`     |
 | Grafana           | `admin`          | `admin123`       |
 
+These credentials are for local Docker development only. Replace them outside local/demo environments.
+
 ---
 
 ## Quick Start
@@ -171,6 +173,22 @@ Local Docker defaults worth knowing:
 - `customer` OTP emails can also be delivered to Mailpit in local Docker via the `CUSTOMER_SMTP_*` settings
 - OutSystems decisioning is optional locally; when `OUTSYSTEMS_DECISION_URL` is blank, `detect_fraud` performs the local fallback decision flow
 - Grafana auto-provisions the `Fraud Detection Platform` and `Tracing Operations` dashboards on startup, and the root Grafana URL opens the platform dashboard by default
+
+---
+
+## Runtime Security
+
+The repo now keeps local development convenient while allowing stricter runtime rules outside Docker demo mode.
+
+Key points:
+
+- Root and nested `.env` files are ignored by git, and service-local `.env` files are intentionally not committed.
+- Copy [`.env.example`](C:/Users/Naren/Documents/SMU/y2s2/ESD/project2/fraudulent-transaction-detection-system-/.env.example) to `.env` for local Docker, then replace all demo credentials before any shared or production-like deployment.
+- Set `SECURITY_ENFORCE_STRICT_CONFIG=true` in staging/production to make auth-bearing services reject demo secrets and weak dashboard credentials.
+- Gateway now requires `JWT_SECRET` to be present, and strict mode rejects wildcard CORS plus known demo JWT secrets.
+- The customer service also rejects demo JWT secrets in strict mode.
+- Grafana anonymous access is now explicitly environment-controlled through `GRAFANA_ANONYMOUS_ENABLED`. Keep it enabled for local convenience only.
+- When validating Compose locally, prefer `docker compose config -q` so you do not print fully resolved environment values to your terminal history.
 
 ---
 

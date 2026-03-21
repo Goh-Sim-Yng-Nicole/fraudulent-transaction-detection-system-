@@ -16,6 +16,12 @@ ALGORITHM = "HS256"
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+INSECURE_SECRET_VALUES = {
+    "change-me-use-a-long-random-secret-in-production",
+    "ftds-dev-secret-change-in-production-32chars",
+    "dev-secret-123",
+}
+
 __all__ = [
     "create_access_token",
     "decode_access_token",
@@ -25,6 +31,15 @@ __all__ = [
     "send_transfer_notification",
     "verify_password",
 ]
+
+
+def _strict_security_enabled() -> bool:
+    return os.getenv("SECURITY_ENFORCE_STRICT_CONFIG", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    } or os.getenv("NODE_ENV", "").strip().lower() == "production"
 
 
 def _get_jwt_secret() -> str:
@@ -41,6 +56,10 @@ def _get_jwt_secret() -> str:
         raise RuntimeError(
             "JWT_SECRET is not configured. Set it via the JWT_SECRET env var "
             "or mount a Docker secret at /run/secrets/jwt_secret"
+        )
+    if _strict_security_enabled() and (secret in INSECURE_SECRET_VALUES or len(secret) < 32):
+        raise RuntimeError(
+            "JWT_SECRET must be a strong non-default secret when strict security is enabled"
         )
     return secret
 

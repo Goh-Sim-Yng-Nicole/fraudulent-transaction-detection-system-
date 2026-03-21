@@ -5,11 +5,67 @@ const flagEnabled = (value, fallback = true) => {
   return String(value).toLowerCase() === 'true';
 };
 
+const strictConfig = flagEnabled(process.env.SECURITY_ENFORCE_STRICT_CONFIG, false)
+  || String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+
+const insecureSecretValues = new Set([
+  'change-me-use-a-long-random-secret-in-production',
+  'ftds-dev-secret-change-in-production-32chars',
+  'dev-secret-123',
+]);
+
+const requireValue = (name, value) => {
+  const normalized = String(value || '').trim();
+  if (!normalized) {
+    throw new Error(`${name} must be configured`);
+  }
+  return normalized;
+};
+
+const requireSafeSecret = (name, value) => {
+  const normalized = requireValue(name, value);
+  if (strictConfig && (normalized.length < 32 || insecureSecretValues.has(normalized))) {
+    throw new Error(`${name} must be a strong non-default secret when strict security is enabled`);
+  }
+  return normalized;
+};
+
+const parseCorsOrigins = (value) => {
+  const normalized = String(value || '').trim();
+  if (!normalized) {
+    return [
+      'http://localhost',
+      'http://127.0.0.1',
+      'http://localhost:8088',
+      'http://127.0.0.1:8088',
+    ];
+  }
+  if (normalized === '*') {
+    return '*';
+  }
+  return normalized
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+};
+
 const externalDecisionUrl = (
   process.env.DECISION_ENGINE_SERVICE_URL
   || process.env.DECISION_BASE_URL
   || ''
 ).trim();
+
+const jwtSecret = requireSafeSecret('JWT_SECRET', process.env.JWT_SECRET);
+const corsOrigin = parseCorsOrigins(process.env.CORS_ORIGIN);
+const corsCredentials = process.env.CORS_CREDENTIALS === 'true';
+
+if (strictConfig && corsOrigin === '*') {
+  throw new Error('CORS_ORIGIN cannot be "*" when strict security is enabled');
+}
+
+if (corsOrigin === '*' && corsCredentials) {
+  throw new Error('CORS_CREDENTIALS=true cannot be combined with CORS_ORIGIN="*"');
+}
 
 module.exports = {
   env: process.env.NODE_ENV || 'development',
@@ -18,7 +74,7 @@ module.exports = {
   logLevel: process.env.LOG_LEVEL || 'info',
 
   jwt: {
-    secret: process.env.JWT_SECRET,
+    secret: jwtSecret,
     expiresIn: process.env.JWT_EXPIRES_IN || '24h',
     issuer: process.env.JWT_ISSUER || 'fraud-detection-platform',
     customerIssuer: process.env.CUSTOMER_JWT_ISSUER || 'ftds-customer-service',
@@ -71,8 +127,8 @@ module.exports = {
   },
 
   cors: {
-    origin: process.env.CORS_ORIGIN || '*',
-    credentials: process.env.CORS_CREDENTIALS === 'true',
+    origin: corsOrigin,
+    credentials: corsCredentials,
   },
 
   proxy: {

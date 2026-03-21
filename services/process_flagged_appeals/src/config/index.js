@@ -1,5 +1,13 @@
 require('dotenv').config();
 
+const flagEnabled = (value, fallback = false) => {
+  if (value == null) return fallback;
+  return String(value).toLowerCase() === 'true';
+};
+
+const strictConfig = flagEnabled(process.env.SECURITY_ENFORCE_STRICT_CONFIG, false)
+  || String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+
 const normalizeDatabaseUrl = (value) => {
   if (!value) return null;
   return String(value).replace('postgresql+asyncpg://', 'postgres://').replace('postgresql://', 'postgres://');
@@ -24,6 +32,16 @@ const parseDatabaseUrl = (value) => {
 };
 
 const dbFromUrl = parseDatabaseUrl(process.env.DATABASE_URL);
+const analystPassword = process.env.ANALYST_PASSWORD || 'analyst123';
+const analystToken = process.env.ANALYST_API_TOKEN || process.env.ANALYST_JWT_SECRET || 'analyst-dev-token';
+
+if (strictConfig && (
+  analystPassword === 'analyst123'
+  || analystToken === 'analyst-dev-token'
+  || analystToken === 'analyst-dev-secret-change-in-prod'
+)) {
+  throw new Error('Analyst credentials must be overridden when strict security is enabled');
+}
 
 module.exports = {
   env: process.env.NODE_ENV || 'development',
@@ -68,7 +86,7 @@ module.exports = {
 
   analyst: {
     username: process.env.ANALYST_USERNAME || 'analyst',
-    password: process.env.ANALYST_PASSWORD || 'analyst123',
-    token: process.env.ANALYST_API_TOKEN || process.env.ANALYST_JWT_SECRET || 'analyst-dev-token',
+    password: analystPassword,
+    token: analystToken,
   },
 };

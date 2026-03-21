@@ -5,6 +5,20 @@ const flagEnabled = (value, fallback = false) => {
   return String(value).toLowerCase() === 'true';
 };
 
+const strictConfig = flagEnabled(process.env.SECURITY_ENFORCE_STRICT_CONFIG, false)
+  || String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+
+const managerPassword = process.env.MANAGER_PASSWORD || 'manager123';
+const managerToken = process.env.MANAGER_API_TOKEN || process.env.MANAGER_JWT_SECRET || 'manager-dev-token';
+
+if (strictConfig && (
+  managerPassword === 'manager123'
+  || managerToken === 'manager-dev-token'
+  || managerToken === 'manager-dev-secret-change-in-prod'
+)) {
+  throw new Error('Manager credentials must be overridden when strict security is enabled');
+}
+
 module.exports = {
   env: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT, 10) || 8006,
@@ -55,8 +69,8 @@ module.exports = {
 
   manager: {
     username: process.env.MANAGER_USERNAME || 'manager',
-    password: process.env.MANAGER_PASSWORD || 'manager123',
-    token: process.env.MANAGER_API_TOKEN || process.env.MANAGER_JWT_SECRET || 'manager-dev-token',
+    password: managerPassword,
+    token: managerToken,
   },
 
   metrics: {
