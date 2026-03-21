@@ -6,3 +6,13 @@ datasources:
     access: proxy
     url: http://prometheus:9090
     isDefault: true
+    editable: false
+    jsonData:
+      httpMethod: POST
+      timeInterval: '15s'
+
+  - name: Jaeger
+    type: jaeger
+    access: proxy
+    url: http://jaeger:16686
+    editable: false
