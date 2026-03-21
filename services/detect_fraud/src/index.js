@@ -1,4 +1,5 @@
 require('express-async-errors');
+require('./config/tracing');
 
 const express = require('express');
 const compression = require('compression');

@@ -14,7 +14,9 @@ import {
   platform,
   poll,
   request,
+  tracing,
   waitForConsumerGroupsSettled,
+  waitForJaegerServices,
   waitForLatestOtp,
   waitForStack,
 } from './helpers.mjs';
@@ -615,6 +617,7 @@ const mailpitMessages = await poll(
 );
 
 const settledConsumerGroups = await waitForConsumerGroupsSettled();
+const jaegerServices = await waitForJaegerServices();
 
 logStep('Service-contract verification completed successfully');
 console.log(JSON.stringify({
@@ -637,6 +640,8 @@ console.log(JSON.stringify({
     customerEventCount: customerAudit.body?.data?.eventCount,
   },
   notificationMetricsChecked: notificationMetrics.status === 200,
+  jaegerServices,
+  missingJaegerServices: tracing.expectedServices.filter((service) => !jaegerServices.includes(service)),
   mailpit: {
     baselineMessages: baselineMailpitCount,
     finalMessages: Number(

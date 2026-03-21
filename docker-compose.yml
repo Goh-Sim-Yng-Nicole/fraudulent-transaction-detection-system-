@@ -146,6 +146,8 @@ services:
       dockerfile: services/transaction/Dockerfile
     env_file: .env
     environment:
+      <<: *otel-env
+      OTEL_SERVICE_NAME: transaction
       KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_TRANSACTION_USER:-postgres}:${POSTGRES_TRANSACTION_PASSWORD:-postgres}@postgres-transaction:5432/${POSTGRES_TRANSACTION_DB:-ftds_transaction}
       CUSTOMER_BASE_URL: http://customer:8005
@@ -179,6 +181,9 @@ services:
       context: .
       dockerfile: services/fraud_score/Dockerfile
     env_file: .env
+    environment:
+      <<: *otel-env
+      OTEL_SERVICE_NAME: fraud-score
     ports:
       - '8001:8001'
 
@@ -188,6 +193,8 @@ services:
       dockerfile: services/detect_fraud/Dockerfile
     env_file: .env
     environment:
+      <<: *otel-env
+      OTEL_SERVICE_NAME: detect-fraud
       KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
       FRAUD_SCORE_URL: http://fraud-score:8001/score
     ports:
@@ -371,6 +378,8 @@ services:
       dockerfile: services/customer/Dockerfile
     env_file: .env
     environment:
+      <<: *otel-env
+      OTEL_SERVICE_NAME: customer
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_CUSTOMER_USER:-postgres}:${POSTGRES_CUSTOMER_PASSWORD:-postgres}@postgres-customer:5432/${POSTGRES_CUSTOMER_DB:-ftds_customer}
       SMTP_HOST: ${CUSTOMER_SMTP_HOST:-mailpit}
       SMTP_PORT: ${CUSTOMER_SMTP_PORT:-1025}

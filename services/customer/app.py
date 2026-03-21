@@ -29,6 +29,11 @@ from services.customer.db import (
     wait_for_db,
 )
 from services.customer.models import Customer, OtpCode
+from services.customer.observability import (
+    instrument_fastapi,
+    instrument_sqlalchemy,
+    shutdown_tracing,
+)
 
 OTP_EXPIRY_MINUTES = 10
 
@@ -131,6 +136,7 @@ _state = AppState()
 async def lifespan(app: FastAPI):
     database_url = os.getenv("DATABASE_URL", "").strip()
     _state.engine = create_engine(database_url)
+    instrument_sqlalchemy(_state.engine)
     await wait_for_db(_state.engine)
     if should_auto_create_tables():
         await init_db(_state.engine)
@@ -140,9 +146,11 @@ async def lifespan(app: FastAPI):
     finally:
         if _state.engine is not None:
             await _state.engine.dispose()
+        shutdown_tracing()
 
 
 app = FastAPI(title="FTDS Customer Service", version="0.2.0", lifespan=lifespan)
+instrument_fastapi(app)
 
 
 # ── Dependencies ──────────────────────────────────────────────────────────────
