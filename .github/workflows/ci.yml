@@ -53,7 +53,7 @@ jobs:
           docker compose version
 
       - name: Validate Docker Compose configuration
-        run: docker compose config
+        run: docker compose config -q
 
       - name: Build application stack
         run: docker compose build --parallel
