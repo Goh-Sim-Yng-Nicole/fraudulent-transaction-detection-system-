@@ -26,4 +26,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD node -e "require('http').get('http://localhost:8002/api/v1/health/live',(r)=>{process.exit(r.statusCode===200?0:1)})"
 
 ENTRYPOINT ["dumb-init","--"]
-CMD ["sh","-c","node src/db/migrate.js && node src/index.js"]
+CMD ["node", "src/index.js"]

@@ -184,6 +184,7 @@ Key points:
 
 - Root and nested `.env` files are ignored by git, and service-local `.env` files are intentionally not committed.
 - Copy [`.env.example`](C:/Users/Naren/Documents/SMU/y2s2/ESD/project2/fraudulent-transaction-detection-system-/.env.example) to `.env` for local Docker, then replace all demo credentials before any shared or production-like deployment.
+- The local/demo `JWT_SECRET` in [`.env.example`](C:/Users/Naren/Documents/SMU/y2s2/ESD/project2/fraudulent-transaction-detection-system-/.env.example) intentionally matches Kong's declarative JWT credential in [`kong/kong.yml`](C:/Users/Naren/Documents/SMU/y2s2/ESD/project2/fraudulent-transaction-detection-system-/kong/kong.yml), so do not change only one of them in Docker-based environments.
 - Set `SECURITY_ENFORCE_STRICT_CONFIG=true` in staging/production to make auth-bearing services reject demo secrets and weak dashboard credentials.
 - Gateway now requires `JWT_SECRET` to be present, and strict mode rejects wildcard CORS plus known demo JWT secrets.
 - The customer service also rejects demo JWT secrets in strict mode.

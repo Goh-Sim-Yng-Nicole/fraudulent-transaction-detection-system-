@@ -198,7 +198,7 @@ services:
       kafka-init:
         condition: service_completed_successfully
       fraud-score:
-        condition: service_started
+        condition: service_healthy
 
   fraud-review:
     build:
@@ -304,9 +304,9 @@ services:
       kafka-init:
         condition: service_completed_successfully
       transaction:
-        condition: service_started
+        condition: service_healthy
       customer:
-        condition: service_started
+        condition: service_healthy
       mailpit:
         condition: service_started
 
@@ -417,13 +417,13 @@ services:
       - '8004:8004'
     depends_on:
       transaction:
-        condition: service_started
+        condition: service_healthy
       fraud-review:
-        condition: service_started
+        condition: service_healthy
       appeal:
-        condition: service_started
+        condition: service_healthy
       customer:
-        condition: service_started
+        condition: service_healthy
 
   nginx:
     build:
@@ -433,9 +433,13 @@ services:
       - '8088:8088'
     depends_on:
       gateway:
-        condition: service_started
+        condition: service_healthy
+      analytics:
+        condition: service_healthy
+      fraud-review:
+        condition: service_healthy
       customer:
-        condition: service_started
+        condition: service_healthy
 
   kong:
     image: kong:3.6
@@ -452,7 +456,7 @@ services:
       - '8090:8001'
     depends_on:
       nginx:
-        condition: service_started
+        condition: service_healthy
     healthcheck:
       test: ['CMD', 'kong', 'health']
       interval: 10s

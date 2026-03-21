@@ -13,7 +13,6 @@ const requestContext = require('./middleware/requestContext');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const routes = require('./routes');
 const { createPool, closePool } = require('./db/pool');
-const migrate = require('./db/migrate');
 const { createProducer, disconnectProducer } = require('./kafka/producer');
 const decisionConsumer = require('./kafka/decisionConsumer');
 
@@ -49,7 +48,6 @@ const shutdown = async (signal) => {
 };
 
 const bootstrap = async () => {
-  await migrate();
   createPool();
   await createProducer();
   await decisionConsumer.start();
