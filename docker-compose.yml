@@ -259,6 +259,10 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
       TRANSACTION_BASE_URL: http://transaction:8000
       CUSTOMER_BASE_URL: http://customer:8005
+      EMAIL_ENABLED: "true"
+      EMAIL_PROVIDER: "mock"
+      NOTIFY_ON_FLAGGED: "true"
+      FLAGGED_NOTIFY_FRAUD_TEAM_EMAIL: "true"
     ports:
       - "8010:8010"
     depends_on:
@@ -273,7 +277,7 @@ services:
 
   audit:
     build:
-      context: ./services/audit
+      context: ./services/audit/audit
       dockerfile: Dockerfile
     env_file: .env
     environment:
@@ -293,7 +297,7 @@ services:
 
   audit-migrate:
     build:
-      context: ./services/audit
+      context: ./services/audit/audit
       dockerfile: Dockerfile
     env_file: .env
     environment:
@@ -305,7 +309,7 @@ services:
 
   analytics:
     build:
-      context: ./services/analytics
+      context: ./services/analytics/analytics
       dockerfile: Dockerfile
     env_file: .env
     environment:
