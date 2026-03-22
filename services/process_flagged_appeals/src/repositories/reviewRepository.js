@@ -113,7 +113,7 @@ class ReviewRepository {
       SELECT *
       FROM manual_reviews
       ${whereSql}
-      ORDER BY created_at ASC
+      ORDER BY created_at DESC
       LIMIT $${values.length - 1} OFFSET $${values.length};
     `, values);
 

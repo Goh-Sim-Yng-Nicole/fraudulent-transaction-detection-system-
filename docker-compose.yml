@@ -178,7 +178,7 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_TRANSACTION_USER:-postgres}:${POSTGRES_TRANSACTION_PASSWORD:-postgres}@postgres-transaction:5432/${POSTGRES_TRANSACTION_DB:-ftds_transaction}
-    command: ['node', 'src/db/migrate.js']
+    command: ['python', '-m', 'services.transaction.migrate']
     restart: on-failure
     depends_on:
       postgres-transaction:

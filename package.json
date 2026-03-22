@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "lint:js": "eslint \"services/**/*.js\" \"testing/**/*.mjs\" \"eslint.config.mjs\" --max-warnings=0",
-    "lint:py": "python -m ruff check services/customer",
+    "lint:py": "python -m ruff check services/customer services/transaction services/detect_fraud ftds",
     "lint": "npm run lint:js && npm run lint:py",
     "format:check": "prettier --check \"README.md\" \"package.json\" \"testing/package.json\" \"docker-compose.yml\" \"otel-collector-config.yml\" \".github/workflows/*.{yml,yaml}\" \"grafana/provisioning/**/*.yml\" \"kong/**/*.yml\" \"prometheus/**/*.yml\" \"jaeger/**/*.json\" \".prettierrc.json\"",
     "format:write": "prettier --write \"README.md\" \"package.json\" \"testing/package.json\" \"docker-compose.yml\" \"otel-collector-config.yml\" \".github/workflows/*.{yml,yaml}\" \"grafana/provisioning/**/*.yml\" \"kong/**/*.yml\" \"prometheus/**/*.yml\" \"jaeger/**/*.json\" \".prettierrc.json\"",
