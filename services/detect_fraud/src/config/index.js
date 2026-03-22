@@ -36,10 +36,19 @@ module.exports = {
 
   kafka: {
     brokers: (process.env.KAFKA_BROKERS || process.env.KAFKA_BOOTSTRAP_SERVERS || 'localhost:9092').split(','),
+    clientId: process.env.KAFKA_CLIENT_ID || 'detect-fraud',
+    groupId: process.env.KAFKA_GROUP_ID || 'detect-fraud-group',
     inputTopic: process.env.KAFKA_INPUT_TOPIC || process.env.TOPIC_TRANSACTION_CREATED || 'transaction.created',
     outputTopic: process.env.KAFKA_OUTPUT_TOPIC || process.env.TOPIC_TRANSACTION_SCORED || 'transaction.scored',
     flaggedTopic: process.env.KAFKA_OUTPUT_TOPIC_FLAGGED || process.env.TOPIC_TRANSACTION_FLAGGED || 'transaction.flagged',
     finalisedTopic: process.env.KAFKA_OUTPUT_TOPIC_FINALISED || process.env.TOPIC_TRANSACTION_FINALISED || 'transaction.finalised',
+    dlqTopic: process.env.KAFKA_DLQ_TOPIC || 'detect-fraud.dlq',
+    retry: {
+      initialRetryTime: parseInteger(process.env.KAFKA_RETRY_INITIAL_DELAY_MS, 100),
+      retries: parseInteger(process.env.KAFKA_RETRY_MAX_ATTEMPTS, 8),
+      multiplier: parseInteger(process.env.KAFKA_RETRY_MULTIPLIER, 2),
+      maxRetryTime: parseInteger(process.env.KAFKA_RETRY_MAX_DELAY_MS, 30000),
+    },
   },
 
   mlScoring: {

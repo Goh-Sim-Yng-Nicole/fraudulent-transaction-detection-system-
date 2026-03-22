@@ -67,6 +67,12 @@ export const kafka = {
     'transaction.reviewed',
     'appeal.created',
     'appeal.resolved',
+    'analytics.dlq',
+    'detect-fraud.dlq',
+    'transaction.dlq',
+    'transaction.review.dlq',
+    'appeal.dlq',
+    'notification.dlq',
   ],
   consumerGroups: [
     'detect-fraud-group',
@@ -382,11 +388,26 @@ export async function listKafkaTopics() {
     .filter(Boolean);
 }
 
+async function rerunKafkaInit() {
+  await dockerCompose(['up', '--force-recreate', '--abort-on-container-exit', 'kafka-init'], {
+    timeoutMs: 180000,
+  });
+}
+
 export async function assertKafkaTopicsPresent(expectedTopics = kafka.requiredTopics) {
-  const topics = await listKafkaTopics();
+  let topics = await listKafkaTopics();
+  let missingTopics = expectedTopics.filter((topic) => !topics.includes(topic));
+
+  if (missingTopics.length > 0) {
+    await rerunKafkaInit();
+    topics = await listKafkaTopics();
+    missingTopics = expectedTopics.filter((topic) => !topics.includes(topic));
+  }
+
   for (const topic of expectedTopics) {
     assert.ok(topics.includes(topic), `Kafka topic ${topic} should exist. Found: ${topics.join(', ')}`);
   }
+
   return topics;
 }
 

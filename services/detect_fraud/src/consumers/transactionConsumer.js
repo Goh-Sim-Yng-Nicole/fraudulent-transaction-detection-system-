@@ -21,42 +21,155 @@ const normalizeTransaction = (payload) => {
     cardType: raw?.cardType || raw?.card_type || 'CREDIT',
     createdAt,
     location: raw?.location || { country: raw?.country || 'SG' },
-    metadata
+    metadata,
   };
+};
+
+const validateTransaction = (transaction) => {
+  if (!transaction.id) {
+    return 'transaction.id is required';
+  }
+  if (!transaction.customerId) {
+    return 'transaction.customerId is required';
+  }
+  if (!Number.isFinite(transaction.amount)) {
+    return 'transaction.amount must be a finite number';
+  }
+  return null;
+};
+
+const commitOffset = async (topic, partition, offset) => {
+  if (!consumer) return;
+  await consumer.commitOffsets([
+    {
+      topic,
+      partition,
+      offset: (BigInt(offset) + 1n).toString(),
+    },
+  ]);
+};
+
+const sendToDlq = async ({ topic, partition, offset, reason, raw = null, payload = null, error = null }) => {
+  if (!producer) {
+    throw new Error('Detect fraud DLQ producer is not ready');
+  }
+
+  await producer.send({
+    topic: config.kafka.dlqTopic,
+    compression: CompressionTypes.GZIP,
+    messages: [
+      {
+        key: String(payload?.transactionId || payload?.transaction?.id || topic),
+        value: JSON.stringify({
+          eventType: 'detect-fraud.dlq',
+          sourceTopic: topic,
+          sourcePartition: partition,
+          sourceOffset: offset,
+          reason,
+          error,
+          rawPayload: raw,
+          originalPayload: payload,
+          failedAt: new Date().toISOString(),
+          serviceName: config.serviceName,
+        }),
+        headers: {
+          'content-type': 'application/json',
+          'service-source': config.serviceName,
+          'x-dlq-reason': reason,
+        },
+      },
+    ],
+  });
 };
 
 const start = async () => {
   if (consumer) return;
 
   const kafka = new Kafka({
-    clientId: `${config.serviceName}-consumer`,
-    brokers: config.kafka.brokers
+    clientId: config.kafka.clientId,
+    brokers: config.kafka.brokers,
+    retry: config.kafka.retry,
   });
 
   consumer = kafka.consumer({
-    groupId: `${config.serviceName}-group`,
-    allowAutoTopicCreation: true
+    groupId: config.kafka.groupId,
+    allowAutoTopicCreation: false,
+    retry: config.kafka.retry,
   });
 
-  producer = kafka.producer({ allowAutoTopicCreation: true });
+  producer = kafka.producer({
+    allowAutoTopicCreation: false,
+    idempotent: true,
+    maxInFlightRequests: 1,
+    retry: config.kafka.retry,
+  });
 
   await consumer.connect();
   await producer.connect();
   await consumer.subscribe({ topic: config.kafka.inputTopic, fromBeginning: false });
 
   await consumer.run({
-    eachMessage: async ({ topic, message }) => {
+    autoCommit: false,
+    eachMessage: async ({ topic, partition, message, heartbeat }) => {
+      const offset = message.offset;
       const raw = message.value?.toString();
-      if (!raw) return;
+
+      if (!raw) {
+        logger.warn('Sending empty transaction.created event to DLQ', { topic, partition, offset });
+        await sendToDlq({ topic, partition, offset, reason: 'empty_payload' });
+        await commitOffset(topic, partition, offset);
+        return;
+      }
+
+      let payload;
+      try {
+        payload = JSON.parse(raw);
+      } catch (error) {
+        logger.error('Sending malformed transaction.created event to DLQ', {
+          topic,
+          partition,
+          offset,
+          error: error.message,
+        });
+        await sendToDlq({
+          topic,
+          partition,
+          offset,
+          reason: 'parse_error',
+          raw,
+          error: error.message,
+        });
+        await commitOffset(topic, partition, offset);
+        return;
+      }
 
       try {
-        const payload = JSON.parse(raw);
         const transaction = normalizeTransaction(payload);
-        if (!transaction.id || !transaction.customerId || !Number.isFinite(transaction.amount)) {
+        const validationError = validateTransaction(transaction);
+        if (validationError) {
+          logger.error('Sending invalid transaction.created event to DLQ', {
+            topic,
+            partition,
+            offset,
+            error: validationError,
+          });
+          await sendToDlq({
+            topic,
+            partition,
+            offset,
+            reason: 'invalid_event',
+            raw,
+            payload,
+            error: validationError,
+          });
+          await commitOffset(topic, partition, offset);
           return;
         }
 
+        await heartbeat();
         const fraudAnalysis = await fraudDetectionService.analyzeTransaction(transaction);
+        await heartbeat();
+
         await producer.send({
           topic: config.kafka.outputTopic,
           compression: CompressionTypes.GZIP,
@@ -74,32 +187,37 @@ const start = async () => {
                 data: {
                   transaction_id: transaction.id,
                   rules_score: fraudAnalysis.riskScore,
-                  reason: fraudAnalysis.reasons[0] || null
+                  reason: fraudAnalysis.reasons[0] || null,
                 },
-                processedAt: new Date().toISOString()
+                processedAt: new Date().toISOString(),
               }),
               headers: {
                 'content-type': 'application/json',
-                'service-source': config.serviceName
-              }
-            }
-          ]
+                'service-source': config.serviceName,
+              },
+            },
+          ],
         });
 
+        await heartbeat();
         await decisionPublisher.process({
           producer,
           transaction,
           fraudAnalysis,
-          correlationId: payload.correlationId || payload.trace_id || transaction.id
+          correlationId: payload.correlationId || payload.trace_id || transaction.id,
         });
+
+        await commitOffset(topic, partition, offset);
       } catch (error) {
         logger.error('Fraud detection consumer failed to process transaction', {
           topic,
-          offset: message.offset,
-          error: error.message
+          partition,
+          offset,
+          error: error.message,
         });
+        throw error;
       }
-    }
+    },
   });
 };
 
@@ -116,5 +234,5 @@ const stop = async () => {
 
 module.exports = {
   start,
-  stop
+  stop,
 };

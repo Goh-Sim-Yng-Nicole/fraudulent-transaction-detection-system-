@@ -112,7 +112,7 @@ const bootstrap = async () => {
   createPool();
   producer = await createProducer();
   reviewService.setProducer(producer);
-  await startFlaggedConsumer();
+  await startFlaggedConsumer(producer);
 
   server = app.listen(config.port, () => {
     logger.info(`Human Verification Service listening on port ${config.port}`, {

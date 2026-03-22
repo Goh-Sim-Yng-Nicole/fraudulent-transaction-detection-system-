@@ -51,6 +51,13 @@ module.exports = {
     brokers: (process.env.KAFKA_BROKERS || process.env.KAFKA_BOOTSTRAP_SERVERS || 'localhost:9092').split(','),
     clientId: process.env.KAFKA_CLIENT_ID || 'transaction-service',
     groupId: process.env.KAFKA_GROUP_ID || 'transaction-service',
+    dlqTopic: process.env.KAFKA_DLQ_TOPIC || 'transaction.dlq',
+    retry: {
+      initialRetryTime: parseInt(process.env.KAFKA_RETRY_INITIAL_DELAY_MS, 10) || 100,
+      retries: parseInt(process.env.KAFKA_RETRY_MAX_ATTEMPTS, 10) || 8,
+      multiplier: parseInt(process.env.KAFKA_RETRY_MULTIPLIER, 10) || 2,
+      maxRetryTime: parseInt(process.env.KAFKA_RETRY_MAX_DELAY_MS, 10) || 30000,
+    },
     topics: {
       transactionCreated: process.env.KAFKA_TOPIC_TRANSACTION_CREATED || process.env.TOPIC_TRANSACTION_CREATED || 'transaction.created',
       transactionFlagged: process.env.KAFKA_TOPIC_TRANSACTION_FLAGGED || process.env.TOPIC_TRANSACTION_FLAGGED || 'transaction.flagged',

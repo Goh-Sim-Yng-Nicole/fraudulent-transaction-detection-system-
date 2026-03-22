@@ -32,6 +32,11 @@ CREATE INDEX IF NOT EXISTS idx_transactions_recipient_customer_id ON transaction
 CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status);
 
+ALTER TABLE transactions
+  ADD COLUMN IF NOT EXISTS outbound_event_published_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS outbound_event_publish_attempts INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS outbound_event_last_error TEXT;
+
 CREATE OR REPLACE FUNCTION set_transaction_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
