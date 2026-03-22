@@ -47,6 +47,9 @@ jobs:
       - name: Run code quality gates
         run: npm run quality
 
+      - name: Run unit tests
+        run: npm run test:unit
+
       - name: Show Docker versions
         run: |
           docker --version
