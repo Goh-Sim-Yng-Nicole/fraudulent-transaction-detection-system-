@@ -1,11 +1,12 @@
 const config = require('../config');
 const logger = require('../config/logger');
-const { createConsumer } = require('../config/kafka');
+const { createConsumer, createProducer, publish } = require('../config/kafka');
 const projectionStore = require('./projectionStore');
 
 class EventConsumerService {
   constructor() {
     this.consumer = null;
+    this.producer = null;
     this.isRunning = false;
     this.startedAt = null;
     this.lastProcessedAt = null;
@@ -25,6 +26,7 @@ class EventConsumerService {
       return;
     }
 
+    this.producer = await createProducer();
     this.consumer = await createConsumer();
     await this.consumer.subscribe({
       topics: config.kafka.topics,
@@ -49,13 +51,16 @@ class EventConsumerService {
   }
 
   async stop() {
-    if (!this.consumer) {
-      this.isRunning = false;
-      return;
+    if (this.consumer) {
+      await this.consumer.disconnect();
+      this.consumer = null;
     }
 
-    await this.consumer.disconnect();
-    this.consumer = null;
+    if (this.producer) {
+      await this.producer.disconnect();
+      this.producer = null;
+    }
+
     this.isRunning = false;
     logger.info('Analytics Kafka consumer stopped');
   }
@@ -79,7 +84,13 @@ class EventConsumerService {
     const raw = message.value?.toString();
 
     if (!raw) {
-      logger.warn('Skipping empty analytics event', { topic, partition, offset });
+      logger.warn('Sending empty analytics event to DLQ', { topic, partition, offset });
+      await this._sendToDlq({
+        topic,
+        partition,
+        offset,
+        reason: 'empty_payload',
+      });
       await this._commitOffset(topic, partition, offset);
       return;
     }
@@ -89,18 +100,68 @@ class EventConsumerService {
       payload = JSON.parse(raw);
     } catch (err) {
       this.lastError = err.message;
-      logger.error('Skipping malformed analytics event', {
+      logger.error('Sending malformed analytics event to DLQ', {
         topic,
         partition,
         offset,
+        error: err.message,
+      });
+      await this._sendToDlq({
+        topic,
+        partition,
+        offset,
+        reason: 'parse_error',
+        raw,
         error: err.message,
       });
       await this._commitOffset(topic, partition, offset);
       return;
     }
 
+    const validationError = this._validatePayload(topic, payload);
+    if (validationError) {
+      this.lastError = validationError;
+      logger.error('Sending invalid analytics event to DLQ', {
+        topic,
+        partition,
+        offset,
+        error: validationError,
+      });
+      await this._sendToDlq({
+        topic,
+        partition,
+        offset,
+        reason: 'invalid_event',
+        raw,
+        payload,
+        error: validationError,
+      });
+      await this._commitOffset(topic, partition, offset);
+      return;
+    }
+
     try {
-      await this._applyProjection(topic, payload);
+      const handled = await this._applyProjection(topic, payload);
+      if (!handled) {
+        this.lastError = `No analytics projection handler for topic ${topic}`;
+        logger.error('Sending unhandled analytics event to DLQ', {
+          topic,
+          partition,
+          offset,
+        });
+        await this._sendToDlq({
+          topic,
+          partition,
+          offset,
+          reason: 'unhandled_topic',
+          raw,
+          payload,
+          error: `No analytics projection handler for topic ${topic}`,
+        });
+        await this._commitOffset(topic, partition, offset);
+        return;
+      }
+
       this.lastProcessedAt = new Date().toISOString();
       this.lastProcessedTopic = topic;
       this.lastProcessedOffset = offset;
@@ -119,23 +180,44 @@ class EventConsumerService {
     }
   }
 
+  _validatePayload(topic, payload) {
+    switch (topic) {
+      case 'transaction.finalised':
+      case 'transaction.flagged':
+        return payload?.transactionId ? null : 'transactionId is required for transaction decision projections';
+      case 'transaction.reviewed':
+        if (!payload?.transactionId) {
+          return 'transactionId is required for manual review projections';
+        }
+        if (!payload?.reviewDecision && !payload?.decision) {
+          return 'reviewDecision is required for manual review projections';
+        }
+        return null;
+      case 'appeal.created':
+      case 'appeal.resolved':
+        return payload?.appealId ? null : 'appealId is required for appeal projections';
+      default:
+        return null;
+    }
+  }
+
   async _applyProjection(topic, payload) {
     switch (topic) {
       case 'transaction.finalised':
       case 'transaction.flagged':
         await projectionStore.upsertDecisionEvent(payload);
-        break;
+        return true;
       case 'transaction.reviewed':
         await projectionStore.applyManualReview(payload);
-        break;
+        return true;
       case 'appeal.created':
         await projectionStore.upsertAppealCreated(payload);
-        break;
+        return true;
       case 'appeal.resolved':
         await projectionStore.upsertAppealResolved(payload);
-        break;
+        return true;
       default:
-        logger.warn('Received unhandled analytics topic', { topic });
+        return false;
     }
   }
 
@@ -151,6 +233,34 @@ class EventConsumerService {
         offset: (BigInt(offset) + 1n).toString(),
       },
     ]);
+  }
+
+  async _sendToDlq({ topic, partition, offset, reason, raw = null, payload = null, error = null }) {
+    if (!this.producer) {
+      throw new Error('Analytics DLQ producer is not ready');
+    }
+
+    const partitionKey = payload?.transactionId || payload?.appealId || topic;
+    await publish(
+      this.producer,
+      config.kafka.dlqTopic,
+      partitionKey,
+      {
+        eventType: 'analytics.dlq',
+        sourceTopic: topic,
+        sourcePartition: partition,
+        sourceOffset: offset,
+        reason,
+        error,
+        rawPayload: raw,
+        originalPayload: payload,
+        failedAt: new Date().toISOString(),
+        serviceName: config.serviceName,
+      },
+      {
+        'x-dlq-reason': reason,
+      }
+    );
   }
 }
 

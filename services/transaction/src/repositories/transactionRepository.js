@@ -1,48 +1,59 @@
 const { query } = require('../db/pool');
 const { DatabaseError } = require('../utils/errors');
 
-const mapRow = (row, direction = null) => ({
-  transaction_id: row.id,
-  amount: Number(row.amount),
-  currency: row.currency,
-  card_type: row.card_type,
-  country: row.country,
-  merchant_id: row.merchant_id,
-  hour_utc: row.hour_utc,
-  customer_id: row.customer_id,
-  sender_name: row.sender_name,
-  recipient_customer_id: row.recipient_customer_id,
-  recipient_name: row.recipient_name,
-  status: row.status,
-  fraud_score: row.fraud_score,
-  outcome_reason: row.outcome_reason,
-  created_at: row.created_at,
-  updated_at: row.updated_at,
-  direction
-});
+const mapRow = (row, direction = null, options = {}) => {
+  const record = {
+    transaction_id: row.id,
+    amount: Number(row.amount),
+    currency: row.currency,
+    card_type: row.card_type,
+    country: row.country,
+    merchant_id: row.merchant_id,
+    hour_utc: row.hour_utc,
+    customer_id: row.customer_id,
+    sender_name: row.sender_name,
+    recipient_customer_id: row.recipient_customer_id,
+    recipient_name: row.recipient_name,
+    status: row.status,
+    fraud_score: row.fraud_score,
+    outcome_reason: row.outcome_reason,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    direction,
+  };
+
+  if (options.includeWorkflowState) {
+    record.outbound_event_published_at = row.outbound_event_published_at;
+    record.outbound_event_publish_attempts = row.outbound_event_publish_attempts;
+    record.outbound_event_last_error = row.outbound_event_last_error;
+    record.correlation_id = row.correlation_id;
+  }
+
+  return record;
+};
 
 class TransactionRepository {
-  async findById(transactionId) {
+  async findById(transactionId, options = {}) {
     try {
       const { rows } = await query('SELECT * FROM transactions WHERE id = $1', [transactionId]);
-      return rows[0] ? mapRow(rows[0]) : null;
+      return rows[0] ? mapRow(rows[0], null, options) : null;
     } catch (error) {
       throw new DatabaseError(`Failed to fetch transaction: ${error.message}`);
     }
   }
 
-  async findByIdempotencyKey(idempotencyKey) {
+  async findByIdempotencyKey(idempotencyKey, options = {}) {
     if (!idempotencyKey) return null;
 
     try {
       const { rows } = await query('SELECT * FROM transactions WHERE idempotency_key = $1', [idempotencyKey]);
-      return rows[0] ? mapRow(rows[0]) : null;
+      return rows[0] ? mapRow(rows[0], null, options) : null;
     } catch (error) {
       throw new DatabaseError(`Failed idempotency lookup: ${error.message}`);
     }
   }
 
-  async create(record) {
+  async create(record, options = {}) {
     try {
       const { rows } = await query(
         `INSERT INTO transactions (
@@ -71,11 +82,11 @@ class TransactionRepository {
           record.outcomeReason,
           record.idempotencyKey,
           record.correlationId,
-          record.requestId
+          record.requestId,
         ]
       );
 
-      return mapRow(rows[0]);
+      return mapRow(rows[0], null, options);
     } catch (error) {
       throw new DatabaseError(`Failed to create transaction: ${error.message}`);
     }
@@ -127,6 +138,39 @@ class TransactionRepository {
       return rows[0] ? mapRow(rows[0]) : null;
     } catch (error) {
       throw new DatabaseError(`Failed to update transaction status: ${error.message}`);
+    }
+  }
+
+  async markOutboundEventPublished(transactionId, options = {}) {
+    try {
+      const { rows } = await query(
+        `UPDATE transactions
+         SET outbound_event_published_at = NOW(),
+             outbound_event_publish_attempts = outbound_event_publish_attempts + 1,
+             outbound_event_last_error = NULL
+         WHERE id = $1
+         RETURNING *`,
+        [transactionId]
+      );
+      return rows[0] ? mapRow(rows[0], null, options) : null;
+    } catch (error) {
+      throw new DatabaseError(`Failed to mark outbound event as published: ${error.message}`);
+    }
+  }
+
+  async markOutboundEventFailed(transactionId, errorMessage, options = {}) {
+    try {
+      const { rows } = await query(
+        `UPDATE transactions
+         SET outbound_event_publish_attempts = outbound_event_publish_attempts + 1,
+             outbound_event_last_error = $2
+         WHERE id = $1
+         RETURNING *`,
+        [transactionId, errorMessage]
+      );
+      return rows[0] ? mapRow(rows[0], null, options) : null;
+    } catch (error) {
+      throw new DatabaseError(`Failed to mark outbound event as failed: ${error.message}`);
     }
   }
 }

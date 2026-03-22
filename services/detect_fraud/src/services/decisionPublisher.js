@@ -30,11 +30,7 @@ class DecisionPublisher {
     }
 
     if (!config.decision.localFallbackEnabled) {
-      logger.warn('Decision handoff skipped because no local fallback is enabled', {
-        transactionId: transaction.id,
-        outsystemsConfigured: Boolean(config.decision.outsystemsUrl),
-      });
-      return;
+      throw new Error(`Decision handoff failed for transaction ${transaction.id} and no local fallback is enabled`);
     }
 
     const decisionResult = this._makeLocalDecision(fraudAnalysis, transaction);

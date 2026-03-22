@@ -13,22 +13,67 @@ const toFraudTransaction = (record) => ({
   cardType: record.card_type,
   createdAt: record.created_at,
   location: {
-    country: record.country
+    country: record.country,
   },
   metadata: {
     senderName: record.sender_name,
     recipientCustomerId: record.recipient_customer_id,
     recipientName: record.recipient_name,
-    hourUtc: record.hour_utc
-  }
+    hourUtc: record.hour_utc,
+  },
 });
 
 class TransactionService {
+  async _publishTransactionCreated(record, correlationId) {
+    await publish(
+      config.kafka.topics.transactionCreated,
+      record.customer_id,
+      {
+        eventType: 'transaction.created',
+        event_type: 'transaction.created.v1',
+        trace_id: record.transaction_id,
+        correlationId,
+        transactionId: record.transaction_id,
+        customerId: record.customer_id,
+        merchantId: record.merchant_id,
+        transaction: toFraudTransaction(record),
+        data: {
+          transaction_id: record.transaction_id,
+          amount: record.amount,
+          currency: record.currency,
+          card_type: record.card_type,
+          country: record.country,
+          merchant_id: record.merchant_id,
+          hour_utc: record.hour_utc,
+          customer_id: record.customer_id,
+          sender_name: record.sender_name,
+          recipient_customer_id: record.recipient_customer_id,
+          recipient_name: record.recipient_name,
+        },
+        createdAt: record.created_at,
+      },
+      { 'x-correlation-id': correlationId }
+    );
+  }
+
   async createTransaction(body, context) {
     if (context.idempotencyKey) {
-      const existing = await transactionRepository.findByIdempotencyKey(context.idempotencyKey);
+      const existing = await transactionRepository.findByIdempotencyKey(context.idempotencyKey, {
+        includeWorkflowState: true,
+      });
       if (existing) {
-        return existing;
+        if (!existing.outbound_event_published_at) {
+          const correlationId = existing.correlation_id || context.correlationId;
+          try {
+            await this._publishTransactionCreated(existing, correlationId);
+            return transactionRepository.markOutboundEventPublished(existing.transaction_id);
+          } catch (error) {
+            await transactionRepository.markOutboundEventFailed(existing.transaction_id, error.message);
+            throw error;
+          }
+        }
+
+        return transactionRepository.findById(existing.transaction_id);
       }
     }
 
@@ -49,42 +94,16 @@ class TransactionService {
       outcomeReason: null,
       idempotencyKey: context.idempotencyKey,
       correlationId: context.correlationId,
-      requestId: context.requestId
-    });
+      requestId: context.requestId,
+    }, { includeWorkflowState: true });
 
-    const eventPayload = {
-      eventType: 'transaction.created',
-      event_type: 'transaction.created.v1',
-      trace_id: record.transaction_id,
-      correlationId: context.correlationId,
-      transactionId: record.transaction_id,
-      customerId: record.customer_id,
-      merchantId: record.merchant_id,
-      transaction: toFraudTransaction(record),
-      data: {
-        transaction_id: record.transaction_id,
-        amount: record.amount,
-        currency: record.currency,
-        card_type: record.card_type,
-        country: record.country,
-        merchant_id: record.merchant_id,
-        hour_utc: record.hour_utc,
-        customer_id: record.customer_id,
-        sender_name: record.sender_name,
-        recipient_customer_id: record.recipient_customer_id,
-        recipient_name: record.recipient_name
-      },
-      createdAt: record.created_at
-    };
-
-    await publish(
-      config.kafka.topics.transactionCreated,
-      record.customer_id,
-      eventPayload,
-      { 'x-correlation-id': context.correlationId }
-    );
-
-    return record;
+    try {
+      await this._publishTransactionCreated(record, context.correlationId);
+      return transactionRepository.markOutboundEventPublished(record.transaction_id);
+    } catch (error) {
+      await transactionRepository.markOutboundEventFailed(record.transaction_id, error.message);
+      throw error;
+    }
   }
 
   async listByCustomer(customerId, direction) {
@@ -106,7 +125,7 @@ class TransactionService {
       status: record.status,
       fraud_score: record.fraud_score,
       outcome_reason: record.outcome_reason,
-      updated_at: record.updated_at
+      updated_at: record.updated_at,
     };
   }
 }

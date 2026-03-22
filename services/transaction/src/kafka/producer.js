@@ -1,4 +1,4 @@
-const { Kafka, CompressionTypes } = require('kafkajs');
+const { Kafka, CompressionTypes, Partitioners } = require('kafkajs');
 const config = require('../config');
 
 let producer = null;
@@ -8,10 +8,17 @@ const createProducer = async () => {
 
   const kafka = new Kafka({
     clientId: config.kafka.clientId,
-    brokers: config.kafka.brokers
+    brokers: config.kafka.brokers,
+    retry: config.kafka.retry,
   });
 
-  producer = kafka.producer({ allowAutoTopicCreation: true });
+  producer = kafka.producer({
+    createPartitioner: Partitioners.DefaultPartitioner,
+    allowAutoTopicCreation: false,
+    idempotent: true,
+    maxInFlightRequests: 1,
+    retry: config.kafka.retry,
+  });
   await producer.connect();
   return producer;
 };

@@ -129,16 +129,24 @@ services:
     depends_on:
       redpanda:
         condition: service_healthy
-    entrypoint: ['/bin/sh', '-c']
-    command: >
-      rpk topic create transaction.created --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true;
-      rpk topic create transaction.scored --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true;
-      rpk topic create transaction.flagged --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true;
-      rpk topic create transaction.finalised --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true;
-      rpk topic create transaction.reviewed --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true;
-      rpk topic create appeal.created --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true;
-      rpk topic create appeal.resolved --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true;
-      echo "[kafka-init] ok"
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        rpk topic create transaction.created --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true
+        rpk topic create transaction.scored --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true
+        rpk topic create transaction.flagged --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true
+        rpk topic create transaction.finalised --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true
+        rpk topic create transaction.reviewed --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true
+        rpk topic create appeal.created --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true
+        rpk topic create appeal.resolved --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true
+        rpk topic create analytics.dlq --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true
+        rpk topic create detect-fraud.dlq --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true
+        rpk topic create transaction.dlq --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true
+        rpk topic create transaction.review.dlq --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true
+        rpk topic create appeal.dlq --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true
+        rpk topic create notification.dlq --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true
+        echo "[kafka-init] ok"
 
   transaction:
     build:

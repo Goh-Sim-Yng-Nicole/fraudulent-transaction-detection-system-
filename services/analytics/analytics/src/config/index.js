@@ -41,6 +41,7 @@ module.exports = {
     clientId: process.env.KAFKA_CLIENT_ID || 'analytics',
     groupId: process.env.KAFKA_GROUP_ID || 'analytics-group',
     enableConsumer: process.env.KAFKA_ENABLE_CONSUMER !== 'false',
+    dlqTopic: process.env.KAFKA_DLQ_TOPIC || 'analytics.dlq',
     topics: (process.env.KAFKA_TOPICS || 'transaction.finalised,transaction.flagged,transaction.reviewed,appeal.created,appeal.resolved')
       .split(',')
       .map((topic) => topic.trim())
