@@ -4,7 +4,6 @@ import os
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
 def _header_html() -> str:

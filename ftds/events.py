@@ -6,7 +6,6 @@ from pydantic import BaseModel
 
 from ftds.schemas import EventEnvelope
 
-
 DataT = TypeVar("DataT", bound=BaseModel)
 
 
