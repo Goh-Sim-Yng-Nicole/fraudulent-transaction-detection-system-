@@ -62,6 +62,11 @@ module.exports = {
     notifyOnDeclined: process.env.NOTIFY_ON_DECLINED === 'true',
     notifyOnFlagged: process.env.NOTIFY_ON_FLAGGED === 'true',
 
+    approved: {
+      notifyCustomerEmail: process.env.APPROVED_NOTIFY_CUSTOMER_EMAIL === 'true',
+      notifyCustomerSms: process.env.APPROVED_NOTIFY_CUSTOMER_SMS === 'true',
+    },
+
     declined: {
       notifyCustomerEmail: process.env.DECLINED_NOTIFY_CUSTOMER_EMAIL === 'true',
       notifyCustomerSms: process.env.DECLINED_NOTIFY_CUSTOMER_SMS === 'true',
@@ -69,6 +74,8 @@ module.exports = {
     },
 
     flagged: {
+      notifyCustomerEmail: process.env.FLAGGED_NOTIFY_CUSTOMER_EMAIL === 'true',
+      notifyCustomerSms: process.env.FLAGGED_NOTIFY_CUSTOMER_SMS === 'true',
       notifyFraudTeamEmail: process.env.FLAGGED_NOTIFY_FRAUD_TEAM_EMAIL === 'true',
       notifyFraudTeamSms: process.env.FLAGGED_NOTIFY_FRAUD_TEAM_SMS === 'true',
     },
@@ -94,4 +101,5 @@ module.exports = {
       phone: process.env.NOTIFICATION_FRAUD_TEAM_PHONE || '+15550000001',
     },
   },
+  customerPortalUrl: process.env.CUSTOMER_PORTAL_URL || 'http://localhost:8088/banking.html',
 };

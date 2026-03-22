@@ -23,6 +23,24 @@ class DecisionPublisher:
         self._http_client = http_client
         self.decision_version = "detect-fraud-local-fallback-1.0.0"
 
+    def _outsystems_headers(self, correlation_id: str) -> dict[str, str]:
+        headers = {
+            "Content-Type": "application/json",
+            "X-Correlation-ID": correlation_id,
+            "X-Service-Source": settings.service_name,
+        }
+
+        if settings.outsystems_auth_type == "bearer" and settings.outsystems_bearer_token:
+            headers["Authorization"] = f"Bearer {settings.outsystems_bearer_token}"
+        elif (
+            settings.outsystems_auth_type == "header"
+            and settings.outsystems_auth_header_name
+            and settings.outsystems_auth_header_value
+        ):
+            headers[settings.outsystems_auth_header_name] = settings.outsystems_auth_header_value
+
+        return headers
+
     async def process(
         self,
         *,
@@ -81,11 +99,7 @@ class DecisionPublisher:
                     "processedAt": datetime.now(timezone.utc).isoformat(),
                 },
                 timeout=settings.outsystems_decision_timeout_ms / 1000,
-                headers={
-                    "Content-Type": "application/json",
-                    "X-Correlation-ID": correlation_id,
-                    "X-Service-Source": settings.service_name,
-                },
+                headers=self._outsystems_headers(correlation_id),
             )
             if response.status_code < 200 or response.status_code >= 300:
                 raise RuntimeError(f"OutSystems returned {response.status_code}")

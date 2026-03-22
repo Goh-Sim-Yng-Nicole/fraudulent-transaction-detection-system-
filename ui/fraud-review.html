@@ -4,20 +4,63 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FTDS | Fraud Review Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@600;700&display=swap" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
   <style>
-    body { background: #f6f4ff; color: #111827; }
-    .navbar { background: linear-gradient(120deg, #5b21b6, #4338ca) !important; }
-    .panel-card, .summary-card { border: none; border-radius: 18px; box-shadow: 0 16px 40px rgba(76, 29, 149, 0.08); }
-    .summary-value { font-size: 1.9rem; font-weight: 800; }
-    .summary-label { color: #6b7280; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
-    .status-pill { border-radius: 999px; padding: 0.2rem 0.7rem; font-size: 0.78rem; font-weight: 700; }
-    .status-pending, .status-open { background: #fef3c7; color: #92400e; }
-    .status-in_review, .status-under_review { background: #dbeafe; color: #1d4ed8; }
-    .status-reviewed, .status-resolved { background: #dcfce7; color: #166534; }
-    textarea.form-control { min-height: 84px; }
-    code { word-break: break-all; }
+    :root { color-scheme: light; --ink:#111827; --muted:#64748b; --violet:#5b21b6; --indigo:#4338ca; --border:rgba(148,163,184,.2); --panel:rgba(255,255,255,.96); }
+    body { margin:0; min-height:100vh; font-family:"Manrope","Segoe UI",sans-serif; color:var(--ink); background:radial-gradient(circle at top left, rgba(99,102,241,.18), transparent 28%), radial-gradient(circle at bottom right, rgba(245,158,11,.12), transparent 24%), linear-gradient(180deg, #f5f3ff 0%, #f8fafc 48%, #fff 100%); }
+    .navbar { background:linear-gradient(120deg, #5b21b6, #4338ca)!important; box-shadow:0 14px 34px rgba(76,29,149,.18); }
+    .app-shell { max-width:1480px; margin:0 auto; }
+    .hero, .panel-card, .summary-card { border:1px solid var(--border); border-radius:24px; background:var(--panel); box-shadow:0 22px 60px rgba(67,56,202,.1); }
+    .hero { overflow:hidden; position:relative; color:#fff; background:linear-gradient(135deg, rgba(91,33,182,.97), rgba(49,46,129,.97)); }
+    .hero::after { content:""; position:absolute; right:-100px; top:-90px; width:280px; height:280px; border-radius:50%; background:radial-gradient(circle, rgba(196,181,253,.22), transparent 68%); }
+    .hero-chip { display:inline-flex; gap:.45rem; align-items:center; padding:.48rem .8rem; border-radius:999px; background:rgba(255,255,255,.12); font-size:.78rem; font-weight:800; letter-spacing:.07em; text-transform:uppercase; }
+    .hero-title { font-family:"Sora","Manrope",sans-serif; font-size:clamp(1.9rem,2.8vw,2.65rem); line-height:1.08; margin:1.05rem 0 .75rem; }
+    .hero p { color:rgba(255,255,255,.8); max-width:780px; margin-bottom:0; }
+    .hero-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:.9rem; }
+    .hero-stat { padding:1rem; border-radius:18px; border:1px solid rgba(255,255,255,.16); background:rgba(255,255,255,.08); }
+    .hero-stat .value { font-size:1.45rem; font-weight:800; line-height:1; }
+    .hero-stat .label { margin-top:.45rem; color:rgba(255,255,255,.72); font-size:.8rem; font-weight:700; letter-spacing:.05em; text-transform:uppercase; }
+    .summary-card { height:100%; padding:1.15rem 1.2rem; }
+    .summary-icon { width:3rem; height:3rem; border-radius:16px; display:grid; place-items:center; font-size:1.1rem; }
+    .tone-gold { background:rgba(245,158,11,.12); color:#b45309; }
+    .tone-indigo { background:rgba(99,102,241,.12); color:#4338ca; }
+    .tone-green { background:rgba(34,197,94,.12); color:#15803d; }
+    .tone-rose { background:rgba(244,63,94,.12); color:#be123c; }
+    .summary-label { color:var(--muted); font-size:.8rem; text-transform:uppercase; letter-spacing:.07em; font-weight:800; margin-bottom:.45rem; }
+    .summary-value { font-size:2rem; font-weight:800; line-height:1; }
+    .summary-note { margin-top:.4rem; color:#475569; font-size:.9rem; }
+    .section-copy .sub { color:#475569; font-size:.94rem; }
+    .table thead th { font-size:.8rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); border-bottom-color:rgba(148,163,184,.22); white-space:nowrap; }
+    .table tbody tr:hover { background:rgba(99,102,241,.04); }
+    .row-mine { background:linear-gradient(90deg, rgba(99,102,241,.08), rgba(255,255,255,0)); }
+    .record-title { font-weight:800; margin-bottom:.35rem; display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; }
+    .record-meta { display:flex; flex-wrap:wrap; gap:.45rem; margin-bottom:.45rem; }
+    .record-pill, .status-pill, .ownership-pill { border-radius:999px; padding:.25rem .68rem; font-size:.77rem; font-weight:800; display:inline-flex; gap:.35rem; align-items:center; }
+    .record-pill { background:#eef2ff; color:#4338ca; }
+    .status-pill.status-pending, .status-pill.status-open { background:#fef3c7; color:#92400e; }
+    .status-pill.status-in_review, .status-pill.status-under_review { background:#dbeafe; color:#1d4ed8; }
+    .status-pill.status-reviewed, .status-pill.status-resolved { background:#dcfce7; color:#166534; }
+    .ownership-pill.mine { background:rgba(79,70,229,.12); color:#4338ca; }
+    .ownership-pill.unclaimed { background:rgba(245,158,11,.12); color:#b45309; }
+    .ownership-pill.team { background:rgba(148,163,184,.14); color:#475569; }
+    .owner-box { min-width:160px; border-radius:16px; border:1px solid rgba(148,163,184,.18); background:#f8fafc; padding:.85rem .95rem; }
+    .owner-label { color:var(--muted); font-size:.74rem; font-weight:800; letter-spacing:.06em; text-transform:uppercase; margin-bottom:.35rem; }
+    .owner-name { font-weight:800; line-height:1.2; }
+    .owner-role { color:#64748b; font-size:.86rem; margin-top:.2rem; }
+    .notes-box { min-width:240px; }
+    .notes-box textarea { min-height:96px; border-radius:16px; border-color:rgba(148,163,184,.25); box-shadow:none; resize:vertical; }
+    .notes-box textarea:focus { border-color:rgba(99,102,241,.45); box-shadow:0 0 0 .22rem rgba(99,102,241,.12); }
+    .notes-caption { margin-top:.4rem; color:#64748b; font-size:.8rem; }
+    .action-stack { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:.55rem; min-width:230px; }
+    .action-stack .btn { border-radius:999px; font-weight:700; padding-inline:.9rem; white-space:nowrap; }
+    .empty-state { text-align:center; padding:3rem 1.25rem; color:#94a3b8; }
+    .empty-state i { display:block; font-size:2rem; margin-bottom:.8rem; color:#a78bfa; }
+    code { word-break:break-all; font-size:.82rem; color:#312e81; }
+    @media (max-width: 767.98px) { .hero,.panel-card,.summary-card{border-radius:20px}.action-stack{justify-content:flex-start}.notes-box,.owner-box,.action-stack{min-width:100%} }
   </style>
 </head>
 <body>
@@ -29,90 +72,106 @@
     <div class="d-flex align-items-center gap-2">
       <span class="text-white-50 small" id="roleLabel">Loading session...</span>
       <span class="badge text-bg-light" id="userBadge">-</span>
-      <button class="btn btn-outline-light btn-sm" id="logoutBtn">
-        <i class="bi bi-box-arrow-right me-1"></i>Logout
-      </button>
+      <button class="btn btn-outline-light btn-sm" id="logoutBtn"><i class="bi bi-box-arrow-right me-1"></i>Logout</button>
     </div>
   </nav>
 
   <main class="container-fluid px-4 py-4">
-    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
-      <div>
-        <h1 class="h3 fw-bold mb-1">Manual Review Queue</h1>
-        <p class="text-muted mb-0">Every claim and outcome is tied back to the authenticated staff member who handled it.</p>
+    <div class="app-shell">
+      <section class="hero p-4 p-lg-5 mb-4">
+        <div class="row g-4 align-items-end position-relative">
+          <div class="col-xl-7">
+            <span class="hero-chip"><i class="bi bi-check2-square"></i> Ownership-first review lane</span>
+            <h1 class="hero-title">Manual Review Queue</h1>
+            <p>Every claim, release, approval, decline, reversal, and uphold action is attributed to the authenticated staff member who performed it.</p>
+          </div>
+          <div class="col-xl-5">
+            <div class="hero-grid">
+              <div class="hero-stat"><div class="value" id="heroOpenCases">0</div><div class="label">Open reviews</div></div>
+              <div class="hero-stat"><div class="value" id="heroOpenAppeals">0</div><div class="label">Open appeals</div></div>
+              <div class="hero-stat"><div class="value" id="heroMine">0</div><div class="label">Assigned to me</div></div>
+              <div class="hero-stat"><div class="value" id="heroRefresh">--:--</div><div class="label">Last refresh</div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+        <div class="section-copy">
+          <div class="small text-uppercase fw-bold text-secondary-emphasis mb-2" style="letter-spacing: 0.08em;">Review activity</div>
+          <div class="sub">Rows claimed by the current reviewer are highlighted so it is easy to see what is already yours.</div>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge rounded-pill text-bg-light" id="refreshStamp">Refreshing...</span>
+          <button class="btn btn-primary btn-sm" id="refreshBtn"><i class="bi bi-arrow-clockwise me-1"></i>Refresh</button>
+        </div>
       </div>
-      <div class="d-flex align-items-center gap-2">
-        <span class="badge rounded-pill text-bg-light" id="refreshStamp">Refreshing...</span>
-        <button class="btn btn-primary btn-sm" id="refreshBtn">
-          <i class="bi bi-arrow-clockwise me-1"></i>Refresh
-        </button>
-      </div>
+
+      <div class="alert alert-danger d-none" id="errorAlert" role="alert"></div>
+      <div class="alert alert-success d-none" id="successAlert" role="alert"></div>
+
+      <section class="row g-3 mb-4" id="summaryGrid"></section>
+
+      <section class="row g-4">
+        <div class="col-12">
+          <div class="panel-card p-4">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+              <div class="section-copy">
+                <h2 class="h4 fw-bold mb-1">Flagged Transactions</h2>
+                <div class="sub">Claims lock a case to the reviewer, and approvals or declines record the deciding role.</div>
+              </div>
+              <span class="badge text-bg-secondary" id="reviewCount">0 open cases</span>
+            </div>
+            <div class="table-responsive">
+              <table class="table align-middle">
+                <thead>
+                  <tr>
+                    <th>Case</th>
+                    <th>Status</th>
+                    <th>Claimed By</th>
+                    <th>Decided By</th>
+                    <th>Notes</th>
+                    <th class="text-end">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="reviewRows">
+                  <tr><td colspan="6"><div class="empty-state"><i class="bi bi-hourglass-split"></i>Loading review queue...</div></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12">
+          <div class="panel-card p-4">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+              <div class="section-copy">
+                <h2 class="h4 fw-bold mb-1">Appeal Queue</h2>
+                <div class="sub">Appeals carry claim ownership too, so the reviewer of record stays visible from intake to resolution.</div>
+              </div>
+              <span class="badge text-bg-secondary" id="appealCount">0 open appeals</span>
+            </div>
+            <div class="table-responsive">
+              <table class="table align-middle">
+                <thead>
+                  <tr>
+                    <th>Appeal</th>
+                    <th>Status</th>
+                    <th>Claimed By</th>
+                    <th>Decided By</th>
+                    <th>Notes</th>
+                    <th class="text-end">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="appealRows">
+                  <tr><td colspan="6"><div class="empty-state"><i class="bi bi-flag"></i>Loading appeal queue...</div></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
-
-    <div class="alert alert-danger d-none" id="errorAlert" role="alert"></div>
-    <div class="alert alert-success d-none" id="successAlert" role="alert"></div>
-
-    <section class="row g-3 mb-4" id="summaryGrid"></section>
-
-    <section class="row g-4">
-      <div class="col-12">
-        <div class="panel-card bg-white p-4">
-          <div class="d-flex justify-content-between align-items-center mb-3">
-            <div>
-              <h2 class="h5 mb-1">Flagged Transactions</h2>
-              <div class="text-muted small">Claims lock a case to the reviewer, and approvals or declines record the deciding role.</div>
-            </div>
-            <span class="badge text-bg-secondary" id="reviewCount">0 open cases</span>
-          </div>
-          <div class="table-responsive">
-            <table class="table align-middle">
-              <thead>
-                <tr>
-                  <th>Transaction</th>
-                  <th>Status</th>
-                  <th>Claimed By</th>
-                  <th>Decided By</th>
-                  <th>Notes</th>
-                  <th class="text-end">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="reviewRows">
-                <tr><td colspan="6" class="text-center text-muted py-4">Loading review queue...</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <div class="col-12">
-        <div class="panel-card bg-white p-4">
-          <div class="d-flex justify-content-between align-items-center mb-3">
-            <div>
-              <h2 class="h5 mb-1">Appeal Queue</h2>
-              <div class="text-muted small">Appeals now carry claim ownership too, so the reviewer of record is visible before and after a decision.</div>
-            </div>
-            <span class="badge text-bg-secondary" id="appealCount">0 open appeals</span>
-          </div>
-          <div class="table-responsive">
-            <table class="table align-middle">
-              <thead>
-                <tr>
-                  <th>Appeal</th>
-                  <th>Status</th>
-                  <th>Claimed By</th>
-                  <th>Decided By</th>
-                  <th>Notes</th>
-                  <th class="text-end">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="appealRows">
-                <tr><td colspan="6" class="text-center text-muted py-4">Loading appeal queue...</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </section>
   </main>
 
   <script>
@@ -125,17 +184,14 @@
         headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
         ...options,
       });
-
       if (response.status === 401) {
         window.location.href = loginUrl;
         throw new Error('Session expired');
       }
-
       if (response.status === 403) {
         window.location.href = '/forbidden.html';
         throw new Error('Insufficient permissions');
       }
-
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(payload.error || payload.detail || `Request failed with status ${response.status}`);
@@ -148,115 +204,114 @@
       alert.textContent = message;
       alert.classList.remove('d-none');
     };
-
-    const hideAlert = (id) => {
-      document.getElementById(id).classList.add('d-none');
-    };
-
-    const clearAlerts = () => {
-      hideAlert('errorAlert');
-      hideAlert('successAlert');
-    };
-
+    const hideAlert = (id) => document.getElementById(id).classList.add('d-none');
+    const clearAlerts = () => { hideAlert('errorAlert'); hideAlert('successAlert'); };
     const normalizeStatus = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, '_');
     const formatStatus = (value) => String(value || 'unknown').replace(/_/g, ' ');
     const statusBadge = (value) => `<span class="status-pill status-${normalizeStatus(value)}">${formatStatus(value)}</span>`;
-    const escapeHtml = (value) => String(value || '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-
+    const escapeHtml = (value) => String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     const currentUserId = () => state.user?.userId || '';
+    const mine = (claimedBy) => Boolean(claimedBy && claimedBy === currentUserId());
+    const ownershipBadge = (claimedBy) => {
+      if (!claimedBy) return '<span class="ownership-pill unclaimed"><i class="bi bi-broadcast-pin"></i>Unclaimed</span>';
+      if (mine(claimedBy)) return '<span class="ownership-pill mine"><i class="bi bi-person-check"></i>Mine</span>';
+      return '<span class="ownership-pill team"><i class="bi bi-people"></i>Team-owned</span>';
+    };
 
     const renderSummary = () => {
-      const pendingReviews = state.reviews.filter((item) => item.queueStatus === 'PENDING').length;
-      const inReview = state.reviews.filter((item) => item.queueStatus === 'IN_REVIEW').length;
-      const pendingAppeals = state.appeals.filter((item) => item.currentStatus === 'OPEN').length;
-      const appealsInReview = state.appeals.filter((item) => item.currentStatus === 'UNDER_REVIEW').length;
+      const reviewPending = state.reviews.filter((item) => item.queueStatus === 'PENDING').length;
+      const reviewMineCount = state.reviews.filter((item) => mine(item.claimedBy)).length;
+      const appealPending = state.appeals.filter((item) => item.currentStatus === 'OPEN').length;
+      const appealMineCount = state.appeals.filter((item) => mine(item.claimedBy)).length;
       const cards = [
-        ['Flagged pending', pendingReviews],
-        ['Flagged in review', inReview],
-        ['Appeals pending', pendingAppeals],
-        ['Appeals in review', appealsInReview],
+        { label: 'Flagged pending', value: reviewPending, note: 'Awaiting first claim', icon: 'bi-hourglass-split', tone: 'tone-gold' },
+        { label: 'My flagged cases', value: reviewMineCount, note: 'Currently assigned to you', icon: 'bi-person-check', tone: 'tone-indigo' },
+        { label: 'Appeals pending', value: appealPending, note: 'Ready for reviewer pickup', icon: 'bi-flag', tone: 'tone-rose' },
+        { label: 'My appeals', value: appealMineCount, note: 'Appeals on your desk', icon: 'bi-check2-square', tone: 'tone-green' },
       ];
-
-      document.getElementById('summaryGrid').innerHTML = cards.map(([label, value]) => `
+      document.getElementById('summaryGrid').innerHTML = cards.map((card) => `
         <div class="col-12 col-sm-6 col-xl-3">
-          <div class="summary-card bg-white p-4">
-            <div class="summary-label">${label}</div>
-            <div class="summary-value mt-2">${Number(value || 0).toLocaleString()}</div>
+          <div class="summary-card">
+            <div class="d-flex align-items-start justify-content-between gap-3">
+              <div>
+                <div class="summary-label">${card.label}</div>
+                <div class="summary-value">${Number(card.value || 0).toLocaleString()}</div>
+              </div>
+              <div class="summary-icon ${card.tone}"><i class="bi ${card.icon}"></i></div>
+            </div>
+            <div class="summary-note">${card.note}</div>
           </div>
-        </div>
-      `).join('');
+        </div>`).join('');
+      document.getElementById('heroOpenCases').textContent = state.reviews.length;
+      document.getElementById('heroOpenAppeals').textContent = state.appeals.length;
+      document.getElementById('heroMine').textContent = reviewMineCount + appealMineCount;
     };
 
     const actionButtons = ({ type, id, claimedBy, status }) => {
-      const mine = claimedBy && claimedBy === currentUserId();
+      const mineNow = claimedBy && claimedBy === currentUserId();
       const inReview = ['IN_REVIEW', 'UNDER_REVIEW'].includes(status);
       const open = ['PENDING', 'OPEN'].includes(status);
       const resolutionApprove = type === 'review' ? 'APPROVED' : 'REVERSE';
       const resolutionDecline = type === 'review' ? 'DECLINED' : 'UPHOLD';
-
-      return `
-        <div class="d-flex flex-wrap justify-content-end gap-2">
-          <button class="btn btn-outline-primary btn-sm" data-action="claim" data-type="${type}" data-id="${id}" ${open ? '' : 'disabled'}>Claim</button>
-          <button class="btn btn-outline-secondary btn-sm" data-action="release" data-type="${type}" data-id="${id}" ${mine && inReview ? '' : 'disabled'}>Release</button>
-          <button class="btn btn-success btn-sm" data-action="resolve" data-resolution="${resolutionApprove}" data-type="${type}" data-id="${id}" ${mine && inReview ? '' : 'disabled'}>${type === 'review' ? 'Approve' : 'Reverse'}</button>
-          <button class="btn btn-danger btn-sm" data-action="resolve" data-resolution="${resolutionDecline}" data-type="${type}" data-id="${id}" ${mine && inReview ? '' : 'disabled'}>${type === 'review' ? 'Decline' : 'Uphold'}</button>
-        </div>
-      `;
+      return `<div class="action-stack">
+        <button class="btn btn-outline-primary btn-sm" data-action="claim" data-type="${type}" data-id="${id}" ${open ? '' : 'disabled'}><i class="bi bi-hand-index-thumb me-1"></i>Claim</button>
+        <button class="btn btn-outline-secondary btn-sm" data-action="release" data-type="${type}" data-id="${id}" ${mineNow && inReview ? '' : 'disabled'}><i class="bi bi-arrow-counterclockwise me-1"></i>Release</button>
+        <button class="btn btn-success btn-sm" data-action="resolve" data-resolution="${resolutionApprove}" data-type="${type}" data-id="${id}" ${mineNow && inReview ? '' : 'disabled'}><i class="bi bi-check2-circle me-1"></i>${type === 'review' ? 'Approve' : 'Reverse'}</button>
+        <button class="btn btn-danger btn-sm" data-action="resolve" data-resolution="${resolutionDecline}" data-type="${type}" data-id="${id}" ${mineNow && inReview ? '' : 'disabled'}><i class="bi bi-x-circle me-1"></i>${type === 'review' ? 'Decline' : 'Uphold'}</button>
+      </div>`;
     };
+
+    const renderOwner = (label, name, role) => `<div class="owner-box"><div class="owner-label">${label}</div><div class="owner-name">${escapeHtml(name || 'Unassigned')}</div><div class="owner-role">${escapeHtml(role || 'Pending')}</div></div>`;
+    const noteHint = (text) => `<div class="notes-caption">${text}</div>`;
 
     const renderReviewRows = () => {
       const tbody = document.getElementById('reviewRows');
-      document.getElementById('reviewCount').textContent = `${state.reviews.length} open cases`;
-
+      document.getElementById('reviewCount').textContent = `${state.reviews.length} open case${state.reviews.length === 1 ? '' : 's'}`;
       if (!state.reviews.length) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No flagged transactions are waiting for review.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><i class="bi bi-check2-circle"></i>No flagged transactions are waiting for review.</div></td></tr>';
         return;
       }
-
       tbody.innerHTML = state.reviews.map((item) => `
-        <tr>
+        <tr class="${mine(item.claimedBy) ? 'row-mine' : ''}">
           <td>
-            <div class="fw-semibold"><code>${escapeHtml(item.transactionId)}</code></div>
-            <div class="small text-muted">Customer ${escapeHtml(item.customerId || '-')} · Risk ${escapeHtml(item.riskScore ?? '-')}</div>
-            <div class="small text-muted">${escapeHtml(item.decisionReason || 'Manual review required')}</div>
+            <div class="record-title"><code>${escapeHtml(item.transactionId)}</code>${ownershipBadge(item.claimedBy)}</div>
+            <div class="record-meta">
+              <span class="record-pill"><i class="bi bi-person"></i>${escapeHtml(item.customerId || '-')}</span>
+              <span class="record-pill"><i class="bi bi-graph-up"></i>Risk ${escapeHtml(item.riskScore ?? item.ruleScore ?? '-')}</span>
+            </div>
+            <div class="text-muted small">${escapeHtml(item.reviewReason || item.decisionReason || 'Manual review required')}</div>
           </td>
           <td>${statusBadge(item.queueStatus)}</td>
-          <td class="small"><div>${escapeHtml(item.claimedBy || '-')}</div><div class="text-muted">${escapeHtml(item.claimedRole || '')}</div></td>
-          <td class="small"><div>${escapeHtml(item.reviewedBy || '-')}</div><div class="text-muted">${escapeHtml(item.reviewedRole || '')}</div></td>
-          <td style="min-width: 220px;"><textarea class="form-control form-control-sm" data-notes="review-${item.transactionId}" placeholder="Decision notes">${escapeHtml(item.reviewNotes || '')}</textarea></td>
+          <td>${renderOwner('Claim owner', item.claimedBy || 'Unclaimed', item.claimedRole || 'Awaiting assignment')}</td>
+          <td>${renderOwner('Decision owner', item.reviewedBy || 'Not decided', item.reviewedRole || 'Pending')}</td>
+          <td><div class="notes-box"><textarea class="form-control form-control-sm" data-notes="review-${item.transactionId}" placeholder="Decision notes">${escapeHtml(item.reviewNotes || '')}</textarea>${noteHint('Notes are saved with the next release or decision action.')}</div></td>
           <td class="text-end">${actionButtons({ type: 'review', id: item.transactionId, claimedBy: item.claimedBy, status: item.queueStatus })}</td>
-        </tr>
-      `).join('');
+        </tr>`).join('');
     };
 
     const renderAppealRows = () => {
       const tbody = document.getElementById('appealRows');
-      document.getElementById('appealCount').textContent = `${state.appeals.length} open appeals`;
-
+      document.getElementById('appealCount').textContent = `${state.appeals.length} open appeal${state.appeals.length === 1 ? '' : 's'}`;
       if (!state.appeals.length) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No appeals are waiting for manual review.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><i class="bi bi-check2-circle"></i>No appeals are waiting for manual review.</div></td></tr>';
         return;
       }
-
       tbody.innerHTML = state.appeals.map((item) => `
-        <tr>
+        <tr class="${mine(item.claimedBy) ? 'row-mine' : ''}">
           <td>
-            <div class="fw-semibold"><code>${escapeHtml(item.appealId)}</code></div>
-            <div class="small text-muted">Txn ${escapeHtml(item.transactionId || '-')} · Customer ${escapeHtml(item.customerId || '-')}</div>
-            <div class="small text-muted">${escapeHtml(item.appealReason || 'Customer dispute')}</div>
+            <div class="record-title"><code>${escapeHtml(item.appealId)}</code>${ownershipBadge(item.claimedBy)}</div>
+            <div class="record-meta">
+              <span class="record-pill"><i class="bi bi-receipt"></i>${escapeHtml(item.transactionId || '-')}</span>
+              <span class="record-pill"><i class="bi bi-person"></i>${escapeHtml(item.customerId || '-')}</span>
+            </div>
+            <div class="text-muted small">${escapeHtml(item.appealReason || 'Customer dispute')}</div>
           </td>
           <td>${statusBadge(item.currentStatus)}</td>
-          <td class="small"><div>${escapeHtml(item.claimedBy || '-')}</div><div class="text-muted">${escapeHtml(item.claimedRole || '')}</div></td>
-          <td class="small"><div>${escapeHtml(item.reviewedBy || '-')}</div><div class="text-muted">${escapeHtml(item.resolvedRole || '')}</div></td>
-          <td style="min-width: 220px;"><textarea class="form-control form-control-sm" data-notes="appeal-${item.appealId}" placeholder="Resolution notes">${escapeHtml(item.resolutionNotes || '')}</textarea></td>
+          <td>${renderOwner('Claim owner', item.claimedBy || 'Unclaimed', item.claimedRole || 'Awaiting assignment')}</td>
+          <td>${renderOwner('Decision owner', item.reviewedBy || 'Not decided', item.resolvedRole || 'Pending')}</td>
+          <td><div class="notes-box"><textarea class="form-control form-control-sm" data-notes="appeal-${item.appealId}" placeholder="Resolution notes">${escapeHtml(item.resolutionNotes || '')}</textarea>${noteHint('Use notes to record appeal evidence, customer context, or override rationale.')}</div></td>
           <td class="text-end">${actionButtons({ type: 'appeal', id: item.appealId, claimedBy: item.claimedBy, status: item.currentStatus })}</td>
-        </tr>
-      `).join('');
+        </tr>`).join('');
     };
 
     const refreshQueues = async () => {
@@ -266,90 +321,52 @@
         fetchJson('/api/v1/review-cases?status=PENDING,IN_REVIEW&limit=50&offset=0'),
         fetchJson('/api/v1/reviews/appeals/pending?limit=50&offset=0'),
       ]);
-
       state.user = session.user;
       state.reviews = reviewsResponse.data || [];
       state.appeals = appealsResponse.data || [];
-
+      const now = new Date();
       document.getElementById('userBadge').textContent = state.user.displayName || state.user.userId || '-';
       document.getElementById('roleLabel').textContent = state.user.role || 'unknown';
-      document.getElementById('refreshStamp').textContent = `Updated ${new Date().toLocaleTimeString()}`;
-
+      document.getElementById('refreshStamp').textContent = `Updated ${now.toLocaleTimeString()}`;
+      document.getElementById('heroRefresh').textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       renderSummary();
       renderReviewRows();
       renderAppealRows();
     };
 
     const getNotes = (key) => document.querySelector(`[data-notes="${key}"]`)?.value?.trim() || '';
-
     const callAction = async (type, id, action, resolution = null) => {
       clearAlerts();
       const notes = getNotes(`${type}-${id}`);
       let url = '';
       let body = {};
-
       if (type === 'review') {
-        if (action === 'claim') {
-          url = `/api/v1/review-cases/${encodeURIComponent(id)}/claim`;
-          body = { claimTtlMinutes: 10 };
-        } else if (action === 'release') {
-          url = `/api/v1/review-cases/${encodeURIComponent(id)}/release`;
-          body = { notes };
-        } else {
-          url = `/api/v1/reviews/${encodeURIComponent(id)}/decision`;
-          body = { decision: resolution, notes };
-        }
+        if (action === 'claim') { url = `/api/v1/review-cases/${encodeURIComponent(id)}/claim`; body = { claimTtlMinutes: 10 }; }
+        else if (action === 'release') { url = `/api/v1/review-cases/${encodeURIComponent(id)}/release`; body = { notes }; }
+        else { url = `/api/v1/reviews/${encodeURIComponent(id)}/decision`; body = { decision: resolution, notes }; }
       } else {
-        if (action === 'claim') {
-          url = `/api/v1/reviews/appeals/${encodeURIComponent(id)}/claim`;
-          body = { claimTtlMinutes: 10 };
-        } else if (action === 'release') {
-          url = `/api/v1/reviews/appeals/${encodeURIComponent(id)}/release`;
-          body = { notes };
-        } else {
-          url = `/api/v1/reviews/appeals/${encodeURIComponent(id)}/resolve`;
-          body = { resolution, notes };
-        }
+        if (action === 'claim') { url = `/api/v1/reviews/appeals/${encodeURIComponent(id)}/claim`; body = { claimTtlMinutes: 10 }; }
+        else if (action === 'release') { url = `/api/v1/reviews/appeals/${encodeURIComponent(id)}/release`; body = { notes }; }
+        else { url = `/api/v1/reviews/appeals/${encodeURIComponent(id)}/resolve`; body = { resolution, notes }; }
       }
-
-      await fetchJson(url, {
-        method: 'POST',
-        body: JSON.stringify(body),
-      });
-
+      await fetchJson(url, { method: 'POST', body: JSON.stringify(body) });
       showAlert('successAlert', `${type === 'review' ? 'Review case' : 'Appeal'} updated successfully.`);
       await refreshQueues();
     };
 
-    document.getElementById('refreshBtn').addEventListener('click', () => {
-      refreshQueues().catch((error) => showAlert('errorAlert', error.message));
-    });
-
-    document.getElementById('logoutBtn').addEventListener('click', async () => {
-      await fetch('/api/staff/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
-      window.location.href = loginUrl;
-    });
-
+    document.getElementById('refreshBtn').addEventListener('click', () => { refreshQueues().catch((error) => showAlert('errorAlert', error.message)); });
+    document.getElementById('logoutBtn').addEventListener('click', async () => { await fetch('/api/staff/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {}); window.location.href = loginUrl; });
     document.addEventListener('click', (event) => {
       const button = event.target.closest('[data-action]');
-      if (!button) {
-        return;
-      }
-
+      if (!button) return;
       button.disabled = true;
-      callAction(
-        button.dataset.type,
-        button.dataset.id,
-        button.dataset.action,
-        button.dataset.resolution || null
-      )
+      callAction(button.dataset.type, button.dataset.id, button.dataset.action, button.dataset.resolution || null)
         .catch((error) => showAlert('errorAlert', error.message))
-        .finally(() => {
-          button.disabled = false;
-        });
+        .finally(() => { button.disabled = false; });
     });
 
     refreshQueues().catch((error) => showAlert('errorAlert', error.message));
+    setInterval(() => { refreshQueues().catch(() => {}); }, 20000);
   </script>
 </body>
 </html>
