@@ -136,9 +136,12 @@ for (const check of directHealthChecks) {
 
 logStep('Validating protected UI and observability surfaces');
 await checkHtmlPage(`${platform.publicBase}/`, 'public edge root');
-await checkHtmlPage(`${platform.nginxBase}/staff-login.html`, 'staff login ui', 'Staff Sign In');
-await checkHtmlPage(`${platform.nginxBase}/fraud-review.html`, 'fraud review redirect to staff login', 'Staff Sign In');
-await checkHtmlPage(`${platform.nginxBase}/manager.html`, 'manager redirect to staff login', 'Staff Sign In');
+await checkHtmlPage(`${platform.nginxBase}/staff-login.html`, 'staff login ui', 'Staff and Operations Sign In');
+await checkHtmlPage(`${platform.httpsBase}/staff-login.html`, 'https staff login ui', 'Staff and Operations Sign In', {
+  insecureTls: true,
+});
+await checkHtmlPage(`${platform.nginxBase}/fraud-review.html`, 'fraud review redirect to staff login', 'Staff and Operations Sign In');
+await checkHtmlPage(`${platform.nginxBase}/manager.html`, 'manager redirect to staff login', 'Staff and Operations Sign In');
 await checkHtmlPage(`${platform.nginxBase}/fraud-review.html`, 'fraud review console', 'Fraud Review Console', {
   headers: { Cookie: analystSession.cookie },
 });

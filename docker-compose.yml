@@ -447,6 +447,7 @@ services:
       dockerfile: nginx/Dockerfile
     ports:
       - '8088:8088'
+      - '443:8443'
       - '3000:3000'
       - '16686:16686'
       - '9090:9090'

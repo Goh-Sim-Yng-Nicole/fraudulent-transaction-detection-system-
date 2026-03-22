@@ -81,7 +81,7 @@
 
   <script>
     const loginUrl = '/staff-login.html?redirect=/manager.html';
-    const state = { user: null, dashboard: null, realtime: null };
+    const state = { user: null, dashboard: null, legacyDashboard: null, realtime: null };
 
     const fetchJson = async (url, options = {}) => {
       const response = await fetch(url, {
@@ -120,18 +120,23 @@
     const roleIsOps = (role) => String(role || '').startsWith('ops_');
     const formatInteger = (value) => Number(value || 0).toLocaleString();
     const formatDecimal = (value) => Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 1 });
+    const formatPercent = (value) => `${formatDecimal(value)}%`;
 
     const renderOverview = () => {
-      const overview = state.dashboard?.overview || {};
-      const appealImpact = state.dashboard?.appealImpact || {};
-      const analystImpact = state.dashboard?.analystImpact || {};
+      const legacy = state.legacyDashboard || {};
+      const approved = Number(legacy.transactions_approved || 0);
+      const declined = Number(legacy.transactions_rejected || 0);
+      const flagged = Number(legacy.transactions_flagged || 0);
+      const totalTransactions = approved + declined + flagged;
+      const approvalRate = totalTransactions > 0 ? (approved / totalTransactions) * 100 : 0;
+      const declineRate = totalTransactions > 0 ? (declined / totalTransactions) * 100 : 0;
       const cards = [
-        ['Transactions', formatInteger(overview.totalTransactions)],
-        ['Approval Rate', `${formatDecimal(overview.approvalRate)}%`],
-        ['Decline Rate', `${formatDecimal(overview.declineRate)}%`],
-        ['Manual Reviews', formatInteger(analystImpact.totalManualReviews)],
-        ['Appeals Created', formatInteger(appealImpact.appealsCreated)],
-        ['Appeals Reversed', formatInteger(appealImpact.reversedCount)],
+        ['Transactions', formatInteger(totalTransactions)],
+        ['Approval Rate', formatPercent(approvalRate)],
+        ['Decline Rate', formatPercent(declineRate)],
+        ['Manual Reviews', formatInteger(legacy.transactions_reviewed)],
+        ['Appeals Created', formatInteger(legacy.appeals_created)],
+        ['Appeals Reversed', formatInteger(legacy.appeals_approved)],
       ];
 
       document.getElementById('overviewGrid').innerHTML = cards.map(([label, value]) => `
@@ -214,19 +219,21 @@
 
     const refreshDashboard = async () => {
       hideError();
-      const [session, dashboardResponse, realtimeResponse] = await Promise.all([
+      const [session, legacyDashboardResponse, dashboardResponse, realtimeResponse] = await Promise.all([
         fetchJson('/api/staff/me'),
+        fetchJson('/api/analytics/dashboard'),
         fetchJson('/api/v1/analytics/dashboard?timeRange=24h'),
         fetchJson('/api/v1/analytics/realtime'),
       ]);
 
       state.user = session.user;
+      state.legacyDashboard = legacyDashboardResponse || {};
       state.dashboard = dashboardResponse.data || {};
       state.realtime = realtimeResponse.data || {};
 
       document.getElementById('userBadge').textContent = state.user.displayName || state.user.userId || '-';
       document.getElementById('roleLabel').textContent = state.user.role || 'unknown';
-      document.getElementById('generatedAt').textContent = `Updated ${new Date(state.dashboard?.metadata?.generatedAt || state.realtime?.timestamp || Date.now()).toLocaleString()}`;
+      document.getElementById('generatedAt').textContent = `Updated ${new Date(state.legacyDashboard?.updated_at || state.dashboard?.metadata?.generatedAt || state.realtime?.timestamp || Date.now()).toLocaleString()}`;
       document.getElementById('timeRangeLabel').textContent = state.dashboard?.metadata?.timeRange || '24h';
 
       renderOverview();
