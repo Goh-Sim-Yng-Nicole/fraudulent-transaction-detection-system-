@@ -4,6 +4,9 @@ Composite service that consumes `transaction.created`, calls `fraud_score`, publ
 
 **Type:** Composite service (Kafka worker + HTTP client)  
 **Port:** 8008
+**Runtime:** Python / FastAPI
+
+This folder now reflects the live runtime directly; OutSystems owns the external decision service, and there is no alternate inactive Node implementation kept alongside it.
 
 ---
 

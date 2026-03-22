@@ -53,18 +53,26 @@ Observability
 
 ## Services
 
-| Service                   | Type      | Port | Description                                                                                                                                             |
-| ------------------------- | --------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `customer`                | Atomic    | 8005 | Registration, login, OTP, profile management                                                                                                            |
-| `transaction`             | Atomic    | 8000 | Transaction lifecycle and Kafka-driven status updates                                                                                                   |
-| `fraud_score`             | Atomic    | 8001 | ML fraud scoring via Random Forest                                                                                                                      |
-| `detect_fraud`            | Composite | 8008 | Orchestrates fraud scoring, publishes `transaction.scored`, hands off to OutSystems when configured, and provides a Docker-safe local decision fallback |
-| `process_flagged_appeals` | Composite | 8002 | Fraud review service with legacy analyst routes, modern `/api/v1/review-cases` and `/api/v1/reviews` APIs, and the analyst dashboard                    |
-| `appeal`                  | Atomic    | 8003 | Customer appeal lifecycle                                                                                                                               |
-| `notification`            | Atomic    | 8010 | Event-driven notifications with local Mailpit SMTP by default in Docker, plus optional external SMTP/Twilio integrations                                |
-| `audit`                   | Atomic    | 8007 | Structured audit log with query APIs, Prometheus metrics, and chain-integrity verification                                                              |
-| `analytics`               | Atomic    | 8006 | Real-time manager analytics with dashboard APIs, WebSocket updates, and in-memory fallback when Redis is disabled                                       |
-| `gateway`                 | Composite | 8004 | Customer-facing API aggregation with legacy customer routes, modern `/api/v1` proxies, and optional external decision proxying                          |
+| Service                   | Runtime           | Type      | Port | Description                                                                                                                                             |
+| ------------------------- | ----------------- | --------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `customer`                | Python / FastAPI  | Atomic    | 8005 | Registration, login, OTP, profile management                                                                                                            |
+| `transaction`             | Python / FastAPI  | Atomic    | 8000 | Transaction lifecycle and Kafka-driven status updates                                                                                                   |
+| `fraud_score`             | Node.js / Express | Atomic    | 8001 | ML fraud scoring via Random Forest                                                                                                                      |
+| `detect_fraud`            | Python / FastAPI  | Composite | 8008 | Orchestrates fraud scoring, publishes `transaction.scored`, hands off to OutSystems when configured, and provides a Docker-safe local decision fallback |
+| `process_flagged_appeals` | Node.js / Express | Composite | 8002 | Fraud review service with legacy analyst routes, modern `/api/v1/review-cases` and `/api/v1/reviews` APIs, and the analyst dashboard                    |
+| `appeal`                  | Node.js / Express | Atomic    | 8003 | Customer appeal lifecycle                                                                                                                               |
+| `notification`            | Node.js / Express | Atomic    | 8010 | Event-driven notifications with local Mailpit SMTP by default in Docker, plus optional external SMTP/Twilio integrations                                |
+| `audit`                   | Node.js / Express | Atomic    | 8007 | Structured audit log with query APIs, Prometheus metrics, and chain-integrity verification                                                              |
+| `analytics`               | Node.js / Express | Atomic    | 8006 | Real-time manager analytics with dashboard APIs, WebSocket updates, and in-memory fallback when Redis is disabled                                       |
+| `gateway`                 | Node.js / Express | Composite | 8004 | Customer-facing API aggregation with legacy customer routes, modern `/api/v1` proxies, and optional external decision proxying                          |
+
+Active runtime ownership:
+
+- Python services: `customer`, `transaction`, `detect_fraud`
+- Node.js services: `fraud_score`, `process_flagged_appeals`, `appeal`, `notification`, `audit`, `analytics`, `gateway`
+- External decisioning: OutSystems
+
+The checked-in service folders now match the live Docker runtimes directly. `transaction` and `detect_fraud` no longer carry inactive duplicate Node implementations in this repo.
 
 ---
 
@@ -117,7 +125,7 @@ The project currently exposes both legacy and versioned APIs:
 - Fraud-review legacy analyst routes such as `/login`, `/flagged`, and `/appeals`
 - Fraud-review modern routes such as `/api/v1/review-cases`, `/api/v1/reviews`, and `/api/v1/reviews/appeals`
 - Appeal legacy routes under `/appeals` and modern routes under `/api/v1/appeals`
-- Swagger/OpenAPI docs on the gateway and the Node-based services via `/api-docs` and `/api-docs.json`
+- Swagger/OpenAPI docs across the platform via FastAPI `/docs` plus `/api-docs` and `/api-docs.json` where applicable
 
 Decision APIs are not hosted in this repo. The decision step belongs to OutSystems, and gateway decision proxy routes are enabled only when an external decision URL is configured.
 
@@ -198,15 +206,19 @@ Key points:
 
 The repo includes four automated validation layers under `testing/`.
 
-The unit layer targets core business logic directly, and the contracts layer also verifies Jaeger's `/api/services` output so missing traced services are caught automatically.
+The unit layer now follows the live runtimes directly:
 
-| Command                  | Purpose                                                                                                          |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| `npm run test:unit`      | Focused unit tests for fraud decisioning, transaction event publication, and analytics projections               |
-| `npm run test:smoke`     | Fast availability check across the main service surfaces                                                         |
-| `npm run test:contracts` | Direct service and infrastructure validation across APIs, dashboards, Kafka, and observability                   |
-| `npm run test:e2e`       | Full customer-to-analyst-to-appeal flow with OTP, manual review, analytics, audit, and notification verification |
-| `npm run test:verify`    | Runs `unit -> smoke -> contracts -> e2e` in sequence                                                             |
+- Python `unittest` covers the active Python `transaction` and `detect_fraud` services
+- Node `node:test` covers the active Node analytics projection logic
+- the contracts layer also verifies Jaeger's `/api/services` output so missing traced services are caught automatically
+
+| Command                  | Purpose                                                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `npm run test:unit`      | Focused Python and Node unit tests for fraud decisioning, transaction idempotent publish flow, and analytics projections |
+| `npm run test:smoke`     | Fast availability check across the main service surfaces                                                                 |
+| `npm run test:contracts` | Direct service and infrastructure validation across APIs, dashboards, Kafka, and observability                           |
+| `npm run test:e2e`       | Full customer-to-analyst-to-appeal flow with OTP, manual review, analytics, audit, and notification verification         |
+| `npm run test:verify`    | Runs `unit -> smoke -> contracts -> e2e` in sequence                                                                     |
 
 On Windows PowerShell, use `npm.cmd` if `npm` is blocked by execution policy:
 
@@ -256,7 +268,7 @@ The repo now has a shared root-level quality gate so the mixed Node and Python s
 Available commands:
 
 - `npm run lint:js` for repo-wide JavaScript and test-script linting with ESLint
-- `npm run lint:py` for the Python customer service with Ruff
+- `npm run lint:py` for the Python services and Python unit tests with Ruff
 - `npm run lint` to run both lint layers
 - `npm run format:check` to validate shared repo config and documentation formatting with Prettier
 - `npm run format:write` to apply the standard formatting to those files

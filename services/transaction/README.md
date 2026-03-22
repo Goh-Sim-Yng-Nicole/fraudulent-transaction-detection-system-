@@ -3,6 +3,9 @@
 Stores transactions and keeps their status up to date by consuming Kafka events.
 
 **Port:** 8000 | **Type:** Atomic microservice
+**Runtime:** Python / FastAPI
+
+This folder now reflects the live runtime directly; there is no alternate inactive Node implementation kept alongside it.
 
 ---
 

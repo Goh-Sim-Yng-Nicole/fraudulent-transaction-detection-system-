@@ -3,16 +3,18 @@
   "private": true,
   "scripts": {
     "lint:js": "eslint \"services/**/*.js\" \"testing/**/*.mjs\" \"eslint.config.mjs\" --max-warnings=0",
-    "lint:py": "python -m ruff check services/customer services/transaction services/detect_fraud ftds",
+    "lint:py": "python -m ruff check services/customer services/transaction services/detect_fraud ftds testing/unit_py",
     "lint": "npm run lint:js && npm run lint:py",
     "format:check": "prettier --check \"README.md\" \"package.json\" \"testing/package.json\" \"docker-compose.yml\" \"otel-collector-config.yml\" \".github/workflows/*.{yml,yaml}\" \"grafana/provisioning/**/*.yml\" \"kong/**/*.yml\" \"prometheus/**/*.yml\" \"jaeger/**/*.json\" \".prettierrc.json\"",
     "format:write": "prettier --write \"README.md\" \"package.json\" \"testing/package.json\" \"docker-compose.yml\" \"otel-collector-config.yml\" \".github/workflows/*.{yml,yaml}\" \"grafana/provisioning/**/*.yml\" \"kong/**/*.yml\" \"prometheus/**/*.yml\" \"jaeger/**/*.json\" \".prettierrc.json\"",
     "quality": "npm run lint && npm run format:check",
-    "test:unit": "node --test ./testing/unit/*.test.mjs",
+    "test:unit:py": "python -m unittest discover -s testing/unit_py -p \"*_test.py\"",
+    "test:unit:js": "node --test ./testing/unit/*.test.mjs",
+    "test:unit": "npm run test:unit:py && npm run test:unit:js",
     "test:smoke": "node ./testing/smoke-health.mjs",
     "test:contracts": "node ./testing/service-contracts.mjs",
     "test:e2e": "node ./testing/e2e-platform.mjs",
-    "test:verify": "node --test ./testing/unit/*.test.mjs && node ./testing/smoke-health.mjs && node ./testing/service-contracts.mjs && node ./testing/e2e-platform.mjs"
+    "test:verify": "npm run test:unit && npm run test:smoke && npm run test:contracts && npm run test:e2e"
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",
