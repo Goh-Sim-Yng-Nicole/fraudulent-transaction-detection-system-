@@ -12,6 +12,7 @@ const workspaceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)),
 
 export const platform = {
   publicBase: process.env.PUBLIC_BASE_URL || 'http://localhost',
+  httpsBase: process.env.HTTPS_BASE_URL || 'https://localhost',
   nginxBase: process.env.NGINX_BASE_URL || 'http://localhost:8088',
   gatewayBase: process.env.GATEWAY_BASE_URL || 'http://localhost:8004',
   customerBase: process.env.CUSTOMER_BASE_URL || 'http://localhost:8005',
@@ -167,6 +168,7 @@ export async function request(url, options = {}) {
     body,
     timeoutMs = 15000,
     redirect = 'follow',
+    insecureTls = false,
   } = options;
 
   const requestHeaders = { ...headers };
@@ -179,12 +181,25 @@ export async function request(url, options = {}) {
       : body;
   }
 
+  const originalTlsSetting = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+  if (insecureTls) {
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+  }
+
   const response = await fetch(url, {
     method,
     headers: requestHeaders,
     body: requestBody,
     signal: AbortSignal.timeout(timeoutMs),
     redirect,
+  }).finally(() => {
+    if (insecureTls) {
+      if (originalTlsSetting === undefined) {
+        delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+      } else {
+        process.env.NODE_TLS_REJECT_UNAUTHORIZED = originalTlsSetting;
+      }
+    }
   });
 
   const text = await response.text();

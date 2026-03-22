@@ -5,6 +5,13 @@ const { authenticate, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
+router.use((req, _res, next) => {
+  if (String(req.originalUrl || '').startsWith('/api/v1/')) {
+    return next('router');
+  }
+  return next();
+});
+
 const customerOnly = [authenticate, authorize('customer')];
 const fraudStaffOnly = [authenticate, authorize('fraud_analyst', 'fraud_manager')];
 const analyticsStaffOnly = [authenticate, authorize('fraud_manager', 'ops_readonly', 'ops_admin')];
