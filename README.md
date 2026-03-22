@@ -196,20 +196,22 @@ Key points:
 
 ## Automated Testing
 
-The repo includes three automated validation layers under `testing/`:
+The repo includes four automated validation layers under `testing/`.
 
-The contracts layer also verifies Jaeger's `/api/services` output so missing traced services are caught automatically.
+The unit layer targets core business logic directly, and the contracts layer also verifies Jaeger's `/api/services` output so missing traced services are caught automatically.
 
 | Command                  | Purpose                                                                                                          |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `npm run test:unit`      | Focused unit tests for fraud decisioning, transaction event publication, and analytics projections               |
 | `npm run test:smoke`     | Fast availability check across the main service surfaces                                                         |
 | `npm run test:contracts` | Direct service and infrastructure validation across APIs, dashboards, Kafka, and observability                   |
 | `npm run test:e2e`       | Full customer-to-analyst-to-appeal flow with OTP, manual review, analytics, audit, and notification verification |
-| `npm run test:verify`    | Runs `smoke -> contracts -> e2e` in sequence                                                                     |
+| `npm run test:verify`    | Runs `unit -> smoke -> contracts -> e2e` in sequence                                                             |
 
 On Windows PowerShell, use `npm.cmd` if `npm` is blocked by execution policy:
 
 ```powershell
+npm.cmd run test:unit
 npm.cmd run test:smoke
 npm.cmd run test:contracts
 npm.cmd run test:e2e
@@ -235,6 +237,7 @@ On every push, pull request, or manual dispatch, CI will:
 - install the shared root linting and formatting toolchain
 - install `ruff` for Python quality checks
 - run `npm run quality`
+- run `npm run test:unit`
 - validate the Docker Compose configuration
 - build the full application stack
 - start the stack in Docker
