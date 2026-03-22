@@ -1,15 +1,16 @@
 const { getPool, query } = require('../db/pool');
 
 class ReviewRepository {
-  async _insertEvent(client, transactionId, eventType, actor, fromStatus, toStatus, notes, metadata = {}) {
+  async _insertEvent(client, transactionId, eventType, actor, actorRole, fromStatus, toStatus, notes, metadata = {}) {
     await client.query(`
       INSERT INTO review_case_events (
-        transaction_id, event_type, actor, from_status, to_status, notes, metadata
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb)
+        transaction_id, event_type, actor, actor_role, from_status, to_status, notes, metadata
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)
     `, [
       transactionId,
       eventType,
       actor || null,
+      actorRole || null,
       fromStatus || null,
       toStatus || null,
       notes || null,
@@ -35,13 +36,13 @@ class ReviewRepository {
         INSERT INTO manual_reviews (
           transaction_id, customer_id, merchant_id, source_topic,
           previous_decision, decision_reason, risk_score, payload, correlation_id,
-          queue_status, final_decision, reviewed_by, review_notes,
-          claimed_by, claimed_at, claim_expires_at, reviewed_at, updated_at, version
+          queue_status, final_decision, reviewed_by, reviewed_role, review_notes,
+          claimed_by, claimed_role, claimed_at, claim_expires_at, reviewed_at, updated_at, version
         ) VALUES (
           $1, $2, $3, $4,
           'FLAGGED', $5, $6, $7::jsonb, $8,
-          'PENDING', NULL, NULL, NULL,
-          NULL, NULL, NULL, NULL, NOW(), 0
+          'PENDING', NULL, NULL, NULL, NULL,
+          NULL, NULL, NULL, NULL, NULL, NOW(), 0
         )
         ON CONFLICT (transaction_id) DO UPDATE SET
           decision_reason = EXCLUDED.decision_reason,
@@ -51,8 +52,10 @@ class ReviewRepository {
           queue_status = 'PENDING',
           final_decision = NULL,
           reviewed_by = NULL,
+          reviewed_role = NULL,
           review_notes = NULL,
           claimed_by = NULL,
+          claimed_role = NULL,
           claimed_at = NULL,
           claim_expires_at = NULL,
           reviewed_at = NULL,
@@ -74,6 +77,7 @@ class ReviewRepository {
         client,
         transactionId,
         'CASE_ENQUEUED',
+        'system',
         'system',
         null,
         'PENDING',
@@ -136,7 +140,7 @@ class ReviewRepository {
 
   async getHistory(transactionId, limit = 50) {
     const { rows } = await query(`
-      SELECT event_id, transaction_id, event_type, actor, from_status, to_status, notes, metadata, created_at
+      SELECT event_id, transaction_id, event_type, actor, actor_role, from_status, to_status, notes, metadata, created_at
       FROM review_case_events
       WHERE transaction_id = $1
       ORDER BY created_at DESC
@@ -148,6 +152,7 @@ class ReviewRepository {
       transactionId: row.transaction_id,
       eventType: row.event_type,
       actor: row.actor,
+      actorRole: row.actor_role,
       fromStatus: row.from_status,
       toStatus: row.to_status,
       notes: row.notes,
@@ -156,7 +161,7 @@ class ReviewRepository {
     }));
   }
 
-  async claimCase(transactionId, reviewerId, claimTtlMinutes = 10) {
+  async claimCase(transactionId, reviewerId, reviewerRole, claimTtlMinutes = 10) {
     const pool = getPool();
     const client = await pool.connect();
 
@@ -193,19 +198,21 @@ class ReviewRepository {
         SET
           queue_status = 'IN_REVIEW',
           claimed_by = $2,
+          claimed_role = $3,
           claimed_at = NOW(),
-          claim_expires_at = NOW() + ($3::text || ' minutes')::interval,
+          claim_expires_at = NOW() + ($4::text || ' minutes')::interval,
           updated_at = NOW(),
           version = version + 1
         WHERE transaction_id = $1
         RETURNING *;
-      `, [transactionId, reviewerId, String(claimTtlMinutes)]);
+      `, [transactionId, reviewerId, reviewerRole || null, String(claimTtlMinutes)]);
 
       await this._insertEvent(
         client,
         transactionId,
         'CASE_CLAIMED',
         reviewerId,
+        reviewerRole,
         existing.queue_status,
         'IN_REVIEW',
         `Case claimed for ${claimTtlMinutes} minutes`,
@@ -222,7 +229,7 @@ class ReviewRepository {
     }
   }
 
-  async releaseCase(transactionId, reviewerId, notes) {
+  async releaseCase(transactionId, reviewerId, reviewerRole, notes) {
     const pool = getPool();
     const client = await pool.connect();
 
@@ -256,6 +263,7 @@ class ReviewRepository {
         SET
           queue_status = 'PENDING',
           claimed_by = NULL,
+          claimed_role = NULL,
           claimed_at = NULL,
           claim_expires_at = NULL,
           updated_at = NOW(),
@@ -264,7 +272,7 @@ class ReviewRepository {
         RETURNING *;
       `, [transactionId]);
 
-      await this._insertEvent(client, transactionId, 'CASE_RELEASED', reviewerId, 'IN_REVIEW', 'PENDING', notes || 'Case released', {});
+      await this._insertEvent(client, transactionId, 'CASE_RELEASED', reviewerId, reviewerRole, 'IN_REVIEW', 'PENDING', notes || 'Case released', {});
 
       await client.query('COMMIT');
       return this._map(rows[0]);
@@ -276,7 +284,7 @@ class ReviewRepository {
     }
   }
 
-  async applyReviewDecision(transactionId, decision, reviewedBy, reviewNotes) {
+  async applyReviewDecision(transactionId, decision, reviewedBy, reviewedRole, reviewNotes) {
     const pool = getPool();
     const client = await pool.connect();
 
@@ -311,22 +319,25 @@ class ReviewRepository {
           queue_status = 'REVIEWED',
           final_decision = $2,
           reviewed_by = $3,
-          review_notes = $4,
+          reviewed_role = $4,
+          review_notes = $5,
           reviewed_at = NOW(),
           claimed_by = NULL,
+          claimed_role = NULL,
           claimed_at = NULL,
           claim_expires_at = NULL,
           updated_at = NOW(),
           version = version + 1
         WHERE transaction_id = $1
         RETURNING *;
-      `, [transactionId, decision, reviewedBy, reviewNotes || null]);
+      `, [transactionId, decision, reviewedBy, reviewedRole || null, reviewNotes || null]);
 
       await this._insertEvent(
         client,
         transactionId,
         'CASE_RESOLVED',
         reviewedBy,
+        reviewedRole,
         existing.queue_status,
         'REVIEWED',
         reviewNotes,
@@ -356,8 +367,10 @@ class ReviewRepository {
       riskScore: row.risk_score === null ? null : parseFloat(row.risk_score),
       payload: row.payload,
       reviewedBy: row.reviewed_by,
+      reviewedRole: row.reviewed_role,
       reviewNotes: row.review_notes,
       claimedBy: row.claimed_by,
+      claimedRole: row.claimed_role,
       claimedAt: row.claimed_at,
       claimExpiresAt: row.claim_expires_at,
       correlationId: row.correlation_id,

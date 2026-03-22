@@ -3,6 +3,25 @@ const { Pool } = require('pg');
 const config = require('../config');
 const logger = require('../config/logger');
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const waitForDatabase = async (pool, attempts = 30, delayMs = 2000) => {
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      await pool.query('SELECT 1;');
+      return;
+    } catch (error) {
+      lastError = error;
+      logger.warn('Audit database not ready yet, retrying', { attempt, attempts, error: error.message });
+      await sleep(delayMs);
+    }
+  }
+
+  throw lastError || new Error('Audit database did not become ready in time');
+};
+
 // Handles run migrations.
 const runMigrations = async () => {
   logger.info('Running database migrations...');
@@ -16,6 +35,7 @@ const runMigrations = async () => {
   });
 
   try {
+    await waitForDatabase(pool);
     await pool.query('CREATE EXTENSION IF NOT EXISTS pgcrypto;');
 
     await pool.query(`

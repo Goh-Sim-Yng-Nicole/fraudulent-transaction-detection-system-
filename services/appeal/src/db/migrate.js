@@ -1,10 +1,30 @@
 const { createPool, closePool } = require('./pool');
 const logger = require('../config/logger');
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const waitForDatabase = async (pool, attempts = 30, delayMs = 2000) => {
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      await pool.query('SELECT 1;');
+      return;
+    } catch (error) {
+      lastError = error;
+      logger.warn('Appeal database not ready yet, retrying', { attempt, attempts, error: error.message });
+      await sleep(delayMs);
+    }
+  }
+
+  throw lastError || new Error('Appeal database did not become ready in time');
+};
+
 // Handles migrate.
 const migrate = async () => {
   const pool = createPool();
   try {
+    await waitForDatabase(pool);
     await pool.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto";');
 
     await pool.query(`
@@ -22,7 +42,13 @@ const migrate = async () => {
         evidence                    JSONB NOT NULL DEFAULT '{}'::jsonb,
         resolution_notes            TEXT,
         reviewed_by                 VARCHAR(255),
+        resolved_role               VARCHAR(50),
+        claimed_by                  VARCHAR(255),
+        claimed_role                VARCHAR(50),
+        claimed_at                  TIMESTAMPTZ,
+        claim_expires_at            TIMESTAMPTZ,
         correlation_id              VARCHAR(255),
+        version                     INTEGER NOT NULL DEFAULT 0,
         created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         resolved_at                 TIMESTAMPTZ
@@ -35,6 +61,11 @@ const migrate = async () => {
     `);
 
     await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_appeals_claim_owner
+      ON appeals (claimed_by, current_status, claim_expires_at);
+    `);
+
+    await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_appeals_customer_created_at
       ON appeals (customer_id, created_at DESC);
     `);
@@ -43,6 +74,33 @@ const migrate = async () => {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_appeals_one_active_per_transaction
       ON appeals (transaction_id)
       WHERE current_status IN ('OPEN', 'UNDER_REVIEW');
+    `);
+
+    await pool.query(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS resolved_role VARCHAR(50);`);
+    await pool.query(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS claimed_by VARCHAR(255);`);
+    await pool.query(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS claimed_role VARCHAR(50);`);
+    await pool.query(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ;`);
+    await pool.query(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS claim_expires_at TIMESTAMPTZ;`);
+    await pool.query(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 0;`);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS appeal_case_events (
+        event_id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        appeal_id                   UUID NOT NULL REFERENCES appeals(appeal_id) ON DELETE CASCADE,
+        event_type                  VARCHAR(60) NOT NULL,
+        actor                       VARCHAR(255),
+        actor_role                  VARCHAR(50),
+        from_status                 VARCHAR(50),
+        to_status                   VARCHAR(50),
+        notes                       TEXT,
+        metadata                    JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_appeal_case_events_created
+      ON appeal_case_events (appeal_id, created_at DESC);
     `);
 
     await pool.query(`

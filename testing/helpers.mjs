@@ -55,6 +55,14 @@ export const credentials = {
     username: process.env.MANAGER_USERNAME || 'manager',
     password: process.env.MANAGER_PASSWORD || 'manager123',
   },
+  opsReadonly: {
+    username: process.env.OPS_READONLY_USERNAME || 'opsviewer',
+    password: process.env.OPS_READONLY_PASSWORD || 'opsviewer123',
+  },
+  opsAdmin: {
+    username: process.env.OPS_ADMIN_USERNAME || 'opsadmin',
+    password: process.env.OPS_ADMIN_PASSWORD || 'opsadmin123',
+  },
 };
 
 export const kafka = {
@@ -158,6 +166,7 @@ export async function request(url, options = {}) {
     headers = {},
     body,
     timeoutMs = 15000,
+    redirect = 'follow',
   } = options;
 
   const requestHeaders = { ...headers };
@@ -175,6 +184,7 @@ export async function request(url, options = {}) {
     headers: requestHeaders,
     body: requestBody,
     signal: AbortSignal.timeout(timeoutMs),
+    redirect,
   });
 
   const text = await response.text();
@@ -358,14 +368,48 @@ export async function waitForLatestOtp(email, options = {}) {
   );
 }
 
-export async function checkHtmlPage(url, label, expectedText) {
-  const result = await request(url);
+export async function checkHtmlPage(url, label, expectedText, options = {}) {
+  const result = await request(url, options);
   assertStatus(result, 200, label);
   assert.ok(result.text?.includes('<html') || result.text?.includes('<!DOCTYPE html'), `${label}: expected HTML page`);
   if (expectedText) {
     assertTextIncludes(result, expectedText, label);
   }
   return result;
+}
+
+export function extractSetCookieHeaders(headers) {
+  if (typeof headers.getSetCookie === 'function') {
+    return headers.getSetCookie();
+  }
+
+  const singleHeader = headers.get('set-cookie');
+  return singleHeader ? [singleHeader] : [];
+}
+
+export function toCookieHeader(setCookieHeaders = []) {
+  return setCookieHeaders
+    .map((header) => String(header).split(';')[0].trim())
+    .filter(Boolean)
+    .join('; ');
+}
+
+export async function staffLogin(credentialsSet, options = {}) {
+  const loginResult = await request(`${options.baseUrl || platform.publicBase}/api/staff/login`, {
+    method: 'POST',
+    body: credentialsSet,
+  });
+
+  assertStatus(loginResult, 200, `staff login ${credentialsSet.username}`);
+  const cookie = toCookieHeader(extractSetCookieHeaders(loginResult.headers));
+  assert.ok(cookie, `staff login ${credentialsSet.username}: missing session cookie`);
+  assert.ok(loginResult.body?.access_token, `staff login ${credentialsSet.username}: missing access token`);
+
+  return {
+    token: loginResult.body.access_token,
+    cookie,
+    user: loginResult.body.user,
+  };
 }
 
 export async function listKafkaTopics() {
@@ -487,17 +531,17 @@ export async function waitForConsumerGroupsSettled(groups = kafka.consumerGroups
   return settled;
 }
 
-export async function listJaegerServices() {
-  const result = await request(`${platform.jaegerBase}/api/services`);
+export async function listJaegerServices(headers = {}) {
+  const result = await request(`${platform.jaegerBase}/api/services`, { headers });
   assertStatus(result, 200, 'jaeger services');
   assert.ok(Array.isArray(result.body?.data), 'jaeger services should return an array');
   return result.body.data;
 }
 
-export async function waitForJaegerServices(expectedServices = tracing.expectedServices, options = {}) {
+export async function waitForJaegerServices(expectedServices = tracing.expectedServices, options = {}, headers = {}) {
   return poll(
     'jaeger services include expected application services',
-    () => listJaegerServices(),
+    () => listJaegerServices(headers),
     (services) => expectedServices.every((service) => services.includes(service)),
     {
       timeoutMs: options.timeoutMs || 120000,

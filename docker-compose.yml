@@ -119,7 +119,6 @@ services:
     image: axllent/mailpit:v1.26
     ports:
       - '1025:1025'
-      - '8025:8025'
     environment:
       MP_SMTP_AUTH_ACCEPT_ANY: '1'
       MP_SMTP_AUTH_ALLOW_INSECURE: '1'
@@ -448,6 +447,11 @@ services:
       dockerfile: nginx/Dockerfile
     ports:
       - '8088:8088'
+      - '3000:3000'
+      - '16686:16686'
+      - '9090:9090'
+      - '9091:9091'
+      - '8025:8025'
     depends_on:
       gateway:
         condition: service_healthy
@@ -457,6 +461,16 @@ services:
         condition: service_healthy
       customer:
         condition: service_healthy
+      grafana:
+        condition: service_started
+      jaeger:
+        condition: service_started
+      prometheus:
+        condition: service_started
+      cadvisor:
+        condition: service_started
+      mailpit:
+        condition: service_started
 
   kong:
     image: kong:3.6
@@ -470,7 +484,6 @@ services:
       - ./kong/kong.yml:/etc/kong/kong.yml:ro
     ports:
       - '80:8000'
-      - '8090:8001'
     depends_on:
       nginx:
         condition: service_healthy
@@ -505,13 +518,9 @@ services:
       - /var/run:/var/run:ro
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
-    ports:
-      - '9091:8080'
 
   prometheus:
     image: prom/prometheus:latest
-    ports:
-      - '9090:9090'
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ftds_prometheus_data:/prometheus
@@ -524,8 +533,6 @@ services:
 
   jaeger:
     image: cr.jaegertracing.io/jaegertracing/jaeger:2.14.0
-    ports:
-      - '16686:16686'
     command:
       - '--set=extensions.jaeger_query.ui.config_file=/etc/jaeger/ui-config.json'
       - '--set=extensions.jaeger_storage.metric_backends.prometheus_backend.prometheus.endpoint=http://prometheus:9090'
@@ -539,8 +546,6 @@ services:
 
   grafana:
     image: grafana/grafana:latest
-    ports:
-      - '3000:3000'
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin123}

@@ -61,6 +61,60 @@ class AppealController {
     res.json({ success: true, data, meta: { limit, offset, count: data.length } });
   }
 
+  async claim(req, res) {
+    const reviewerId = req.staff?.userId || req.body?.reviewerId;
+    const reviewerRole = req.staff?.role || req.body?.reviewerRole || null;
+    const claimTtlMinutes = Math.min(Math.max(parseInt(req.body?.claimTtlMinutes, 10) || 10, 1), 120);
+
+    if (!reviewerId || typeof reviewerId !== 'string') {
+      return res.status(400).json({ success: false, error: 'reviewerId is required' });
+    }
+
+    const data = await appealService.claimAppeal({
+      appealId: req.params.appealId,
+      reviewerId,
+      reviewerRole,
+      claimTtlMinutes,
+    });
+
+    if (!data) {
+      return res.status(404).json({ success: false, error: `Appeal ${req.params.appealId} not found` });
+    }
+
+    if (data.conflict) {
+      return res.status(409).json({ success: false, error: data.conflict, details: data });
+    }
+
+    return res.json({ success: true, data });
+  }
+
+  async release(req, res) {
+    const reviewerId = req.staff?.userId || req.body?.reviewerId;
+    const reviewerRole = req.staff?.role || req.body?.reviewerRole || null;
+    const notes = req.body?.notes || null;
+
+    if (!reviewerId || typeof reviewerId !== 'string') {
+      return res.status(400).json({ success: false, error: 'reviewerId is required' });
+    }
+
+    const data = await appealService.releaseAppeal({
+      appealId: req.params.appealId,
+      reviewerId,
+      reviewerRole,
+      notes,
+    });
+
+    if (!data) {
+      return res.status(404).json({ success: false, error: `Appeal ${req.params.appealId} not found` });
+    }
+
+    if (data.conflict) {
+      return res.status(409).json({ success: false, error: data.conflict, details: data });
+    }
+
+    return res.json({ success: true, data });
+  }
+
   // Handles list customer appeals.
   async listByCustomer(req, res) {
     const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
@@ -71,7 +125,9 @@ class AppealController {
 
   // Handles resolve appeal.
   async resolve(req, res) {
-    const { resolution, reviewedBy, notes } = req.body;
+    const { resolution, notes } = req.body;
+    const reviewedBy = req.staff?.userId || req.body?.reviewedBy;
+    const reviewedRole = req.staff?.role || req.body?.reviewedRole || null;
     if (!resolution || !reviewedBy) {
       return res.status(400).json({
         success: false,
@@ -84,6 +140,7 @@ class AppealController {
         appealId: req.params.appealId,
         resolution,
         reviewedBy,
+        reviewedRole,
         resolutionNotes: notes,
       });
 
@@ -92,7 +149,11 @@ class AppealController {
       if (err.message.includes('not found')) {
         return res.status(404).json({ success: false, error: err.message });
       }
-      if (err.message.includes('already resolved') || err.message.includes('must be')) {
+      if (
+        err.message.includes('already resolved')
+        || err.message.includes('must be')
+        || err.message.includes('Unable to claim appeal')
+      ) {
         return res.status(400).json({ success: false, error: err.message });
       }
       throw err;

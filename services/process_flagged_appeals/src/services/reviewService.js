@@ -43,24 +43,24 @@ class ReviewService {
     return reviewRepository.getHistory(transactionId, limit);
   }
 
-  async claimCase({ transactionId, reviewerId, claimTtlMinutes = 10 }) {
+  async claimCase({ transactionId, reviewerId, reviewerRole, claimTtlMinutes = 10 }) {
     if (!reviewerId || typeof reviewerId !== 'string') {
       throw new Error('reviewerId is required');
     }
 
-    return reviewRepository.claimCase(transactionId, reviewerId.trim(), claimTtlMinutes);
+    return reviewRepository.claimCase(transactionId, reviewerId.trim(), reviewerRole || null, claimTtlMinutes);
   }
 
-  async releaseCase({ transactionId, reviewerId, notes }) {
+  async releaseCase({ transactionId, reviewerId, reviewerRole, notes }) {
     if (!reviewerId || typeof reviewerId !== 'string') {
       throw new Error('reviewerId is required');
     }
 
-    return reviewRepository.releaseCase(transactionId, reviewerId.trim(), notes);
+    return reviewRepository.releaseCase(transactionId, reviewerId.trim(), reviewerRole || null, notes);
   }
 
   // Handles apply decision.
-  async applyDecision({ transactionId, decision, reviewedBy, notes }) {
+  async applyDecision({ transactionId, decision, reviewedBy, reviewedRole, notes }) {
     const allowed = new Set(['APPROVED', 'DECLINED']);
     if (!allowed.has(decision)) {
       throw new Error('decision must be APPROVED or DECLINED');
@@ -78,13 +78,14 @@ class ReviewService {
       transactionId,
       decision,
       reviewedBy,
+      reviewedRole,
       notes
     );
 
     // Legacy analyst flows resolve directly from the queue without an explicit
     // "claim" step, so we auto-claim once and retry to preserve compatibility.
     if (updated?.conflict === 'CASE_NOT_CLAIMED_BY_REVIEWER') {
-      const claimResult = await reviewRepository.claimCase(transactionId, reviewedBy, 10);
+      const claimResult = await reviewRepository.claimCase(transactionId, reviewedBy, reviewedRole || null, 10);
       if (claimResult?.conflict && claimResult.conflict !== 'CASE_ALREADY_CLAIMED') {
         throw new Error(`Unable to claim review case: ${claimResult.conflict}`);
       }
@@ -93,6 +94,7 @@ class ReviewService {
         transactionId,
         decision,
         reviewedBy,
+        reviewedRole,
         notes
       );
     }
@@ -123,6 +125,7 @@ class ReviewService {
       decision,
       reviewNotes: notes || null,
       reviewedBy,
+      reviewedRole: reviewedRole || null,
       reviewedAt: updated.reviewedAt,
       correlationId,
       sourceService: config.serviceName,

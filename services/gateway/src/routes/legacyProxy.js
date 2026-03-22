@@ -1,8 +1,13 @@
 const express = require('express');
 const axios = require('axios');
 const config = require('../config');
+const { authenticate, authorize } = require('../middleware/auth');
 
 const router = express.Router();
+
+const customerOnly = [authenticate, authorize('customer')];
+const fraudStaffOnly = [authenticate, authorize('fraud_analyst', 'fraud_manager')];
+const analyticsStaffOnly = [authenticate, authorize('fraud_manager', 'ops_readonly', 'ops_admin')];
 
 const request = async (req, method, target, { body, params } = {}) => {
   return axios({
@@ -11,9 +16,11 @@ const request = async (req, method, target, { body, params } = {}) => {
     data: body,
     params,
     headers: {
-      Authorization: req.headers.authorization || '',
+      Authorization: req.headers.authorization || (req.token ? `Bearer ${req.token}` : ''),
       'X-Request-ID': req.requestId || '',
       'X-Correlation-ID': req.correlationId || '',
+      'X-User-ID': req.user?.userId || '',
+      'X-User-Role': req.user?.role || '',
       'X-Forwarded-For': req.ip || '',
     },
     timeout: config.proxy.timeout,
@@ -49,7 +56,7 @@ router.post('/auth/login', async (req, res) => {
   );
 });
 
-router.get('/customers/lookup', async (req, res) => {
+router.get('/customers/lookup', ...customerOnly, async (req, res) => {
   const query = req.query.query;
   if (!query) {
     return res.status(400).json({ detail: 'query is required' });
@@ -64,7 +71,7 @@ router.get('/customers/lookup', async (req, res) => {
   );
 });
 
-router.get('/customers/me', async (req, res) => {
+router.get('/customers/me', ...customerOnly, async (req, res) => {
   await send(
     req,
     res,
@@ -73,7 +80,7 @@ router.get('/customers/me', async (req, res) => {
   );
 });
 
-router.put('/customers/me', async (req, res) => {
+router.put('/customers/me', ...customerOnly, async (req, res) => {
   await send(
     req,
     res,
@@ -83,7 +90,7 @@ router.put('/customers/me', async (req, res) => {
   );
 });
 
-router.put('/customers/me/password', async (req, res) => {
+router.put('/customers/me/password', ...customerOnly, async (req, res) => {
   await send(
     req,
     res,
@@ -93,7 +100,7 @@ router.put('/customers/me/password', async (req, res) => {
   );
 });
 
-router.post('/customers/me/request-otp', async (req, res) => {
+router.post('/customers/me/request-otp', ...customerOnly, async (req, res) => {
   await send(
     req,
     res,
@@ -102,7 +109,7 @@ router.post('/customers/me/request-otp', async (req, res) => {
   );
 });
 
-router.delete('/customers/me', async (req, res) => {
+router.delete('/customers/me', ...customerOnly, async (req, res) => {
   await send(
     req,
     res,
@@ -112,7 +119,7 @@ router.delete('/customers/me', async (req, res) => {
   );
 });
 
-router.get('/customer/transactions', async (req, res) => {
+router.get('/customer/transactions', ...customerOnly, async (req, res) => {
   const customerId = req.query.customer_id || req.query.customerId;
   if (!customerId) {
     return res.status(400).json({ detail: 'customer_id is required' });
@@ -127,7 +134,7 @@ router.get('/customer/transactions', async (req, res) => {
   );
 });
 
-router.post('/customer/transactions', async (req, res) => {
+router.post('/customer/transactions', ...customerOnly, async (req, res) => {
   await send(
     req,
     res,
@@ -137,7 +144,7 @@ router.post('/customer/transactions', async (req, res) => {
   );
 });
 
-router.get('/customer/transactions/:transactionId', async (req, res) => {
+router.get('/customer/transactions/:transactionId', ...customerOnly, async (req, res) => {
   await send(
     req,
     res,
@@ -146,7 +153,7 @@ router.get('/customer/transactions/:transactionId', async (req, res) => {
   );
 });
 
-router.get('/customer/transactions/:transactionId/decision', async (req, res) => {
+router.get('/customer/transactions/:transactionId/decision', ...customerOnly, async (req, res) => {
   await send(
     req,
     res,
@@ -155,7 +162,7 @@ router.get('/customer/transactions/:transactionId/decision', async (req, res) =>
   );
 });
 
-router.get('/customer/appeals', async (req, res) => {
+router.get('/customer/appeals', ...customerOnly, async (req, res) => {
   await send(
     req,
     res,
@@ -165,7 +172,7 @@ router.get('/customer/appeals', async (req, res) => {
   );
 });
 
-router.post('/customer/appeals', async (req, res) => {
+router.post('/customer/appeals', ...customerOnly, async (req, res) => {
   await send(
     req,
     res,
@@ -175,7 +182,7 @@ router.post('/customer/appeals', async (req, res) => {
   );
 });
 
-router.get('/customer/appeals/:appealId', async (req, res) => {
+router.get('/customer/appeals/:appealId', ...customerOnly, async (req, res) => {
   await send(
     req,
     res,
@@ -194,11 +201,11 @@ router.post('/fraud/login', async (req, res) => {
   );
 });
 
-router.get('/fraud/flagged', async (req, res) => {
+router.get('/fraud/flagged', ...fraudStaffOnly, async (req, res) => {
   await send(req, res, 'GET', `${config.services.humanVerification}/flagged`);
 });
 
-router.post('/fraud/flagged/:transactionId/resolve', async (req, res) => {
+router.post('/fraud/flagged/:transactionId/resolve', ...fraudStaffOnly, async (req, res) => {
   await send(
     req,
     res,
@@ -208,11 +215,11 @@ router.post('/fraud/flagged/:transactionId/resolve', async (req, res) => {
   );
 });
 
-router.get('/fraud/appeals', async (req, res) => {
+router.get('/fraud/appeals', ...fraudStaffOnly, async (req, res) => {
   await send(req, res, 'GET', `${config.services.humanVerification}/appeals`);
 });
 
-router.post('/fraud/appeals/:appealId/resolve', async (req, res) => {
+router.post('/fraud/appeals/:appealId/resolve', ...fraudStaffOnly, async (req, res) => {
   await send(
     req,
     res,
@@ -220,6 +227,60 @@ router.post('/fraud/appeals/:appealId/resolve', async (req, res) => {
     `${config.services.humanVerification}/appeals/${encodeURIComponent(req.params.appealId)}/resolve`,
     { body: req.body }
   );
+});
+
+router.post('/fraud-review/login', async (req, res) => {
+  await send(
+    req,
+    res,
+    'POST',
+    `${config.services.humanVerification}/login`,
+    { body: req.body },
+    (payload) => payload
+  );
+});
+
+router.get('/fraud-review/flagged', ...fraudStaffOnly, async (req, res) => {
+  await send(req, res, 'GET', `${config.services.humanVerification}/flagged`);
+});
+
+router.post('/fraud-review/flagged/:transactionId/resolve', ...fraudStaffOnly, async (req, res) => {
+  await send(
+    req,
+    res,
+    'POST',
+    `${config.services.humanVerification}/flagged/${encodeURIComponent(req.params.transactionId)}/resolve`,
+    { body: req.body }
+  );
+});
+
+router.get('/fraud-review/appeals', ...fraudStaffOnly, async (req, res) => {
+  await send(req, res, 'GET', `${config.services.humanVerification}/appeals`);
+});
+
+router.post('/fraud-review/appeals/:appealId/resolve', ...fraudStaffOnly, async (req, res) => {
+  await send(
+    req,
+    res,
+    'POST',
+    `${config.services.humanVerification}/appeals/${encodeURIComponent(req.params.appealId)}/resolve`,
+    { body: req.body }
+  );
+});
+
+router.post('/analytics/login', async (req, res) => {
+  await send(
+    req,
+    res,
+    'POST',
+    `${config.services.analytics}/login`,
+    { body: req.body },
+    (payload) => payload
+  );
+});
+
+router.get('/analytics/dashboard', ...analyticsStaffOnly, async (req, res) => {
+  await send(req, res, 'GET', `${config.services.analytics}/dashboard`);
 });
 
 module.exports = router;

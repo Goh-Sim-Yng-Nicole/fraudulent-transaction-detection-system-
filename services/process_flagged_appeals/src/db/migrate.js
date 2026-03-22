@@ -23,8 +23,10 @@ const migrate = async () => {
         risk_score          NUMERIC(5,2),
         payload             JSONB NOT NULL DEFAULT '{}'::jsonb,
         reviewed_by         VARCHAR(255),
+        reviewed_role       VARCHAR(50),
         review_notes        TEXT,
         claimed_by          VARCHAR(255),
+        claimed_role        VARCHAR(50),
         claimed_at          TIMESTAMPTZ,
         claim_expires_at    TIMESTAMPTZ,
         correlation_id      VARCHAR(255),
@@ -36,8 +38,10 @@ const migrate = async () => {
     `);
 
     await pool.query(`ALTER TABLE manual_reviews ADD COLUMN IF NOT EXISTS claimed_by VARCHAR(255);`);
+    await pool.query(`ALTER TABLE manual_reviews ADD COLUMN IF NOT EXISTS claimed_role VARCHAR(50);`);
     await pool.query(`ALTER TABLE manual_reviews ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ;`);
     await pool.query(`ALTER TABLE manual_reviews ADD COLUMN IF NOT EXISTS claim_expires_at TIMESTAMPTZ;`);
+    await pool.query(`ALTER TABLE manual_reviews ADD COLUMN IF NOT EXISTS reviewed_role VARCHAR(50);`);
     await pool.query(`ALTER TABLE manual_reviews ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 0;`);
 
     await pool.query(`
@@ -46,6 +50,7 @@ const migrate = async () => {
         transaction_id      UUID NOT NULL REFERENCES manual_reviews(transaction_id) ON DELETE CASCADE,
         event_type          VARCHAR(60) NOT NULL,
         actor               VARCHAR(255),
+        actor_role          VARCHAR(50),
         from_status         VARCHAR(50),
         to_status           VARCHAR(50),
         notes               TEXT,
@@ -73,6 +78,8 @@ const migrate = async () => {
       CREATE INDEX IF NOT EXISTS idx_review_case_events_txn_created
       ON review_case_events (transaction_id, created_at DESC);
     `);
+
+    await pool.query(`ALTER TABLE review_case_events ADD COLUMN IF NOT EXISTS actor_role VARCHAR(50);`);
 
     logger.info('Manual review schema migration complete');
   } finally {

@@ -4,6 +4,36 @@ const logger = require('../config/logger');
 const { UnauthorizedError, ForbiddenError } = require('../utils/errors');
 const MetricsService = require('../utils/metrics');
 
+const parseCookies = (cookieHeader = '') => {
+  return String(cookieHeader || '')
+    .split(';')
+    .map((cookie) => cookie.trim())
+    .filter(Boolean)
+    .reduce((accumulator, cookie) => {
+      const separatorIndex = cookie.indexOf('=');
+      if (separatorIndex === -1) {
+        return accumulator;
+      }
+
+      const name = cookie.slice(0, separatorIndex).trim();
+      const value = cookie.slice(separatorIndex + 1).trim();
+      if (name) {
+        accumulator[name] = decodeURIComponent(value);
+      }
+      return accumulator;
+    }, {});
+};
+
+const extractTokenFromRequest = (req) => {
+  const authHeader = req.headers.authorization || '';
+  if (authHeader.startsWith('Bearer ')) {
+    return authHeader.substring(7);
+  }
+
+  const cookies = parseCookies(req.headers.cookie || '');
+  return cookies[config.auth.staffCookieName] || '';
+};
+
 // Handles verify token.
 const verifyToken = (token) => {
   try {
@@ -31,18 +61,10 @@ const verifyToken = (token) => {
 // Handles authenticate.
 const authenticate = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
-
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const token = extractTokenFromRequest(req);
+    if (!token) {
       MetricsService.recordAuthAttempt('missing_token');
       throw new UnauthorizedError('No authentication token provided');
-    }
-
-    const token = authHeader.substring(7);
-    
-    if (!token) {
-      MetricsService.recordAuthAttempt('empty_token');
-      throw new UnauthorizedError('Invalid authentication token');
     }
 
     const decoded = verifyToken(token);
@@ -51,6 +73,7 @@ const authenticate = async (req, res, next) => {
       email: decoded.email || null,
       role: decoded.role || (decoded.sub ? 'customer' : null),
       permissions: decoded.permissions || [],
+      displayName: decoded.displayName || decoded.name || decoded.userId || decoded.sub || null,
     };
 
     req.token = token;
@@ -99,14 +122,7 @@ const authorize = (...allowedRoles) => {
 // Handles optional auth.
 const optionalAuth = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
-
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return next();
-    }
-
-    const token = authHeader.substring(7);
-    
+    const token = extractTokenFromRequest(req);
     if (!token) {
       return next();
     }
@@ -118,6 +134,7 @@ const optionalAuth = async (req, res, next) => {
         email: decoded.email || null,
         role: decoded.role || (decoded.sub ? 'customer' : null),
         permissions: decoded.permissions || [],
+        displayName: decoded.displayName || decoded.name || decoded.userId || decoded.sub || null,
       };
       req.token = token;
     } catch (error) {
@@ -135,4 +152,6 @@ module.exports = {
   authorize,
   optionalAuth,
   verifyToken,
+  parseCookies,
+  extractTokenFromRequest,
 };
