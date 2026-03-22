@@ -3,6 +3,8 @@
 !.env.example
 !**/.env.example
 node_modules/
+__pycache__/
+*.py[cod]
 services/fraud_score/node_modules/
 services/fraud_score/reports/
 services/fraud_score/models/*.json
