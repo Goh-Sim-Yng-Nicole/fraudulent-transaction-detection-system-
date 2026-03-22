@@ -327,7 +327,7 @@ services:
 
   audit:
     build:
-      context: ./services/audit/audit
+      context: ./services/audit
       dockerfile: Dockerfile
     env_file: .env
     environment:
@@ -349,7 +349,7 @@ services:
 
   audit-migrate:
     build:
-      context: ./services/audit/audit
+      context: ./services/audit
       dockerfile: Dockerfile
     env_file: .env
     environment:
@@ -361,7 +361,7 @@ services:
 
   analytics:
     build:
-      context: ./services/analytics/analytics
+      context: ./services/analytics
       dockerfile: Dockerfile
     env_file: .env
     environment:
