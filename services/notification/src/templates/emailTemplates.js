@@ -254,8 +254,8 @@ const declinedCustomerTemplate = Handlebars.compile(`
           please reach out to our fraud prevention team immediately.
         </p>
         <div class="contact-info">
-          <p><strong>Email</strong> &nbsp; fraud-support@frauddetection.com</p>
-          <p><strong>Phone</strong> &nbsp; 1-800-FRAUD-HELP</p>
+          <p><strong>Email</strong> &nbsp; {{supportEmail}}</p>
+          <p><strong>Phone</strong> &nbsp; {{supportPhone}}</p>
         </div>
 
         <p class="notice">
@@ -1048,13 +1048,98 @@ const flaggedFraudTeamTemplate = Handlebars.compile(`
 </html>
 `);
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function renderReasonList(reasonHighlights) {
+  if (!Array.isArray(reasonHighlights) || reasonHighlights.length === 0) {
+    return '<li>Automated fraud controls identified unusual activity for this payment.</li>';
+  }
+
+  return reasonHighlights.map((reason) => `<li>${escapeHtml(reason)}</li>`).join('');
+}
+
+function renderCustomerDecisionEmail({
+  accentColor,
+  eyebrow,
+  title,
+  intro,
+  decisionSummary,
+  nextSteps,
+  data,
+}) {
+  const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${escapeHtml(title)}</title>
+</head>
+<body style="margin:0;padding:0;background:#f5f6f8;color:#132238;font-family:Segoe UI,Arial,sans-serif;">
+  <div style="max-width:620px;margin:0 auto;padding:32px 16px;">
+    <div style="background:#ffffff;border:1px solid #d8dfe8;border-radius:18px;overflow:hidden;">
+      <div style="padding:28px 32px;background:${accentColor};color:#ffffff;">
+        <div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;opacity:0.85;margin-bottom:10px;">${escapeHtml(eyebrow)}</div>
+        <div style="font-size:28px;font-weight:700;line-height:1.2;">${escapeHtml(title)}</div>
+      </div>
+      <div style="padding:28px 32px;">
+        <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#314255;">${escapeHtml(intro)}</p>
+        <div style="background:#f8fafc;border:1px solid #dde5ee;border-radius:14px;padding:18px 20px;margin-bottom:20px;">
+          <div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#617184;margin-bottom:10px;">Transaction Snapshot</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:14px;color:#132238;">
+            <div><strong>Reference</strong><br />${escapeHtml(data.referenceId)}</div>
+            <div><strong>Amount</strong><br />${escapeHtml(data.amount)} ${escapeHtml(data.currency)}</div>
+            <div><strong>Merchant</strong><br />${escapeHtml(data.merchantId)}</div>
+            <div><strong>Date</strong><br />${escapeHtml(data.timestamp)}</div>
+          </div>
+        </div>
+        <div style="background:#fdf7ec;border:1px solid #f4d6a0;border-radius:14px;padding:18px 20px;margin-bottom:20px;">
+          <div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#8b5e00;margin-bottom:8px;">Why you are receiving this</div>
+          <p style="margin:0 0 12px;font-size:14px;line-height:1.65;color:#5f4200;">${escapeHtml(decisionSummary)}</p>
+          <ul style="margin:0;padding-left:18px;color:#5f4200;font-size:14px;line-height:1.6;">
+            ${renderReasonList(data.reasonHighlights)}
+          </ul>
+        </div>
+        <div style="margin-bottom:20px;">
+          <div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#617184;margin-bottom:8px;">What to do next</div>
+          <p style="margin:0;font-size:14px;line-height:1.7;color:#314255;">${escapeHtml(nextSteps)}</p>
+        </div>
+        <div style="background:#f8fafc;border:1px solid #dde5ee;border-radius:14px;padding:16px 20px;font-size:13px;line-height:1.7;color:#44576d;">
+          <div><strong>Portal:</strong> <a href="${escapeHtml(data.portalUrl)}">${escapeHtml(data.portalUrl)}</a></div>
+          <div><strong>Support email:</strong> ${escapeHtml(data.supportEmail)}</div>
+          <div><strong>Support phone:</strong> ${escapeHtml(data.supportPhone)}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+`;
+
+  const reasonLines = Array.isArray(data.reasonHighlights) && data.reasonHighlights.length > 0
+    ? `${data.reasonHighlights.map((reason) => `- ${reason}`).join('\n')}\n\n`
+    : '';
+
+  return {
+    html,
+    text: `${title}\n\n${intro}\n\nReference: ${data.referenceId}\nAmount: ${data.amount} ${data.currency}\nMerchant: ${data.merchantId}\n\nReason: ${decisionSummary}\n${reasonLines}Next steps: ${nextSteps}\nPortal: ${data.portalUrl}\nSupport: ${data.supportEmail} / ${data.supportPhone}`,
+  };
+}
+
 
 // Handles render declined customer email.
 function renderDeclinedCustomerEmail(data) {
   return {
     subject: `Transaction Declined - Reference ${data.transactionId.substring(0, 8).toUpperCase()}`,
     html: declinedCustomerTemplate(data),
-    text: `Transaction Declined\n\nYour transaction for ${data.amount} ${data.currency} at ${data.merchantId} has been declined.\n\nReason: ${data.decisionReason}\n\nTransaction ID: ${data.transactionId}\n\nIf you believe this is an error, contact fraud-support@frauddetection.com or call 1-800-FRAUD-HELP.`,
+    text: `Transaction Declined\n\nYour transaction for ${data.amount} ${data.currency} at ${data.merchantId} has been declined.\n\nReason: ${data.decisionReason}\n\nTransaction ID: ${data.transactionId}\n\nIf you recognise this transaction and want it reviewed, sign in to ${data.portalUrl}. If you do not recognise it, no further action is required.\n\nSupport: ${data.supportEmail} / ${data.supportPhone}`,
   };
 }
 
@@ -1079,8 +1164,46 @@ function renderFlaggedFraudTeamEmail(data) {
   };
 }
 
+function renderFlaggedCustomerEmail(data) {
+  const content = renderCustomerDecisionEmail({
+    accentColor: '#946200',
+    eyebrow: 'Security Hold',
+    title: 'Transaction On Hold For Review',
+    intro: 'We paused a recent transaction because it needs a quick manual review before we can complete it.',
+    decisionSummary: data.decisionReason,
+    nextSteps: 'No action is required right now. You can monitor the transaction in the banking portal, and if the final decision is not what you expected you can submit an appeal there.',
+    data,
+  });
+
+  return {
+    subject: `Transaction Under Review - Reference ${data.referenceId}`,
+    html: content.html,
+    text: content.text,
+  };
+}
+
+function renderApprovedCustomerEmail(data) {
+  const content = renderCustomerDecisionEmail({
+    accentColor: '#156f4a',
+    eyebrow: 'Transaction Update',
+    title: 'Transaction Approved',
+    intro: 'Your transaction has been approved and is now moving through the normal processing flow.',
+    decisionSummary: 'Our controls have cleared this payment for processing.',
+    nextSteps: 'No further action is needed if this payment was expected. If you do not recognise it, contact the fraud team immediately using the details below.',
+    data,
+  });
+
+  return {
+    subject: `Transaction Approved - Reference ${data.referenceId}`,
+    html: content.html,
+    text: content.text,
+  };
+}
+
 module.exports = {
+  renderApprovedCustomerEmail,
   renderDeclinedCustomerEmail,
   renderDeclinedFraudTeamEmail,
+  renderFlaggedCustomerEmail,
   renderFlaggedFraudTeamEmail,
 };

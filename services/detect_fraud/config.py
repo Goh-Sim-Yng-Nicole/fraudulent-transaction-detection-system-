@@ -94,6 +94,21 @@ class Settings:
         self.suspicious_amount_threshold = _env_float("SUSPICIOUS_AMOUNT_THRESHOLD", 10000)
         self.max_txn_per_hour = _env_int("VELOCITY_MAX_COUNT_PER_HOUR", 8)
         self.max_amount_per_hour = _env_float("VELOCITY_MAX_AMOUNT_PER_HOUR", 15000)
+        self.max_distinct_recipients_per_hour = _env_int("VELOCITY_MAX_DISTINCT_RECIPIENTS_PER_HOUR", 4)
+        self.max_distinct_merchants_per_hour = _env_int("VELOCITY_MAX_DISTINCT_MERCHANTS_PER_HOUR", 5)
+        self.first_time_recipient_review_amount = _env_float("FIRST_TIME_RECIPIENT_REVIEW_AMOUNT", 1500)
+        self.high_risk_merchant_review_amount = _env_float("HIGH_RISK_MERCHANT_REVIEW_AMOUNT", 400)
+        self.prepaid_high_amount_threshold = _env_float("PREPAID_HIGH_AMOUNT_THRESHOLD", 2500)
+        self.high_risk_merchant_ids = [
+            value.upper() for value in _env_csv("HIGH_RISK_MERCHANT_IDS", "")
+        ]
+        self.high_risk_merchant_prefixes = [
+            value.upper()
+            for value in _env_csv(
+                "HIGH_RISK_MERCHANT_PREFIXES",
+                "CRYPTO_,GIFT_,CASHOUT_,FTDS_FLAGGED",
+            )
+        ]
 
         self.rules_weight = _env_float("COMBINATION_RULES_WEIGHT", 0.45)
         self.ml_weight = _env_float("COMBINATION_ML_WEIGHT", 0.55)
@@ -101,6 +116,10 @@ class Settings:
 
         self.outsystems_decision_url = external_decision_url or None
         self.outsystems_decision_timeout_ms = _env_int("OUTSYSTEMS_DECISION_TIMEOUT_MS", 5000)
+        self.outsystems_auth_type = _env("OUTSYSTEMS_AUTH_TYPE", "none").lower()
+        self.outsystems_bearer_token = _env("OUTSYSTEMS_BEARER_TOKEN")
+        self.outsystems_auth_header_name = _env("OUTSYSTEMS_AUTH_HEADER_NAME", "X-API-Key")
+        self.outsystems_auth_header_value = _env("OUTSYSTEMS_AUTH_HEADER_VALUE")
         self.local_decision_fallback_enabled = _env_bool(
             "ENABLE_LOCAL_DECISION_FALLBACK",
             not bool(self.outsystems_decision_url),

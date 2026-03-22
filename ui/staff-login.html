@@ -4,19 +4,37 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FTDS | Staff Sign In</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@600;700&display=swap" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
   <style>
     :root {
       color-scheme: light;
+      --ftds-ink: #0f172a;
+      --ftds-muted: #526072;
+      --ftds-panel: rgba(255, 255, 255, 0.9);
+      --ftds-border: rgba(148, 163, 184, 0.22);
+      --ftds-blue: #1d4ed8;
+      --ftds-cyan: #0f766e;
+      --ftds-shadow: 0 28px 80px rgba(15, 23, 42, 0.16);
+    }
+
+    * {
+      box-sizing: border-box;
     }
 
     body {
       min-height: 100vh;
+      margin: 0;
+      font-family: "Manrope", "Segoe UI", sans-serif;
+      color: var(--ftds-ink);
       background:
-        radial-gradient(circle at top left, rgba(59, 130, 246, 0.18), transparent 34%),
-        radial-gradient(circle at bottom right, rgba(14, 165, 233, 0.16), transparent 30%),
-        linear-gradient(180deg, #eff6ff 0%, #f8fafc 48%, #ffffff 100%);
+        radial-gradient(circle at 0% 0%, rgba(37, 99, 235, 0.22), transparent 26%),
+        radial-gradient(circle at 100% 10%, rgba(14, 165, 233, 0.18), transparent 24%),
+        radial-gradient(circle at 50% 100%, rgba(16, 185, 129, 0.12), transparent 22%),
+        linear-gradient(180deg, #eef5ff 0%, #f8fafc 46%, #ffffff 100%);
     }
 
     .shell {
@@ -27,33 +45,117 @@
     }
 
     .panel {
-      width: min(1160px, 100%);
-      background: rgba(255, 255, 255, 0.92);
-      backdrop-filter: blur(16px);
-      border: 1px solid rgba(148, 163, 184, 0.2);
-      border-radius: 28px;
-      box-shadow: 0 28px 80px rgba(15, 23, 42, 0.14);
+      width: min(1240px, 100%);
+      background: var(--ftds-panel);
+      backdrop-filter: blur(18px);
+      border: 1px solid var(--ftds-border);
+      border-radius: 30px;
+      box-shadow: var(--ftds-shadow);
       overflow: hidden;
     }
 
     .hero {
-      background: linear-gradient(135deg, #1d4ed8, #0f172a);
-      color: white;
-      padding: 2rem;
+      background:
+        linear-gradient(140deg, rgba(29, 78, 216, 0.96), rgba(15, 23, 42, 0.96)),
+        linear-gradient(140deg, #1d4ed8, #0f172a);
+      color: #fff;
+      position: relative;
+      overflow: hidden;
     }
 
-    .hero p {
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto -8% -30% auto;
+      width: 340px;
+      height: 340px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(125, 211, 252, 0.25), transparent 68%);
+      pointer-events: none;
+    }
+
+    .hero-copy {
+      position: relative;
+      z-index: 1;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.45rem 0.75rem;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.12);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 700;
+    }
+
+    .hero-title {
+      font-family: "Sora", "Manrope", sans-serif;
+      font-size: clamp(2rem, 3vw, 2.85rem);
+      line-height: 1.05;
+      margin: 1.1rem 0 0.9rem;
+    }
+
+    .hero-copy p {
       max-width: 720px;
-      margin: 0.75rem 0 0;
-      color: rgba(255, 255, 255, 0.8);
+      color: rgba(255, 255, 255, 0.82);
+      font-size: 1rem;
+      margin-bottom: 1.3rem;
+    }
+
+    .hero-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 0.9rem;
+    }
+
+    .hero-stat {
+      padding: 1rem 1rem 1.05rem;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .hero-stat .value {
+      font-size: 1.55rem;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .hero-stat .label {
+      margin-top: 0.45rem;
+      color: rgba(255, 255, 255, 0.74);
+      font-size: 0.82rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+
+    .section-label {
+      color: #64748b;
+      font-size: 0.8rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 800;
+      margin-bottom: 0.85rem;
+    }
+
+    .role-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem;
     }
 
     .role-card {
       height: 100%;
-      border: 1px solid rgba(148, 163, 184, 0.25);
-      border-radius: 20px;
-      background: #fff;
-      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 22px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.98));
+      box-shadow: 0 14px 38px rgba(15, 23, 42, 0.07);
     }
 
     .role-chip {
@@ -61,11 +163,34 @@
       align-items: center;
       gap: 0.4rem;
       font-size: 0.78rem;
-      padding: 0.35rem 0.7rem;
+      padding: 0.38rem 0.72rem;
       border-radius: 999px;
       background: #eff6ff;
-      color: #1d4ed8;
-      font-weight: 600;
+      color: var(--ftds-blue);
+      font-weight: 700;
+    }
+
+    .role-copy {
+      color: var(--ftds-muted);
+      font-size: 0.96rem;
+      margin-bottom: 1rem;
+    }
+
+    .surface-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      margin-bottom: 0.95rem;
+    }
+
+    .surface-pill {
+      font-size: 0.79rem;
+      font-weight: 700;
+      color: #0f172a;
+      background: #f1f5f9;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 999px;
+      padding: 0.45rem 0.75rem;
     }
 
     .role-card ul {
@@ -74,11 +199,17 @@
       color: #475569;
     }
 
+    .role-card li + li {
+      margin-top: 0.4rem;
+    }
+
     .login-card {
       border: none;
-      border-radius: 24px;
+      border-radius: 26px;
       background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-      box-shadow: 0 18px 44px rgba(15, 23, 42, 0.1);
+      box-shadow: 0 20px 54px rgba(15, 23, 42, 0.1);
+      position: sticky;
+      top: 1rem;
     }
 
     .login-muted {
@@ -86,108 +217,156 @@
       font-size: 0.95rem;
     }
 
-    .surface-list {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      margin-top: 0.8rem;
+    .callout {
+      border: 1px solid rgba(37, 99, 235, 0.15);
+      border-radius: 18px;
+      background: linear-gradient(180deg, rgba(37, 99, 235, 0.08), rgba(255, 255, 255, 0.92));
+      padding: 1rem 1rem 1.05rem;
     }
 
-    .surface-pill {
-      font-size: 0.8rem;
-      font-weight: 600;
-      color: #0f172a;
-      background: #f1f5f9;
-      border-radius: 999px;
-      padding: 0.45rem 0.75rem;
+    .callout strong {
+      display: block;
+      margin-bottom: 0.25rem;
+    }
+
+    .login-form .form-control {
+      min-height: 3rem;
+      border-radius: 14px;
+      border-color: rgba(148, 163, 184, 0.35);
+      box-shadow: none;
+    }
+
+    .login-form .form-control:focus {
+      border-color: rgba(29, 78, 216, 0.55);
+      box-shadow: 0 0 0 0.25rem rgba(37, 99, 235, 0.14);
+    }
+
+    .primary-btn {
+      border: none;
+      border-radius: 16px;
+      background: linear-gradient(135deg, #1d4ed8, #0f766e);
+      box-shadow: 0 16px 30px rgba(29, 78, 216, 0.22);
+    }
+
+    .support-box {
+      border-top: 1px solid rgba(148, 163, 184, 0.18);
+      color: var(--ftds-muted);
+    }
+
+    .support-box a {
+      color: var(--ftds-blue);
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    @media (max-width: 991.98px) {
+      .role-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .login-card {
+        position: static;
+      }
     }
   </style>
 </head>
 <body>
   <div class="shell">
     <div class="panel">
-      <div class="hero">
-        <div class="d-flex align-items-center gap-3">
-          <div class="fs-2"><i class="bi bi-shield-lock-fill"></i></div>
-          <div>
-            <h1 class="h3 fw-bold mb-1">Staff and Operations Sign In</h1>
-            <div class="small text-white-50">One shared staff session, with each role routed only to the surfaces it is allowed to open.</div>
+      <div class="hero p-4 p-lg-5">
+        <div class="hero-copy">
+          <span class="eyebrow"><i class="bi bi-shield-lock-fill"></i> Role-aware access</span>
+          <h1 class="hero-title">Staff and Operations Sign In</h1>
+          <p>
+            One shared sign-in surface for fraud operations and platform ops. Each account is routed only to the pages and tools it is meant to open.
+          </p>
+          <div class="hero-stats">
+            <div class="hero-stat">
+              <div class="value">4</div>
+              <div class="label">Staff roles</div>
+            </div>
+            <div class="hero-stat">
+              <div class="value">2</div>
+              <div class="label">Ops tiers</div>
+            </div>
+            <div class="hero-stat">
+              <div class="value">5</div>
+              <div class="label">Protected tools</div>
+            </div>
+            <div class="hero-stat">
+              <div class="value">1</div>
+              <div class="label">Signed session</div>
+            </div>
           </div>
         </div>
-        <p>
-          Customers continue using the banking portal. Fraud staff use the fraud-review console, while managers and ops use the manager view and protected observability tools based on role.
-        </p>
       </div>
 
       <div class="p-4 p-lg-5">
         <div class="row g-4 align-items-start">
           <div class="col-xl-7">
-            <div class="row g-3">
-              <div class="col-md-6">
-                <div class="role-card p-4">
-                  <span class="role-chip"><i class="bi bi-person-badge"></i> Fraud Analyst</span>
-                  <h2 class="h5 mt-3 fw-bold">Handle manual reviews and appeals</h2>
-                  <div class="surface-list">
-                    <span class="surface-pill">Fraud review console</span>
-                  </div>
-                  <ul class="mt-3">
-                    <li>Claim flagged cases</li>
-                    <li>Approve or reject reviews</li>
-                    <li>Claim and resolve appeals</li>
-                  </ul>
+            <div class="section-label">Role Access At A Glance</div>
+            <div class="role-grid">
+              <div class="role-card p-4">
+                <span class="role-chip"><i class="bi bi-person-badge"></i> Fraud Analyst</span>
+                <h2 class="h5 mt-3 fw-bold">Handle manual reviews and appeals</h2>
+                <p class="role-copy">Analysts own the active decision queue and are the recorded actor for claim, release, and final outcome actions.</p>
+                <div class="surface-list">
+                  <span class="surface-pill">Fraud review console</span>
                 </div>
+                <ul>
+                  <li>Claim flagged cases</li>
+                  <li>Approve or reject reviews</li>
+                  <li>Claim and resolve appeals</li>
+                </ul>
               </div>
-              <div class="col-md-6">
-                <div class="role-card p-4">
-                  <span class="role-chip"><i class="bi bi-briefcase"></i> Fraud Manager</span>
-                  <h2 class="h5 mt-3 fw-bold">Oversee fraud operations and performance</h2>
-                  <div class="surface-list">
-                    <span class="surface-pill">Fraud review console</span>
-                    <span class="surface-pill">Manager dashboard</span>
-                  </div>
-                  <ul class="mt-3">
-                    <li>Review active operations</li>
-                    <li>Access analytics and audit views</li>
-                    <li>Track team outcomes and trends</li>
-                  </ul>
+              <div class="role-card p-4">
+                <span class="role-chip"><i class="bi bi-briefcase"></i> Fraud Manager</span>
+                <h2 class="h5 mt-3 fw-bold">Oversee fraud operations and outcomes</h2>
+                <p class="role-copy">Managers keep access to the review lane while also monitoring the aggregate fraud and appeals picture.</p>
+                <div class="surface-list">
+                  <span class="surface-pill">Fraud review console</span>
+                  <span class="surface-pill">Manager dashboard</span>
                 </div>
+                <ul>
+                  <li>Review active operations</li>
+                  <li>Access analytics and audit views</li>
+                  <li>Track team outcomes and trends</li>
+                </ul>
               </div>
-              <div class="col-md-6">
-                <div class="role-card p-4">
-                  <span class="role-chip"><i class="bi bi-activity"></i> Ops Readonly</span>
-                  <h2 class="h5 mt-3 fw-bold">Inspect platform health and telemetry</h2>
-                  <div class="surface-list">
-                    <span class="surface-pill">Manager dashboard</span>
-                    <span class="surface-pill">Grafana</span>
-                    <span class="surface-pill">Jaeger</span>
-                    <span class="surface-pill">Prometheus</span>
-                    <span class="surface-pill">cAdvisor</span>
-                  </div>
-                  <ul class="mt-3">
-                    <li>Read-only observability access</li>
-                    <li>Performance and tracing visibility</li>
-                    <li>No fraud-case handling rights</li>
-                  </ul>
+              <div class="role-card p-4">
+                <span class="role-chip"><i class="bi bi-activity"></i> Ops Readonly</span>
+                <h2 class="h5 mt-3 fw-bold">Inspect platform health and telemetry</h2>
+                <p class="role-copy">Readonly ops access is intentionally separate from fraud handling so observability stays available without queue privileges.</p>
+                <div class="surface-list">
+                  <span class="surface-pill">Manager dashboard</span>
+                  <span class="surface-pill">Grafana</span>
+                  <span class="surface-pill">Jaeger</span>
+                  <span class="surface-pill">Prometheus</span>
+                  <span class="surface-pill">cAdvisor</span>
                 </div>
+                <ul>
+                  <li>Read-only observability access</li>
+                  <li>Performance and tracing visibility</li>
+                  <li>No fraud-case handling rights</li>
+                </ul>
               </div>
-              <div class="col-md-6">
-                <div class="role-card p-4">
-                  <span class="role-chip"><i class="bi bi-tools"></i> Ops Admin</span>
-                  <h2 class="h5 mt-3 fw-bold">Operate the observability and email stack</h2>
-                  <div class="surface-list">
-                    <span class="surface-pill">Manager dashboard</span>
-                    <span class="surface-pill">Grafana</span>
-                    <span class="surface-pill">Jaeger</span>
-                    <span class="surface-pill">Prometheus</span>
-                    <span class="surface-pill">cAdvisor</span>
-                    <span class="surface-pill">Mailpit</span>
-                  </div>
-                  <ul class="mt-3">
-                    <li>Everything ops-readonly can access</li>
-                    <li>Mail inbox inspection for local SMTP</li>
-                    <li>No fraud-case handling rights</li>
-                  </ul>
+              <div class="role-card p-4">
+                <span class="role-chip"><i class="bi bi-tools"></i> Ops Admin</span>
+                <h2 class="h5 mt-3 fw-bold">Operate the telemetry and local email stack</h2>
+                <p class="role-copy">Ops admins can open the same observability tools plus Mailpit for local SMTP and OTP message inspection.</p>
+                <div class="surface-list">
+                  <span class="surface-pill">Manager dashboard</span>
+                  <span class="surface-pill">Grafana</span>
+                  <span class="surface-pill">Jaeger</span>
+                  <span class="surface-pill">Prometheus</span>
+                  <span class="surface-pill">cAdvisor</span>
+                  <span class="surface-pill">Mailpit</span>
                 </div>
+                <ul>
+                  <li>Everything ops-readonly can access</li>
+                  <li>Mail inbox inspection for local SMTP</li>
+                  <li>No fraud-case handling rights</li>
+                </ul>
               </div>
             </div>
           </div>
@@ -197,36 +376,41 @@
               <div class="card-body p-4 p-lg-5">
                 <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
                   <div>
-                    <h2 class="h4 fw-bold mb-1">Sign in</h2>
-                    <p class="login-muted mb-0">Use the staff account that matches the surface you need.</p>
+                    <div class="section-label mb-2">Sign In</div>
+                    <h2 class="h4 fw-bold mb-1">Open only what your role is allowed to see</h2>
+                    <p class="login-muted mb-0">The gateway issues the staff session, and the protected surfaces use it to gate the UI and observability entry points.</p>
                   </div>
-                  <i class="bi bi-box-arrow-in-right fs-3 text-primary"></i>
+                  <i class="bi bi-box-arrow-in-right fs-2 text-primary"></i>
                 </div>
 
-                <div class="alert alert-info border-0 bg-primary-subtle text-primary-emphasis">
-                  After sign-in, you will only be sent to destinations your role can actually open.
+                <div class="callout mb-4">
+                  <strong>Redirects stay role-safe</strong>
+                  If you open a protected page before signing in, the system will only send you back there if your role is actually permitted to access it.
                 </div>
 
                 <div class="alert alert-danger d-none" id="errorAlert" role="alert"></div>
 
-                <form id="loginForm">
+                <form id="loginForm" class="login-form">
                   <div class="mb-3">
                     <label class="form-label fw-semibold">Username</label>
-                    <input class="form-control" id="username" autocomplete="username" required />
+                    <input class="form-control" id="username" autocomplete="username" placeholder="Enter your staff username" required />
                   </div>
                   <div class="mb-4">
                     <label class="form-label fw-semibold">Password</label>
-                    <input type="password" class="form-control" id="password" autocomplete="current-password" required />
+                    <input type="password" class="form-control" id="password" autocomplete="current-password" placeholder="Enter your password" required />
                   </div>
-                  <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold">
+                  <button type="submit" class="btn primary-btn text-white w-100 py-3 fw-semibold">
                     <span class="spinner-border spinner-border-sm d-none me-2" id="spinner"></span>
                     Sign In
                   </button>
                 </form>
 
-                <div class="mt-4 pt-3 border-top">
-                  <div class="fw-semibold mb-2">Customer banking</div>
-                  <div class="login-muted">Customers do not use these staff accounts. They continue through <a href="/banking.html">the banking portal</a>.</div>
+                <div class="support-box mt-4 pt-4">
+                  <div class="fw-semibold mb-2">Customer banking stays separate</div>
+                  <div class="login-muted">
+                    Customers do not use these staff accounts. They continue through
+                    <a href="/banking.html">the banking portal</a>.
+                  </div>
                 </div>
               </div>
             </div>

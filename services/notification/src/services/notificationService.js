@@ -2,7 +2,13 @@ const config = require('../config');
 const logger = require('../config/logger');
 const emailService = require('./emailService');
 const smsService = require('./smsService');
-const { renderDeclinedCustomerEmail, renderDeclinedFraudTeamEmail, renderFlaggedFraudTeamEmail } = require('../templates/emailTemplates');
+const {
+  renderApprovedCustomerEmail,
+  renderDeclinedCustomerEmail,
+  renderDeclinedFraudTeamEmail,
+  renderFlaggedCustomerEmail,
+  renderFlaggedFraudTeamEmail,
+} = require('../templates/emailTemplates');
 const { retryWithBackoff } = require('../utils/retry');
 
 class NotificationService {
@@ -48,24 +54,10 @@ class NotificationService {
   // Handles get declined notifications.
   _getDeclinedNotifications(event) {
     const notifications = [];
-    const { transactionId, customerId, originalTransaction, fraudAnalysis, decision, decisionReason, decisionFactors } = event;
+    const { transactionId, decision } = event;
     const customerEmail = this._resolveCustomerEmail(event);
     const customerPhone = this._resolveCustomerPhone(event);
-    const templateData = {
-      transactionId,
-      customerId,
-      merchantId: originalTransaction?.merchantId || 'Unknown',
-      amount: originalTransaction?.amount || 0,
-      currency: originalTransaction?.currency || 'USD',
-      location: originalTransaction?.location?.country || 'Unknown',
-      timestamp: event.decidedAt || new Date().toISOString(),
-      riskScore: fraudAnalysis?.riskScore || 0,
-      mlScore: fraudAnalysis?.mlResults?.score || 0,
-      fraudFlagged: fraudAnalysis?.flagged ? 'Yes' : 'No',
-      decision,
-      decisionReason,
-      decisionFactors: decisionFactors || {},
-    };
+    const templateData = this._buildTemplateData(event);
     if (config.notificationRules.declined.notifyCustomerEmail) {
       const emailContent = renderDeclinedCustomerEmail(templateData);
       notifications.push({
@@ -83,7 +75,7 @@ class NotificationService {
         type: 'sms',
         recipient: 'customer',
         to: customerPhone,
-        body: `[Fraud Alert] Your transaction for $${templateData.amount} was declined. Transaction ID: ${transactionId.substring(0, 8)}. If unauthorized, no action needed. For help: fraud@example.com`,
+        body: `[Security Update] We declined your ${templateData.amount} ${templateData.currency} transaction. Ref ${transactionId.substring(0, 8).toUpperCase()}. If you recognise it, review the decision in ${config.customerPortalUrl}. If not, no action is needed.`,
         metadata: { transactionId, decision },
       });
     }
@@ -106,19 +98,32 @@ class NotificationService {
   // Handles get flagged notifications.
   _getFlaggedNotifications(event) {
     const notifications = [];
-    const { transactionId, customerId, originalTransaction, fraudAnalysis, decision, decisionReason, decisionFactors } = event;
+    const { transactionId, decision } = event;
+    const templateData = this._buildTemplateData(event);
+    const customerEmail = this._resolveCustomerEmail(event);
+    const customerPhone = this._resolveCustomerPhone(event);
 
-    const templateData = {
-      transactionId,
-      customerId,
-      merchantId: originalTransaction?.merchantId || 'Unknown',
-      amount: originalTransaction?.amount || 0,
-      currency: originalTransaction?.currency || 'USD',
-      riskScore: fraudAnalysis?.riskScore || 0,
-      decision,
-      decisionReason,
-      decisionFactors: decisionFactors || {},
-    };
+    if (config.notificationRules.flagged.notifyCustomerEmail) {
+      const emailContent = renderFlaggedCustomerEmail(templateData);
+      notifications.push({
+        type: 'email',
+        recipient: 'customer',
+        to: customerEmail,
+        subject: emailContent.subject,
+        text: emailContent.text,
+        html: emailContent.html,
+        metadata: { transactionId, decision },
+      });
+    }
+    if (config.notificationRules.flagged.notifyCustomerSms) {
+      notifications.push({
+        type: 'sms',
+        recipient: 'customer',
+        to: customerPhone,
+        body: `[Security Hold] A ${templateData.amount} ${templateData.currency} transaction is on hold for review. Ref ${transactionId.substring(0, 8).toUpperCase()}. No action is needed unless we contact you.`,
+        metadata: { transactionId, decision },
+      });
+    }
     if (config.notificationRules.flagged.notifyFraudTeamEmail) {
       const emailContent = renderFlaggedFraudTeamEmail(templateData);
       notifications.push({
@@ -146,7 +151,33 @@ class NotificationService {
 
   // Handles get approved notifications.
   _getApprovedNotifications(event) {
-    return [];
+    const notifications = [];
+    const { transactionId, decision } = event;
+    const templateData = this._buildTemplateData(event);
+
+    if (config.notificationRules.approved.notifyCustomerEmail) {
+      const emailContent = renderApprovedCustomerEmail(templateData);
+      notifications.push({
+        type: 'email',
+        recipient: 'customer',
+        to: this._resolveCustomerEmail(event),
+        subject: emailContent.subject,
+        text: emailContent.text,
+        html: emailContent.html,
+        metadata: { transactionId, decision },
+      });
+    }
+    if (config.notificationRules.approved.notifyCustomerSms) {
+      notifications.push({
+        type: 'sms',
+        recipient: 'customer',
+        to: this._resolveCustomerPhone(event),
+        body: `[Transaction Update] Your ${templateData.amount} ${templateData.currency} payment was approved. Ref ${transactionId.substring(0, 8).toUpperCase()}.`,
+        metadata: { transactionId, decision },
+      });
+    }
+
+    return notifications;
   }
 
   // Handles send with retry.
@@ -222,6 +253,54 @@ class NotificationService {
 
   _resolveFraudTeamPhone() {
     return config.contacts.fraudTeam.phone;
+  }
+
+  _buildTemplateData(event) {
+    const { transactionId, customerId, originalTransaction, fraudAnalysis, decision, decisionReason, decisionFactors } = event;
+    const reasonHighlights = this._extractReasonHighlights(event);
+
+    return {
+      transactionId,
+      referenceId: String(transactionId || '').substring(0, 8).toUpperCase(),
+      customerId,
+      merchantId: originalTransaction?.merchantId || 'Unknown',
+      amount: originalTransaction?.amount || 0,
+      currency: originalTransaction?.currency || 'USD',
+      location: originalTransaction?.location?.country || 'Unknown',
+      timestamp: event.decidedAt || new Date().toISOString(),
+      riskScore: fraudAnalysis?.riskScore || 0,
+      mlScore: fraudAnalysis?.mlResults?.score || 0,
+      fraudFlagged: fraudAnalysis?.flagged ? 'Yes' : 'No',
+      decision,
+      decisionReason: this._buildDecisionReason(decisionReason, reasonHighlights),
+      decisionFactors: decisionFactors || {},
+      reasonHighlights,
+      supportEmail: this._resolveFraudTeamEmail(),
+      supportPhone: this._resolveFraudTeamPhone(),
+      portalUrl: config.customerPortalUrl,
+    };
+  }
+
+  _extractReasonHighlights(event) {
+    const rawReasons = Array.isArray(event?.fraudAnalysis?.reasons)
+      ? event.fraudAnalysis.reasons
+      : [];
+
+    return [...new Set(rawReasons
+      .map((reason) => String(reason || '').trim())
+      .filter(Boolean))]
+      .slice(0, 3);
+  }
+
+  _buildDecisionReason(decisionReason, reasonHighlights) {
+    const explicitReason = String(decisionReason || '').trim();
+    if (explicitReason) {
+      return explicitReason;
+    }
+    if (reasonHighlights.length > 0) {
+      return reasonHighlights.join('; ');
+    }
+    return 'Automated security controls identified unusual transaction activity.';
   }
 }
 
