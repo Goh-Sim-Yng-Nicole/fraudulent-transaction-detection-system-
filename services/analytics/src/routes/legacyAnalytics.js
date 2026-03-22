@@ -1,17 +1,9 @@
 const router = require('express').Router();
 const config = require('../config');
 const projectionStore = require('../services/projectionStore');
+const { authenticateStaff } = require('../middleware/staffAuth');
 
-const requireManager = (req, res, next) => {
-  const auth = req.headers.authorization || '';
-  const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-
-  if (token !== config.manager.token) {
-    return res.status(401).json({ detail: 'invalid or expired token' });
-  }
-
-  return next();
-};
+const requireAnalyticsStaff = authenticateStaff(['fraud_manager', 'ops_readonly', 'ops_admin']);
 
 router.post('/login', (req, res) => {
   const { username, password } = req.body || {};
@@ -25,7 +17,7 @@ router.post('/login', (req, res) => {
   });
 });
 
-router.get('/dashboard', requireManager, async (_req, res) => {
+router.get('/dashboard', requireAnalyticsStaff, async (_req, res) => {
   const [transactions, appeals] = await Promise.all([
     projectionStore.listTransactions(),
     projectionStore.listAppeals(),

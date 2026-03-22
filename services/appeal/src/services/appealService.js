@@ -109,6 +109,32 @@ class AppealService {
     return appealRepository.listPending(limit, offset);
   }
 
+  async claimAppeal({ appealId, reviewerId, reviewerRole, claimTtlMinutes = 10 }) {
+    if (!reviewerId || typeof reviewerId !== 'string') {
+      throw new Error('reviewerId is required');
+    }
+
+    return appealRepository.claimAppeal(
+      appealId,
+      reviewerId.trim(),
+      reviewerRole || null,
+      claimTtlMinutes
+    );
+  }
+
+  async releaseAppeal({ appealId, reviewerId, reviewerRole, notes }) {
+    if (!reviewerId || typeof reviewerId !== 'string') {
+      throw new Error('reviewerId is required');
+    }
+
+    return appealRepository.releaseAppeal(
+      appealId,
+      reviewerId.trim(),
+      reviewerRole || null,
+      notes
+    );
+  }
+
   // Handles list by customer.
   async listByCustomer(customerId, limit, offset) {
     return appealRepository.listByCustomer(customerId, limit, offset);
@@ -124,6 +150,7 @@ class AppealService {
     appealId,
     resolution,
     reviewedBy,
+    reviewedRole,
     resolutionNotes,
   }) {
     if (!['UPHOLD', 'REVERSE'].includes(resolution)) {
@@ -146,11 +173,37 @@ class AppealService {
     const updated = await appealRepository.resolveAppeal(appealId, {
       resolution,
       reviewedBy,
+      reviewedRole,
       resolutionNotes,
     });
 
+    if (updated?.conflict === 'APPEAL_NOT_CLAIMED_BY_REVIEWER') {
+      const claimResult = await appealRepository.claimAppeal(appealId, reviewedBy, reviewedRole || null, 10);
+      if (claimResult?.conflict && claimResult.conflict !== 'APPEAL_ALREADY_CLAIMED') {
+        throw new Error(`Unable to claim appeal: ${claimResult.conflict}`);
+      }
+
+      const retried = await appealRepository.resolveAppeal(appealId, {
+        resolution,
+        reviewedBy,
+        reviewedRole,
+        resolutionNotes,
+      });
+      if (retried) {
+        return this._publishResolvedIfNeeded(retried);
+      }
+    }
+
     if (!updated) {
       throw new Error(`Appeal ${appealId} could not be resolved`);
+    }
+
+    return this._publishResolvedIfNeeded(updated);
+  }
+
+  async _publishResolvedIfNeeded(updated) {
+    if (updated.conflict) {
+      throw new Error(`Appeal ${updated.appealId || 'unknown'} could not be resolved: ${updated.conflict}`);
     }
 
     if (this.producer) {
@@ -170,6 +223,7 @@ class AppealService {
         resolution: updated.resolution,
         outcome: updated.resolution,
         reviewedBy: updated.reviewedBy,
+        reviewedRole: updated.resolvedRole,
         resolutionNotes: updated.resolutionNotes,
         resolvedAt: updated.resolvedAt,
         sourceTransactionStatus: updated.sourceTransactionStatus,

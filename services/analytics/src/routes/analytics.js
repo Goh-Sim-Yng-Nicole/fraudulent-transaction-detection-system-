@@ -1,5 +1,7 @@
 const router = require('express').Router();
 const analyticsController = require('./analyticsController');
+const { authenticateStaff } = require('../middleware/staffAuth');
+const requireAnalyticsStaff = authenticateStaff(['fraud_manager', 'ops_readonly', 'ops_admin']);
 /**
  * @openapi
  * /api/v1/analytics/dashboard:
@@ -17,7 +19,7 @@ const analyticsController = require('./analyticsController');
  *         description: Dashboard metrics returned
  */
 // Handles GET /analytics/dashboard.
-router.get('/analytics/dashboard', analyticsController.getDashboard);
+router.get('/analytics/dashboard', requireAnalyticsStaff, analyticsController.getDashboard);
 /**
  * @openapi
  * /api/v1/analytics/realtime:
@@ -29,6 +31,6 @@ router.get('/analytics/dashboard', analyticsController.getDashboard);
  *         description: Realtime metrics returned
  */
 // Handles GET /analytics/realtime.
-router.get('/analytics/realtime', analyticsController.getRealTime);
+router.get('/analytics/realtime', requireAnalyticsStaff, analyticsController.getRealTime);
 
 module.exports = router;

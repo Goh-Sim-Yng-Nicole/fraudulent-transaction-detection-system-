@@ -7,7 +7,7 @@ A microservices-based banking platform with real-time fraud detection, Kafka eve
 ## Architecture Overview
 
 ```text
-Static UIs (banking.html, fraud-review.html, manager.html)
+Static UIs (banking.html, staff-login.html, fraud-review.html, manager.html)
   -> Nginx :8088
   -> Kong :80 (public edge)
 
@@ -26,10 +26,11 @@ Fraud scoring and decisions
      -> OutSystems decision service (external, optional)
      -> Local fallback when OutSystems is unset
 
-Observability
-  -> Grafana :3000 <- Prometheus :9090 <- cAdvisor :9091
-  -> Jaeger :16686 <- OpenTelemetry Collector :4317/:4318
-  -> Mailpit :8025 (local email inbox) / :1025 (local SMTP)
+Protected observability
+  -> Nginx role-aware reverse proxy :3000/:9090/:9091/:16686/:8025
+  -> Grafana <- Prometheus <- cAdvisor
+  -> Jaeger <- OpenTelemetry Collector :4317/:4318
+  -> Mailpit (local email inbox) / :1025 (local SMTP)
 ```
 
 ### Event Flow
@@ -81,24 +82,38 @@ The checked-in service folders now match the live Docker runtimes directly. `tra
 | UI                  | File                   | Audience         | Access                                    |
 | ------------------- | ---------------------- | ---------------- | ----------------------------------------- |
 | Banking Portal      | `ui/banking.html`      | Customers        | `http://localhost:8088/banking.html`      |
+| Staff Sign-In       | `ui/staff-login.html`  | Staff and ops    | `http://localhost:8088/staff-login.html`  |
 | Fraud Review Portal | `ui/fraud-review.html` | Fraud analysts   | `http://localhost:8088/fraud-review.html` |
-| Manager Dashboard   | `ui/manager.html`      | Banking managers | `http://localhost:8088/manager.html`      |
+| Manager Dashboard   | `ui/manager.html`      | Managers and ops | `http://localhost:8088/manager.html`      |
+
+### Staff Roles
+
+- `fraud_analyst`: claim and decide flagged reviews and appeals
+- `fraud_manager`: review operations plus analytics and audit access
+- `ops_readonly`: read-only access to observability, analytics, and audit
+- `ops_admin`: observability admin access plus Mailpit inbox access
+
+### Case Ownership and Accountability
+
+- Flagged review cases now record `claimed_by`, `claimed_role`, `claimed_at`, `reviewed_by`, `reviewed_role`, and `reviewed_at`
+- Appeal cases now record `claimed_by`, `claimed_role`, `claimed_at`, `resolved_by`, `resolved_role`, and `resolved_at`
+- Review and appeal event histories now track the acting role so claim, release, reassignment, and final decisions are attributable in the APIs and UI
 
 ---
 
 ## Infrastructure
 
-| Component               | Port                                     | Purpose                                                          |
-| ----------------------- | ---------------------------------------- | ---------------------------------------------------------------- |
-| Nginx                   | 8088                                     | Static UI files and reverse proxy                                |
-| Kong                    | 80 (proxy), 8090 (admin)                 | API gateway, JWT auth, rate limiting                             |
-| Redpanda (Kafka)        | 19092 (external), 9092 (internal)        | Event streaming                                                  |
-| Grafana                 | 3000                                     | Monitoring dashboards                                            |
-| Prometheus              | 9090                                     | Metrics scraping                                                 |
-| Jaeger                  | 16686                                    | Distributed tracing UI                                           |
-| OpenTelemetry Collector | 4317 (gRPC), 4318 (HTTP), 13133 (health) | Trace ingestion and span-to-metrics pipeline                     |
-| Mailpit                 | 8025 (UI), 1025 (SMTP)                   | Local email inbox and SMTP server for notifications and OTP mail |
-| cAdvisor                | 9091                                     | Container metrics for Prometheus and Grafana                     |
+| Component               | Port                                     | Purpose                                                       |
+| ----------------------- | ---------------------------------------- | ------------------------------------------------------------- |
+| Nginx                   | 8088                                     | Static UI files and reverse proxy                             |
+| Kong                    | 80 (proxy)                               | API gateway, JWT auth, rate limiting                          |
+| Redpanda (Kafka)        | 19092 (external), 9092 (internal)        | Event streaming                                               |
+| Grafana                 | 3000 via Nginx                           | Monitoring dashboards, protected behind staff auth            |
+| Prometheus              | 9090 via Nginx                           | Metrics scraping UI, protected behind staff auth              |
+| Jaeger                  | 16686 via Nginx                          | Distributed tracing UI, protected behind staff auth           |
+| OpenTelemetry Collector | 4317 (gRPC), 4318 (HTTP), 13133 (health) | Trace ingestion and span-to-metrics pipeline                  |
+| Mailpit                 | 8025 via Nginx (UI), 1025 (SMTP)         | Protected local email inbox and SMTP server for notifications |
+| cAdvisor                | 9091 via Nginx                           | Container metrics for Prometheus and Grafana                  |
 
 ---
 
@@ -145,13 +160,15 @@ These thresholds are applied by OutSystems in production, or by the `detect_frau
 
 ## Credentials
 
-| Portal            | Default Username | Default Password |
-| ----------------- | ---------------- | ---------------- |
-| Fraud Review      | `analyst`        | `analyst123`     |
-| Manager Dashboard | `manager`        | `manager123`     |
-| Grafana           | `admin`          | `admin123`       |
+| Persona / Portal     | Default Username | Default Password |
+| -------------------- | ---------------- | ---------------- |
+| Fraud analyst        | `analyst`        | `analyst123`     |
+| Fraud manager        | `manager`        | `manager123`     |
+| Ops readonly         | `opsviewer`      | `opsviewer123`   |
+| Ops admin            | `opsadmin`       | `opsadmin123`    |
+| Grafana (direct app) | `admin`          | `admin123`       |
 
-These credentials are for local Docker development only. Replace them outside local/demo environments.
+Use the staff credentials on `staff-login.html` to access the protected fraud-review UI, manager UI, and observability stack. These credentials are for local Docker development only. Replace them outside local/demo environments.
 
 ---
 
@@ -165,14 +182,14 @@ docker compose up -d --build --remove-orphans
 Default local access points:
 
 - Banking portal: `http://localhost:8088/banking.html`
+- Staff sign-in: `http://localhost:8088/staff-login.html`
 - Fraud review portal: `http://localhost:8088/fraud-review.html`
 - Manager dashboard: `http://localhost:8088/manager.html`
 - Public edge through Kong: `http://localhost/`
-- Kong admin: `http://localhost:8090/status`
-- Grafana: `http://localhost:3000` (opens directly to the `Fraud Detection Platform` dashboard in local Docker)
-- Prometheus: `http://localhost:9090`
-- Jaeger: `http://localhost:16686`
-- Mailpit inbox: `http://localhost:8025`
+- Grafana: `http://localhost:3000` (protected by staff auth and opens directly to the `Fraud Detection Platform` dashboard in local Docker)
+- Prometheus: `http://localhost:9090` (protected by staff auth)
+- Jaeger: `http://localhost:16686` (protected by staff auth)
+- Mailpit inbox: `http://localhost:8025` (protected by `ops_admin`)
 
 Local Docker defaults worth knowing:
 
@@ -182,6 +199,7 @@ Local Docker defaults worth knowing:
 - OutSystems decisioning is optional locally; when `OUTSYSTEMS_DECISION_URL` is blank, `detect_fraud` performs the local fallback decision flow
 - Grafana auto-provisions the `Fraud Detection Platform` and `Tracing Operations` dashboards on startup, and the root Grafana URL opens the platform dashboard by default
 - Jaeger receives traces from the full application path in local Docker, including `customer`, `transaction`, `fraud-score`, `detect-fraud`, `fraud-review`, `appeal`, `notification`, `audit`, `analytics`, and `gateway`
+- Nginx now acts as the role-aware ingress for staff UI pages and observability tools, while internal service ports stay on the Docker network unless explicitly published for local dev APIs
 
 ---
 
@@ -198,6 +216,8 @@ Key points:
 - Gateway now requires `JWT_SECRET` to be present, and strict mode rejects wildcard CORS plus known demo JWT secrets.
 - The customer service also rejects demo JWT secrets in strict mode.
 - Grafana anonymous access is now explicitly environment-controlled through `GRAFANA_ANONYMOUS_ENABLED`. Keep it enabled for local convenience only.
+- Staff and ops access is now issued by the gateway as short-lived signed sessions, and Nginx uses role-aware `auth_request` checks before serving protected UI pages or observability tools.
+- Observability UIs are no longer intended to be exposed directly; access should go through the authenticated Nginx reverse proxy.
 - When validating Compose locally, prefer `docker compose config -q` so you do not print fully resolved environment values to your terminal history.
 
 ---
@@ -307,13 +327,13 @@ The shared standards are defined in:
 - Transaction: create, list by query, list by `/transactions/customer/:customerId`, get by id, get decision, `PENDING -> FLAGGED -> APPROVED`
 - Fraud score: `/docs`, `/model`, `/metrics`, `/api-docs.json`, `/score`, `/api/v1/score`
 - Detect fraud: health plus event-driven scoring validation through real transaction creation
-- Fraud review: root dashboard, legacy analyst queue, modern `/review-cases`, claim, release, resolve, `/reviews/pending`, `/reviews/:transactionId`, modern appeal-review endpoints
-- Appeal: legacy `/appeals`, modern `/api/v1/appeals`, `/appeals/customer/:customerId`, `/appeals/:appealId`, internal pending and resolve endpoints
+- Fraud review: protected staff login flow, root dashboard, legacy analyst queue, modern `/review-cases`, claim, release, resolve, `/reviews/pending`, `/reviews/:transactionId`, modern appeal-review endpoints, and ownership fields
+- Appeal: legacy `/appeals`, modern `/api/v1/appeals`, `/appeals/customer/:customerId`, `/appeals/:appealId`, internal pending/claim/release/resolve endpoints, and ownership fields
 - Analytics: legacy `/login` and `/dashboard`, modern `/api/v1/analytics/dashboard` and `/api/v1/analytics/realtime`, dashboard HTML on port `8006`
 - Audit: `/api/v1/audit/transaction/:transactionId`, `/api/v1/audit/customer/:customerId`, `/api/v1/audit/stats`, `/api/v1/audit/verify`, `/api/v1/metrics`
 - Notification: health, readiness, metrics, Kafka-consumption evidence through counters
 - Gateway: health, `/api/v1/auth/login`, `/api/v1/transactions/customer/:customerId`, `/api-docs.json`
-- Edge and infra: public edge, `banking.html`, `fraud-review.html`, `manager.html`, Kong admin status, Prometheus readiness, Grafana health plus provisioned dashboards, Jaeger UI, Mailpit UI, and cAdvisor health
+- Edge and infra: public edge, `banking.html`, protected `staff-login.html`, protected `fraud-review.html`, protected `manager.html`, protected Prometheus/Grafana/Jaeger/Mailpit/cAdvisor access, and provisioned dashboards
 - Kafka: required topics exist and all core consumer groups settle with `TOTAL-LAG 0`
 
 ### End To End

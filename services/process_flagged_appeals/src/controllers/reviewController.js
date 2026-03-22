@@ -42,7 +42,9 @@ class ReviewController {
   }
 
   async claimCase(req, res) {
-    const { reviewerId, claimTtlMinutes } = req.body;
+    const reviewerId = req.staff?.userId || req.body?.reviewerId;
+    const reviewerRole = req.staff?.role || req.body?.reviewerRole || null;
+    const claimTtlMinutes = req.body?.claimTtlMinutes;
     if (!reviewerId || typeof reviewerId !== 'string') {
       return res.status(400).json({ success: false, error: 'reviewerId is required' });
     }
@@ -50,6 +52,7 @@ class ReviewController {
     const data = await reviewService.claimCase({
       transactionId: req.params.transactionId,
       reviewerId,
+      reviewerRole,
       claimTtlMinutes: Math.min(Math.max(parseInt(claimTtlMinutes, 10) || 10, 1), 120),
     });
 
@@ -65,7 +68,9 @@ class ReviewController {
   }
 
   async releaseCase(req, res) {
-    const { reviewerId, notes } = req.body;
+    const reviewerId = req.staff?.userId || req.body?.reviewerId;
+    const reviewerRole = req.staff?.role || req.body?.reviewerRole || null;
+    const notes = req.body?.notes;
     if (!reviewerId || typeof reviewerId !== 'string') {
       return res.status(400).json({ success: false, error: 'reviewerId is required' });
     }
@@ -73,6 +78,7 @@ class ReviewController {
     const data = await reviewService.releaseCase({
       transactionId: req.params.transactionId,
       reviewerId,
+      reviewerRole,
       notes,
     });
 
@@ -89,7 +95,9 @@ class ReviewController {
 
   // Handles submit decision.
   async submitDecision(req, res) {
-    const { decision, reviewedBy, notes } = req.body;
+    const { decision, notes } = req.body;
+    const reviewedBy = req.staff?.userId || req.body?.reviewedBy;
+    const reviewedRole = req.staff?.role || req.body?.reviewedRole || null;
     const allowed = new Set(['APPROVED', 'DECLINED']);
     if (!allowed.has(decision)) {
       return res.status(400).json({
@@ -109,6 +117,7 @@ class ReviewController {
         transactionId: req.params.transactionId,
         decision,
         reviewedBy,
+        reviewedRole,
         notes,
       });
 

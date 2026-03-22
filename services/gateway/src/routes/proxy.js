@@ -4,7 +4,7 @@ const express = require('express');
 const axios = require('axios');
 const config = require('../config');
 const logger = require('../config/logger');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, authorize } = require('../middleware/auth');
 const { transactionLimiter, standardLimiter } = require('../middleware/rateLimiter');
 
 const router = express.Router();
@@ -34,6 +34,7 @@ const serviceRoutes = [
     enabled: config.routeToggles.audit,
     useTransactionLimiter: false,
     rewriteTo: '/api/v1/audit',
+    allowedRoles: ['fraud_manager', 'ops_readonly', 'ops_admin'],
   },
   {
     pathPrefix: '/decisions',
@@ -42,6 +43,7 @@ const serviceRoutes = [
     enabled: config.routeToggles.decisions,
     useTransactionLimiter: false,
     rewriteTo: '/api/v1/decisions',
+    allowedRoles: ['fraud_manager', 'ops_admin'],
   },
   {
     pathPrefix: '/thresholds',
@@ -50,6 +52,7 @@ const serviceRoutes = [
     enabled: config.routeToggles.decisions,
     useTransactionLimiter: false,
     rewriteTo: '/api/v1/thresholds',
+    allowedRoles: ['fraud_manager', 'ops_admin'],
   },
   {
     pathPrefix: '/analytics',
@@ -58,6 +61,7 @@ const serviceRoutes = [
     enabled: config.routeToggles.analytics,
     useTransactionLimiter: false,
     rewriteTo: '/api/v1/analytics',
+    allowedRoles: ['fraud_manager', 'ops_readonly', 'ops_admin'],
   },
   {
     pathPrefix: '/reviews',
@@ -66,6 +70,7 @@ const serviceRoutes = [
     enabled: config.routeToggles.humanVerification,
     useTransactionLimiter: false,
     rewriteTo: '/api/v1/reviews',
+    allowedRoles: ['fraud_analyst', 'fraud_manager'],
   },
   {
     pathPrefix: '/review-cases',
@@ -74,6 +79,7 @@ const serviceRoutes = [
     enabled: config.routeToggles.humanVerification,
     useTransactionLimiter: false,
     rewriteTo: '/api/v1/review-cases',
+    allowedRoles: ['fraud_analyst', 'fraud_manager'],
   },
   {
     pathPrefix: '/appeals',
@@ -105,7 +111,7 @@ const makeProxyHandler = (target, serviceName, rewriteTo) => async (req, res) =>
       data: ['GET', 'HEAD', 'DELETE'].includes(req.method.toUpperCase()) ? undefined : req.body,
       headers: {
         'Content-Type': 'application/json',
-        Authorization: req.headers.authorization || '',
+        Authorization: req.headers.authorization || (req.token ? `Bearer ${req.token}` : ''),
         'X-Request-ID': req.requestId || '',
         'X-Correlation-ID': req.correlationId || '',
         'X-User-ID': req.user?.userId || '',
@@ -163,7 +169,14 @@ serviceRoutes.forEach((route) => {
   const handler = makeProxyHandler(route.target, route.serviceName, route.rewriteTo);
   const middleware = route.requireGatewayAuth === false
     ? [rateLimiter, handler]
-    : [authenticate, rateLimiter, handler];
+    : [
+      authenticate,
+      ...(Array.isArray(route.allowedRoles) && route.allowedRoles.length > 0
+        ? [authorize(...route.allowedRoles)]
+        : []),
+      rateLimiter,
+      handler,
+    ];
 
   router.use(route.pathPrefix, ...middleware);
 

@@ -1,7 +1,9 @@
 const express = require('express');
 const controller = require('../controllers/appealController');
+const { authenticateStaff } = require('../middleware/staffAuth');
 
 const router = express.Router();
+const requireReviewStaff = authenticateStaff(['fraud_analyst', 'fraud_manager']);
 
 /**
  * @openapi
@@ -86,7 +88,9 @@ router.post('/appeals/:appealId/resolve', (_req, res) => {
 router.get('/appeals/:appealId', controller.getById.bind(controller));
 
 // Internal analyst endpoints consumed by human-verification-service.
-router.get('/internal/appeals/pending', controller.listPending.bind(controller));
-router.post('/internal/appeals/:appealId/resolve', controller.resolve.bind(controller));
+router.get('/internal/appeals/pending', requireReviewStaff, controller.listPending.bind(controller));
+router.post('/internal/appeals/:appealId/claim', requireReviewStaff, controller.claim.bind(controller));
+router.post('/internal/appeals/:appealId/release', requireReviewStaff, controller.release.bind(controller));
+router.post('/internal/appeals/:appealId/resolve', requireReviewStaff, controller.resolve.bind(controller));
 
 module.exports = router;

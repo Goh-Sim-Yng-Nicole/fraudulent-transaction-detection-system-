@@ -2,19 +2,10 @@ const express = require('express');
 const config = require('../config');
 const reviewService = require('../services/reviewService');
 const appealReviewService = require('../services/appealReviewService');
+const { authenticateStaff } = require('../middleware/staffAuth');
 
 const router = express.Router();
-
-const requireAnalyst = (req, res, next) => {
-  const auth = req.headers.authorization || '';
-  const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-
-  if (token !== config.analyst.token) {
-    return res.status(401).json({ detail: 'invalid or expired token' });
-  }
-
-  return next();
-};
+const requireAnalyst = authenticateStaff(['fraud_analyst', 'fraud_manager']);
 
 router.post('/login', (req, res) => {
   const { username, password } = req.body || {};
@@ -33,11 +24,11 @@ router.get('/flagged', requireAnalyst, async (_req, res) => {
   return res.json(data.map((item) => ({
     transaction_id: item.transactionId,
     rules_score: item.riskScore ?? item.ruleScore ?? 0,
-    reason: item.reviewReason || item.decisionReason || 'Manual review required',
-    status: item.status,
-    created_at: item.createdAt,
-    updated_at: item.updatedAt,
-  })));
+      reason: item.reviewReason || item.decisionReason || 'Manual review required',
+      status: item.finalDecision || item.queueStatus,
+      created_at: item.createdAt,
+      updated_at: item.updatedAt,
+    })));
 });
 
 router.post('/flagged/:transactionId/resolve', requireAnalyst, async (req, res, next) => {
@@ -51,7 +42,8 @@ router.post('/flagged/:transactionId/resolve', requireAnalyst, async (req, res, 
     await reviewService.applyDecision({
       transactionId: req.params.transactionId,
       decision,
-      reviewedBy: config.analyst.username,
+      reviewedBy: req.staff?.userId || config.analyst.username,
+      reviewedRole: req.staff?.role || 'fraud_analyst',
       notes: req.body.reason || req.body.notes || null,
     });
 
@@ -94,7 +86,8 @@ router.post('/appeals/:appealId/resolve', requireAnalyst, async (req, res, next)
     await appealReviewService.resolveAppeal({
       appealId: req.params.appealId,
       resolution,
-      reviewedBy: config.analyst.username,
+      reviewedBy: req.staff?.userId || config.analyst.username,
+      reviewedRole: req.staff?.role || 'fraud_analyst',
       notes: req.body.outcome_reason || req.body.notes || null,
       authHeader: req.headers.authorization || null,
       correlationId: req.headers['x-correlation-id'] || null,

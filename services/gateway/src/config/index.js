@@ -30,6 +30,99 @@ const requireSafeSecret = (name, value) => {
   return normalized;
 };
 
+const parsePermissions = (value, fallback = []) => {
+  const normalized = String(value || '').trim();
+  if (!normalized) {
+    return fallback;
+  }
+
+  return normalized
+    .split(',')
+    .map((permission) => permission.trim())
+    .filter(Boolean);
+};
+
+const staffUsers = Object.fromEntries(
+  [
+    {
+      envPrefix: 'ANALYST',
+      username: process.env.ANALYST_USERNAME || 'analyst',
+      password: process.env.ANALYST_PASSWORD || 'analyst123',
+      role: 'fraud_analyst',
+      displayName: process.env.ANALYST_DISPLAY_NAME || 'Fraud Analyst',
+      permissions: parsePermissions(process.env.ANALYST_PERMISSIONS, [
+        'reviews:read',
+        'reviews:claim',
+        'reviews:decide',
+        'appeals:read',
+        'appeals:claim',
+        'appeals:decide',
+      ]),
+    },
+    {
+      envPrefix: 'MANAGER',
+      username: process.env.MANAGER_USERNAME || 'manager',
+      password: process.env.MANAGER_PASSWORD || 'manager123',
+      role: 'fraud_manager',
+      displayName: process.env.MANAGER_DISPLAY_NAME || 'Fraud Manager',
+      permissions: parsePermissions(process.env.MANAGER_PERMISSIONS, [
+        'reviews:read',
+        'reviews:manage',
+        'appeals:read',
+        'appeals:manage',
+        'analytics:read',
+        'audit:read',
+      ]),
+    },
+    {
+      envPrefix: 'OPS_READONLY',
+      username: process.env.OPS_READONLY_USERNAME || 'opsviewer',
+      password: process.env.OPS_READONLY_PASSWORD || 'opsviewer123',
+      role: 'ops_readonly',
+      displayName: process.env.OPS_READONLY_DISPLAY_NAME || 'Ops Readonly',
+      permissions: parsePermissions(process.env.OPS_READONLY_PERMISSIONS, [
+        'analytics:read',
+        'audit:read',
+        'observability:read',
+      ]),
+    },
+    {
+      envPrefix: 'OPS_ADMIN',
+      username: process.env.OPS_ADMIN_USERNAME || 'opsadmin',
+      password: process.env.OPS_ADMIN_PASSWORD || 'opsadmin123',
+      role: 'ops_admin',
+      displayName: process.env.OPS_ADMIN_DISPLAY_NAME || 'Ops Admin',
+      permissions: parsePermissions(process.env.OPS_ADMIN_PERMISSIONS, [
+        'analytics:read',
+        'audit:read',
+        'observability:read',
+        'observability:admin',
+        'mail:read',
+      ]),
+    },
+  ].map((user) => {
+    const username = String(user.username || '').trim();
+    if (!username) {
+      return null;
+    }
+
+    if (strictConfig && user.password && user.password.endsWith('123')) {
+      throw new Error(`${user.envPrefix}_PASSWORD must be overridden when strict security is enabled`);
+    }
+
+    return [
+      username,
+      {
+        username,
+        password: String(user.password || ''),
+        role: user.role,
+        displayName: user.displayName,
+        permissions: user.permissions,
+      },
+    ];
+  }).filter(Boolean)
+);
+
 const parseCorsOrigins = (value) => {
   const normalized = String(value || '').trim();
   if (!normalized) {
@@ -78,6 +171,12 @@ module.exports = {
     expiresIn: process.env.JWT_EXPIRES_IN || '24h',
     issuer: process.env.JWT_ISSUER || 'fraud-detection-platform',
     customerIssuer: process.env.CUSTOMER_JWT_ISSUER || 'ftds-customer-service',
+  },
+  auth: {
+    staffCookieName: process.env.STAFF_SESSION_COOKIE_NAME || 'ftds_staff_token',
+    sessionMaxAgeMs: parseInt(process.env.STAFF_SESSION_MAX_AGE_MS, 10) || 12 * 60 * 60 * 1000,
+    secureCookies: flagEnabled(process.env.COOKIE_SECURE_ONLY, strictConfig),
+    staffUsers,
   },
 
   redis: {

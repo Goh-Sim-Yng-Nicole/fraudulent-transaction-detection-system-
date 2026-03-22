@@ -1,13 +1,15 @@
 const express = require('express');
 const controller = require('../controllers/reviewController');
 const appealReviewController = require('../controllers/appealReviewController');
+const { authenticateStaff } = require('../middleware/staffAuth');
 
 const router = express.Router();
+const requireReviewStaff = authenticateStaff(['fraud_analyst', 'fraud_manager']);
 
-router.get('/review-cases', controller.listCases.bind(controller));
-router.post('/review-cases/:transactionId/claim', controller.claimCase.bind(controller));
-router.post('/review-cases/:transactionId/release', controller.releaseCase.bind(controller));
-router.post('/review-cases/:transactionId/resolve', controller.submitDecision.bind(controller));
+router.get('/review-cases', requireReviewStaff, controller.listCases.bind(controller));
+router.post('/review-cases/:transactionId/claim', requireReviewStaff, controller.claimCase.bind(controller));
+router.post('/review-cases/:transactionId/release', requireReviewStaff, controller.releaseCase.bind(controller));
+router.post('/review-cases/:transactionId/resolve', requireReviewStaff, controller.submitDecision.bind(controller));
 
 /**
  * @openapi
@@ -19,7 +21,7 @@ router.post('/review-cases/:transactionId/resolve', controller.submitDecision.bi
  *       200:
  *         description: Pending cases returned
  */
-router.get('/reviews/pending', controller.listPending.bind(controller));
+router.get('/reviews/pending', requireReviewStaff, controller.listPending.bind(controller));
 /**
  * @openapi
  * /api/v1/reviews/{transactionId}:
@@ -38,7 +40,7 @@ router.get('/reviews/pending', controller.listPending.bind(controller));
  *       404:
  *         description: Review record not found
  */
-router.get('/reviews/:transactionId', controller.getByTransaction.bind(controller));
+router.get('/reviews/:transactionId', requireReviewStaff, controller.getByTransaction.bind(controller));
 /**
  * @openapi
  * /api/v1/reviews/{transactionId}/decision:
@@ -76,7 +78,7 @@ router.get('/reviews/:transactionId', controller.getByTransaction.bind(controlle
  *       400:
  *         description: Invalid decision payload
  */
-router.post('/reviews/:transactionId/decision', controller.submitDecision.bind(controller));
+router.post('/reviews/:transactionId/decision', requireReviewStaff, controller.submitDecision.bind(controller));
 
 /**
  * @openapi
@@ -88,7 +90,10 @@ router.post('/reviews/:transactionId/decision', controller.submitDecision.bind(c
  *       200:
  *         description: Pending appeals returned
  */
-router.get('/reviews/appeals/pending', appealReviewController.listPending.bind(appealReviewController));
+router.get('/reviews/appeals/pending', requireReviewStaff, appealReviewController.listPending.bind(appealReviewController));
+
+router.post('/reviews/appeals/:appealId/claim', requireReviewStaff, appealReviewController.claim.bind(appealReviewController));
+router.post('/reviews/appeals/:appealId/release', requireReviewStaff, appealReviewController.release.bind(appealReviewController));
 
 /**
  * @openapi
@@ -125,6 +130,6 @@ router.get('/reviews/appeals/pending', appealReviewController.listPending.bind(a
  *       404:
  *         description: Appeal not found
  */
-router.post('/reviews/appeals/:appealId/resolve', appealReviewController.resolve.bind(appealReviewController));
+router.post('/reviews/appeals/:appealId/resolve', requireReviewStaff, appealReviewController.resolve.bind(appealReviewController));
 
 module.exports = router;
