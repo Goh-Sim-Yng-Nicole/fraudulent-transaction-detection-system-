@@ -42,6 +42,6 @@ export const scoreRequestSchema = Joi.alternatives().try(
 );
 
 export const modelQuerySchema = Joi.object({
-  model_version: Joi.string().valid("v1", "v2").optional(),
+  model_version: Joi.string().min(1).optional(),
 }).unknown(true);
 

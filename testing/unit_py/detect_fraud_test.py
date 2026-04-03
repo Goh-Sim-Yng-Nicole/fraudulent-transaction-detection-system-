@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import httpx
+
 from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, patch
 
 from services.detect_fraud.config import decision_mode_uses_local_decisioning, settings
 from services.detect_fraud.decision_publisher import DecisionPublisher
+from services.detect_fraud.ml_scoring_client import MlScoringClient
 from services.detect_fraud.rules_engine import FraudRulesEngine
 from services.detect_fraud.velocity_store import VelocityStore
 
@@ -178,81 +181,90 @@ class FraudRulesEngineTests(IsolatedAsyncioTestCase):
         settings.__dict__.clear()
         settings.__dict__.update(self._settings_snapshot)
 
-    async def test_flags_high_value_first_time_recipient_activity(self) -> None:
+    async def test_flags_high_risk_country_and_unusual_time_activity(self) -> None:
         settings.max_txn_per_hour = 99
         settings.max_amount_per_hour = 1_000_000
-        settings.max_distinct_recipients_per_hour = 99
-        settings.max_distinct_merchants_per_hour = 99
-        settings.high_risk_countries = []
-        settings.high_risk_merchant_ids = []
-        settings.high_risk_merchant_prefixes = []
-        settings.high_amount_threshold = 9_999_999
+        settings.max_txn_per_day = 99
+        settings.high_risk_countries = ["NG"]
+        settings.high_amount_threshold = 5_000
         settings.suspicious_amount_threshold = 9_999_999
-        settings.prepaid_high_amount_threshold = 9_999_999
-        settings.first_time_recipient_review_amount = 1_000
 
         engine = FraudRulesEngine(VelocityStore())
         result = await engine.evaluate(
             {
-                "id": "txn-new-recipient",
+                "id": "txn-risk-country",
                 "customerId": "customer-1",
                 "merchantId": "FTDS_TRANSFER",
-                "amount": 2200,
+                "amount": 7800,
                 "currency": "SGD",
                 "cardType": "DEBIT",
-                "createdAt": "2026-03-22T14:30:00+00:00",
-                "location": {"country": "SG"},
-                "metadata": {
-                    "recipientCustomerId": "recipient-1",
-                    "recipientName": "Demo Recipient",
-                },
-            }
-        )
-
-        self.assertTrue(result["flagged"])
-        self.assertIn(
-            "high-value payment to a recipient not seen in recent activity (recipient-1)",
-            result["reasons"],
-        )
-        self.assertEqual(result["riskFactors"]["velocity"]["recipientSeenBefore"], False)
-
-    async def test_flags_high_risk_merchant_and_prepaid_combo(self) -> None:
-        settings.max_txn_per_hour = 99
-        settings.max_amount_per_hour = 1_000_000
-        settings.max_distinct_recipients_per_hour = 99
-        settings.max_distinct_merchants_per_hour = 99
-        settings.high_risk_countries = []
-        settings.high_risk_merchant_ids = []
-        settings.high_risk_merchant_prefixes = ["CRYPTO_"]
-        settings.high_risk_merchant_review_amount = 300
-        settings.high_amount_threshold = 9_999_999
-        settings.suspicious_amount_threshold = 9_999_999
-        settings.prepaid_high_amount_threshold = 2_000
-        settings.first_time_recipient_review_amount = 9_999_999
-
-        engine = FraudRulesEngine(VelocityStore())
-        result = await engine.evaluate(
-            {
-                "id": "txn-risky-merchant",
-                "customerId": "customer-2",
-                "merchantId": "CRYPTO_EXCHANGE_01",
-                "amount": 3200,
-                "currency": "USD",
-                "cardType": "PREPAID",
-                "createdAt": "2026-03-22T14:30:00+00:00",
-                "location": {"country": "SG"},
+                "createdAt": "2026-03-22T03:15:00+00:00",
+                "location": {"country": "NG"},
                 "metadata": {},
             }
         )
 
         self.assertTrue(result["flagged"])
-        self.assertIn("high-risk merchant pattern detected (CRYPTO_EXCHANGE_01)", result["reasons"])
-        self.assertIn(
-            "high-value prepaid transaction (3200 >= 2000)",
-            result["reasons"],
+        self.assertIn("Transaction originates from high-risk country: NG", result["reasons"])
+        self.assertEqual(result["riskFactors"]["geography"]["highRiskCountry"], True)
+        self.assertEqual(result["riskFactors"]["amount"]["highAmount"], True)
+        self.assertEqual(result["riskFactors"]["time"]["unusualTime"], True)
+
+    async def test_flags_daily_velocity_and_bin_blacklist(self) -> None:
+        settings.max_txn_per_hour = 99
+        settings.max_amount_per_hour = 1_000_000
+        settings.max_txn_per_day = 2
+        settings.high_risk_countries = []
+        settings.high_amount_threshold = 9_999_999
+        settings.suspicious_amount_threshold = 9_999_999
+        settings.bin_blacklist = ["411111"]
+
+        engine = FraudRulesEngine(VelocityStore())
+        await engine.evaluate(
+            {
+                "id": "txn-velocity-1",
+                "customerId": "customer-2",
+                "merchantId": "FTDS_CARD_TEST",
+                "amount": 100,
+                "currency": "USD",
+                "cardType": "PREPAID",
+                "createdAt": "2026-03-22T12:00:00+00:00",
+                "location": {"country": "SG"},
+                "metadata": {"cardBin": "411111"},
+            }
         )
-        self.assertEqual(result["riskFactors"]["merchant"]["highRiskMerchant"], True)
-        self.assertEqual(result["riskFactors"]["card"]["prepaidHighAmount"], True)
+        await engine.evaluate(
+            {
+                "id": "txn-velocity-2",
+                "customerId": "customer-2",
+                "merchantId": "FTDS_CARD_TEST",
+                "amount": 150,
+                "currency": "USD",
+                "cardType": "PREPAID",
+                "createdAt": "2026-03-22T13:00:00+00:00",
+                "location": {"country": "SG"},
+                "metadata": {"cardBin": "411111"},
+            }
+        )
+        result = await engine.evaluate(
+            {
+                "id": "txn-velocity-3",
+                "customerId": "customer-2",
+                "merchantId": "FTDS_CARD_TEST",
+                "amount": 200,
+                "currency": "USD",
+                "cardType": "PREPAID",
+                "createdAt": "2026-03-22T14:00:00+00:00",
+                "location": {"country": "SG"},
+                "metadata": {"cardBin": "411111"},
+            }
+        )
+
+        self.assertTrue(result["flagged"])
+        self.assertIn("Exceeded daily transaction count (3/2)", result["reasons"])
+        self.assertIn("Card BIN 411111 is on the blacklist", result["reasons"])
+        self.assertEqual(result["riskFactors"]["velocity"]["customerTransactionsLastDay"], 3)
+        self.assertEqual(result["riskFactors"]["card"]["binBlacklisted"], True)
 
 
 class DetectFraudIntegrationModeTests(IsolatedAsyncioTestCase):
@@ -273,3 +285,102 @@ class DetectFraudIntegrationModeTests(IsolatedAsyncioTestCase):
 
         settings.decision_integration_mode = "outsystems_http"
         self.assertTrue(decision_mode_uses_local_decisioning(settings.decision_integration_mode))
+
+
+class MlScoringClientTests(IsolatedAsyncioTestCase):
+    async def test_uses_slimmed_modern_payload_for_new_rule_factor_shape(self) -> None:
+        http_client = AsyncMock()
+        http_client.post.return_value = SimpleNamespace(
+            raise_for_status=lambda: None,
+            json=lambda: {
+                "success": True,
+                "data": {
+                    "score": 61,
+                    "confidence": 0.88,
+                    "modelVersion": "model-v1",
+                    "features": {"f_geo_high_risk": 1},
+                },
+            },
+        )
+        client = MlScoringClient(http_client)
+
+        result = await client.score(
+            transaction={
+                "id": "txn-modern",
+                "customerId": "customer-1",
+                "merchantId": "merchant-1",
+                "amount": 3200,
+                "currency": "USD",
+                "cardType": "PREPAID",
+                "location": {"country": "NG"},
+                "createdAt": "2026-04-03T14:00:00+00:00",
+                "metadata": {},
+            },
+            rule_results={
+                "flagged": True,
+                "reasons": ["risk detected"],
+                "riskFactors": {
+                    "velocity": {
+                        "countLastHour": 2,
+                        "customerTransactionsLastHour": 2,
+                    },
+                    "geography": {"highRiskCountry": True},
+                    "time": {"transactionHourUTC": 14},
+                    "amount": {"highAmount": True},
+                },
+            },
+        )
+
+        self.assertEqual(result["score"], 61)
+        modern_payload = http_client.post.await_args.kwargs["json"]
+        self.assertEqual(modern_payload["ruleResults"]["riskFactors"]["velocity"]["countLastHour"], 2)
+        self.assertEqual(modern_payload["ruleResults"]["riskFactors"]["geography"]["highRiskCountry"], True)
+        self.assertNotIn("time", modern_payload["ruleResults"]["riskFactors"])
+
+    async def test_legacy_fallback_accepts_transaction_hour_utc_shape(self) -> None:
+        http_client = AsyncMock()
+        http_client.post.side_effect = [
+            httpx.HTTPStatusError(
+                "bad modern request",
+                request=SimpleNamespace(),
+                response=SimpleNamespace(status_code=400),
+            ),
+            SimpleNamespace(
+                raise_for_status=lambda: None,
+                json=lambda: {
+                    "rules_score": 73,
+                    "model_version": "legacy-model",
+                    "confidence": 0.77,
+                },
+            ),
+        ]
+        client = MlScoringClient(http_client)
+
+        result = await client.score(
+            transaction={
+                "id": "txn-legacy",
+                "customerId": "customer-2",
+                "merchantId": "merchant-2",
+                "amount": 3300,
+                "currency": "USD",
+                "cardType": "PREPAID",
+                "location": {"country": "NG"},
+                "createdAt": "2026-04-03T03:15:00+00:00",
+                "metadata": {},
+            },
+            rule_results={
+                "flagged": True,
+                "reasons": ["high-risk country"],
+                "riskFactors": {
+                    "velocity": {"customerTransactionsLastHour": 4},
+                    "geography": {"highRiskCountry": True},
+                    "time": {"transactionHourUTC": 3},
+                },
+            },
+        )
+
+        self.assertEqual(result["score"], 73)
+        legacy_payload = http_client.post.await_args_list[1].kwargs["json"]
+        self.assertEqual(legacy_payload["hour_utc"], 3)
+        self.assertEqual(legacy_payload["velocity_txn_hour_raw"], 4)
+        self.assertEqual(legacy_payload["geo_country_high_risk"], True)

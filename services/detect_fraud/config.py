@@ -97,13 +97,15 @@ class Settings:
         self.high_risk_countries = [value.upper() for value in _env_csv("HIGH_RISK_COUNTRIES", "NG,RU,CN,PK")]
         self.high_amount_threshold = _env_float("HIGH_AMOUNT_THRESHOLD", 5000)
         self.suspicious_amount_threshold = _env_float("SUSPICIOUS_AMOUNT_THRESHOLD", 10000)
-        self.max_txn_per_hour = _env_int("VELOCITY_MAX_COUNT_PER_HOUR", 8)
-        self.max_amount_per_hour = _env_float("VELOCITY_MAX_AMOUNT_PER_HOUR", 15000)
+        self.max_txn_per_hour = _env_int("VELOCITY_MAX_COUNT_PER_HOUR", 10)
+        self.max_amount_per_hour = _env_float("VELOCITY_MAX_AMOUNT_PER_HOUR", 10000)
+        self.max_txn_per_day = _env_int("VELOCITY_MAX_COUNT_PER_DAY", 50)
         self.max_distinct_recipients_per_hour = _env_int("VELOCITY_MAX_DISTINCT_RECIPIENTS_PER_HOUR", 4)
         self.max_distinct_merchants_per_hour = _env_int("VELOCITY_MAX_DISTINCT_MERCHANTS_PER_HOUR", 5)
         self.first_time_recipient_review_amount = _env_float("FIRST_TIME_RECIPIENT_REVIEW_AMOUNT", 1500)
         self.high_risk_merchant_review_amount = _env_float("HIGH_RISK_MERCHANT_REVIEW_AMOUNT", 400)
         self.prepaid_high_amount_threshold = _env_float("PREPAID_HIGH_AMOUNT_THRESHOLD", 2500)
+        self.bin_blacklist = [value.strip() for value in _env_csv("BIN_BLACKLIST", "") if value.strip()]
         self.high_risk_merchant_ids = [
             value.upper() for value in _env_csv("HIGH_RISK_MERCHANT_IDS", "")
         ]
@@ -115,8 +117,18 @@ class Settings:
             )
         ]
 
-        self.rules_weight = _env_float("COMBINATION_RULES_WEIGHT", 0.45)
-        self.ml_weight = _env_float("COMBINATION_ML_WEIGHT", 0.55)
+        self.scoring_velocity_count_hour = _env_float("SCORING_VELOCITY_COUNT_HOUR", 15)
+        self.scoring_velocity_amount_hour = _env_float("SCORING_VELOCITY_AMOUNT_HOUR", 20)
+        self.scoring_velocity_count_day = _env_float("SCORING_VELOCITY_COUNT_DAY", 10)
+        self.scoring_high_risk_country = _env_float("SCORING_HIGH_RISK_COUNTRY", 25)
+        self.scoring_suspicious_amount = _env_float("SCORING_SUSPICIOUS_AMOUNT", 30)
+        self.scoring_high_amount = _env_float("SCORING_HIGH_AMOUNT", 10)
+        self.scoring_unusual_time = _env_float("SCORING_UNUSUAL_TIME", 5)
+        self.scoring_round_amount = _env_float("SCORING_ROUND_AMOUNT", 5)
+        self.scoring_bin_blacklist = _env_float("SCORING_BIN_BLACKLIST", 40)
+
+        self.rules_weight = _env_float("COMBINATION_RULES_WEIGHT", 0.4)
+        self.ml_weight = _env_float("COMBINATION_ML_WEIGHT", 0.6)
         self.ml_flag_threshold = _env_float("ML_FLAG_THRESHOLD", 70)
 
         if configured_decision_mode in {"local", "outsystems_http", "outsystems_kafka"}:
