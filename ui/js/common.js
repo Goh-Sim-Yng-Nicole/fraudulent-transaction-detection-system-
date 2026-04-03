@@ -31,13 +31,14 @@ const toJsonSafely = async (response) => {
 };
 
 export const fetchJson = async (url, options = {}, handlers = {}) => {
+  const optionHeaders = options.headers || {};
   const response = await fetch(url, {
+    ...options,
     credentials: 'same-origin',
     headers: {
       'Content-Type': 'application/json',
-      ...(options.headers || {}),
+      ...optionHeaders,
     },
-    ...options,
   });
 
   if (response.status === 401 && handlers.onUnauthorized) {
