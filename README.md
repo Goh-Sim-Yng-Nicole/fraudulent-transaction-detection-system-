@@ -178,9 +178,9 @@ This is the easiest way to demo the project end to end.
 ### Customer Demo
 
 1. Open [http://localhost:8088/banking.html](http://localhost:8088/banking.html).
-2. Register a new customer account.
-3. When login asks for OTP, open Mailpit at [http://localhost:8025](http://localhost:8025) and read the latest OTP email.
-4. Verify the OTP and enter the banking portal.
+2. Register a new customer account (or choose Google OAuth if configured).
+3. When prompted for OTP, open Mailpit at [http://localhost:8025](http://localhost:8025) and read the latest OTP email.
+4. Verify the OTP to enter the banking portal.
 
 ### Submit A Normal Transaction
 
@@ -362,4 +362,5 @@ testing/
 - A self-signed cert warning on `https://localhost` is expected locally.
 - If the manager dashboard looks stale after a rebuild, refresh after new events are generated.
 - If OutSystems is connected, decisioning can be handed off externally by switching `DECISION_INTEGRATION_MODE`.
+
 

@@ -13,11 +13,19 @@ const phoneCodes = [
   '+65', '+60', '+62', '+63', '+66', '+84', '+86', '+81', '+82', '+91', '+44', '+1', '+61',
 ];
 
+const decodeBase64UrlJson = (value) => {
+  const normalized = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
+  const padding = normalized.length % 4 ? '='.repeat(4 - (normalized.length % 4)) : '';
+  const binary = window.atob(`${normalized}${padding}`);
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  return JSON.parse(new TextDecoder().decode(bytes));
+};
+
 const App = () => {
   const [tab, setTab] = useState('login');
   const [pendingEmail, setPendingEmail] = useState('');
   const [alert, setAlert] = useState(null);
-  const [loading, setLoading] = useState({ login: false, register: false, otp: false, resend: false });
+  const [loading, setLoading] = useState({ login: false, register: false, otp: false, resend: false, oauth: false });
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [registerForm, setRegisterForm] = useState({
     fullName: '',
@@ -29,6 +37,30 @@ const App = () => {
   const [otpCode, setOtpCode] = useState('');
 
   useEffect(() => {
+    const oauthPayload = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const oauthError = oauthPayload.get('oauth_error');
+    const oauthToken = oauthPayload.get('oauth_token');
+    const oauthCustomer = oauthPayload.get('oauth_customer');
+    const oauthNext = oauthPayload.get('oauth_next') || '/banking';
+
+    if (oauthError) {
+      setAlert({ type: 'danger', message: oauthError });
+      window.history.replaceState({}, '', '/index.html');
+      return;
+    }
+
+    if (oauthToken && oauthCustomer) {
+      try {
+        const customer = decodeBase64UrlJson(oauthCustomer);
+        writeCustomerSession(oauthToken, customer);
+        window.location.href = oauthNext.startsWith('/') ? oauthNext : '/banking';
+        return;
+      } catch (_error) {
+        setAlert({ type: 'danger', message: 'OAuth sign-in data was invalid. Please try again.' });
+        window.history.replaceState({}, '', '/index.html');
+      }
+    }
+
     if (readCustomerSession()) {
       window.location.href = '/banking';
     }
@@ -82,13 +114,30 @@ const App = () => {
           password: registerForm.password,
         }),
       });
-      writeCustomerSession(payload.access_token, payload.customer);
-      window.location.href = '/banking';
+      if (payload.requires_otp) {
+        setPendingEmail(registerForm.email.trim());
+        setAlert({ type: 'success', message: payload.message || 'Verification code sent to your email.' });
+        return;
+      }
+
+      if (payload.access_token && payload.customer) {
+        writeCustomerSession(payload.access_token, payload.customer);
+        window.location.href = '/banking';
+        return;
+      }
+
+      throw new Error('Unexpected registration response');
     } catch (error) {
       setAlert({ type: 'danger', message: error.message });
     } finally {
       setBusy('register', false);
     }
+  };
+
+  const startOAuth = (provider = 'google') => {
+    setBusy('oauth', true);
+    const query = new URLSearchParams({ provider, next: '/banking' });
+    window.location.href = `${API_ROOT}/auth/oauth/start?${query.toString()}`;
   };
 
   const submitOtp = async (event) => {
@@ -188,6 +237,11 @@ const App = () => {
               </div>
             </form>
           ` : html`
+            <div style=${{ marginBottom: '0.9rem' }}>
+              <button className="btn btn-ghost" type="button" disabled=${loading.oauth} onClick=${() => startOAuth('google')}>
+                ${loading.oauth ? 'Redirecting...' : 'Continue with Google'}
+              </button>
+            </div>
             <div className="tabs" role="tablist" style=${{ marginBottom: '0.9rem' }}>
               <button className=${`tab ${tab === 'login' ? 'active' : ''}`} type="button" onClick=${() => setTab('login')}>Sign in</button>
               <button className=${`tab ${tab === 'register' ? 'active' : ''}`} type="button" onClick=${() => setTab('register')}>Create account</button>

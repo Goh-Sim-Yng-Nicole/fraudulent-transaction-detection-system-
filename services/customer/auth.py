@@ -119,6 +119,7 @@ async def send_otp_email(to_email: str, full_name: str, code: str, purpose: str 
 
     subject_map = {
         "login": "Your FTDS login verification code",
+        "register": "Verify your new FTDS account",
         "change_password": "Confirm your FTDS password change",
         "delete_account": "Confirm your FTDS account deletion",
     }
