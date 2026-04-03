@@ -615,7 +615,6 @@ services:
   jaeger:
     image: cr.jaegertracing.io/jaegertracing/jaeger:2.14.0
     command:
-      - '--query.base-path=/jaeger'
       - '--set=extensions.jaeger_query.ui.config_file=/etc/jaeger/ui-config.json'
       - '--set=extensions.jaeger_storage.metric_backends.prometheus_backend.prometheus.endpoint=http://prometheus:9090'
       - '--set=extensions.jaeger_storage.metric_backends.prometheus_backend.prometheus.normalize_calls=true'
