@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, patch
 
-from services.detect_fraud.config import settings
+from services.detect_fraud.config import decision_mode_uses_local_decisioning, settings
 from services.detect_fraud.decision_publisher import DecisionPublisher
 from services.detect_fraud.rules_engine import FraudRulesEngine
 from services.detect_fraud.velocity_store import VelocityStore
@@ -253,3 +253,23 @@ class FraudRulesEngineTests(IsolatedAsyncioTestCase):
         )
         self.assertEqual(result["riskFactors"]["merchant"]["highRiskMerchant"], True)
         self.assertEqual(result["riskFactors"]["card"]["prepaidHighAmount"], True)
+
+
+class DetectFraudIntegrationModeTests(IsolatedAsyncioTestCase):
+    def setUp(self) -> None:
+        self._settings_snapshot = settings.__dict__.copy()
+
+    def tearDown(self) -> None:
+        settings.__dict__.clear()
+        settings.__dict__.update(self._settings_snapshot)
+
+    async def test_outsystems_kafka_mode_defers_local_decision_publication(self) -> None:
+        settings.decision_integration_mode = "outsystems_kafka"
+        self.assertFalse(decision_mode_uses_local_decisioning(settings.decision_integration_mode))
+
+    async def test_local_and_http_modes_publish_local_decisions(self) -> None:
+        settings.decision_integration_mode = "local"
+        self.assertTrue(decision_mode_uses_local_decisioning(settings.decision_integration_mode))
+
+        settings.decision_integration_mode = "outsystems_http"
+        self.assertTrue(decision_mode_uses_local_decisioning(settings.decision_integration_mode))

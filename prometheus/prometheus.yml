@@ -25,6 +25,11 @@ scrape_configs:
     static_configs:
       - targets: ['fraud-score:8001']
 
+  - job_name: decision
+    metrics_path: /api/v1/metrics
+    static_configs:
+      - targets: ['decision:3005']
+
   - job_name: audit
     metrics_path: /api/v1/metrics
     static_configs:

@@ -15,7 +15,7 @@ from aiokafka.coordinator.assignors.roundrobin import RoundRobinPartitionAssigno
 from fastapi import APIRouter, FastAPI
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
-from services.detect_fraud.config import settings
+from services.detect_fraud.config import decision_mode_uses_local_decisioning, settings
 from services.detect_fraud.decision_publisher import DecisionPublisher
 from services.detect_fraud.fraud_detection_service import FraudDetectionService
 from services.detect_fraud.ml_scoring_client import MlScoringClient
@@ -180,6 +180,14 @@ async def _publish_scored_event(
     )
 
 
+def _correlation_id_for(payload: dict[str, Any], transaction: dict[str, Any]) -> str:
+    return payload.get("correlationId") or payload.get("trace_id") or transaction["id"]
+
+
+def _should_publish_local_decision() -> bool:
+    return decision_mode_uses_local_decisioning(settings.decision_integration_mode)
+
+
 async def _handle_message(message: Any) -> None:
     raw_bytes = message.value
     raw_payload = raw_bytes.decode("utf-8", errors="replace") if raw_bytes else None
@@ -228,12 +236,22 @@ async def _handle_message(message: Any) -> None:
 
     fraud_analysis = await state.fraud_detection_service.analyze_transaction(transaction)
     await _publish_scored_event(transaction, payload, fraud_analysis)
-    await state.decision_publisher.process(
-        producer=state.producer,
-        transaction=transaction,
-        fraud_analysis=fraud_analysis,
-        correlation_id=payload.get("correlationId") or payload.get("trace_id") or transaction["id"],
-    )
+    if _should_publish_local_decision():
+        await state.decision_publisher.process(
+            producer=state.producer,
+            transaction=transaction,
+            fraud_analysis=fraud_analysis,
+            correlation_id=_correlation_id_for(payload, transaction),
+        )
+    else:
+        logger.info(
+            "Published transaction.scored and deferred final decision to external Kafka consumer",
+            extra={
+                "transactionId": transaction["id"],
+                "decisionIntegrationMode": settings.decision_integration_mode,
+                "correlationId": _correlation_id_for(payload, transaction),
+            },
+        )
     await state.consumer.commit()
 
 
@@ -336,21 +354,33 @@ async def api_docs_json() -> JSONResponse:
 
 @router.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "ok"}
+    return {"status": "ok", "decisionIntegrationMode": settings.decision_integration_mode}
 
 
 @router.get("/health/live")
 async def health_live() -> dict[str, str]:
-    return {"status": "ok"}
+    return {"status": "ok", "decisionIntegrationMode": settings.decision_integration_mode}
 
 
 @router.get("/health/ready")
 async def health_ready() -> JSONResponse:
     if state.ready:
-        return JSONResponse(content={"status": "ok"})
+        return JSONResponse(
+            content={
+                "status": "ok",
+                "decisionIntegrationMode": settings.decision_integration_mode,
+            }
+        )
 
     detail = str(state.processing_error) if state.processing_error else "consumer not ready"
-    return JSONResponse(status_code=503, content={"status": "degraded", "detail": detail})
+    return JSONResponse(
+        status_code=503,
+        content={
+            "status": "degraded",
+            "detail": detail,
+            "decisionIntegrationMode": settings.decision_integration_mode,
+        },
+    )
 
 
 app.include_router(router)
