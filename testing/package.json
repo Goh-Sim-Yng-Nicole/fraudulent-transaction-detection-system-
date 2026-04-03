@@ -9,6 +9,7 @@
     "smoke": "node ./smoke-health.mjs",
     "contracts": "node ./service-contracts.mjs",
     "e2e": "node ./e2e-platform.mjs",
+    "journey": "node ./full-platform-journey.mjs",
     "verify": "npm run unit && npm run smoke && npm run contracts && npm run e2e"
   }
 }

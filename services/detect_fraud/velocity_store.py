@@ -23,8 +23,8 @@ class VelocityStore:
 
     def _prune_memory(self, customer_id: str, now_ms: float) -> list[dict[str, object]]:
         current = self._memory_window.get(customer_id, [])
-        one_hour_ago = now_ms - 60 * 60 * 1000
-        kept = [entry for entry in current if entry["timestamp"] >= one_hour_ago]
+        one_day_ago = now_ms - 24 * 60 * 60 * 1000
+        kept = [entry for entry in current if entry["timestamp"] >= one_day_ago]
         self._memory_window[customer_id] = kept
         return kept
 
@@ -42,33 +42,39 @@ class VelocityStore:
         recipient_key: str | None,
         merchant_key: str | None,
     ) -> dict[str, float | bool]:
+        latest_ts = max((float(entry["timestamp"]) for entry in entries), default=0.0)
+        one_hour_ago = latest_ts - 60 * 60 * 1000
+        hour_entries = [entry for entry in entries if float(entry["timestamp"]) >= one_hour_ago]
         distinct_recipients = {
             str(entry["recipient"])
-            for entry in entries
+            for entry in hour_entries
             if entry.get("recipient")
         }
         distinct_merchants = {
             str(entry["merchant"])
-            for entry in entries
+            for entry in hour_entries
             if entry.get("merchant")
         }
         merchant_entries = [
             entry
-            for entry in entries
+            for entry in hour_entries
             if merchant_key and entry.get("merchant") == merchant_key
         ]
         recipient_seen_before = bool(
             recipient_key
-            and any(entry.get("recipient") == recipient_key for entry in entries[:-1])
+            and any(entry.get("recipient") == recipient_key for entry in hour_entries[:-1])
         )
         merchant_seen_before = bool(
             merchant_key
-            and any(entry.get("merchant") == merchant_key for entry in entries[:-1])
+            and any(entry.get("merchant") == merchant_key for entry in hour_entries[:-1])
         )
+        hour_count = float(len(hour_entries))
+        hour_amount = float(sum(float(entry["amount"]) for entry in hour_entries))
+        day_count = float(len(entries))
 
         return {
-            "countLastHour": float(len(entries)),
-            "amountLastHour": float(sum(float(entry["amount"]) for entry in entries)),
+            "countLastHour": hour_count,
+            "amountLastHour": hour_amount,
             "distinctRecipientsLastHour": float(len(distinct_recipients)),
             "distinctMerchantsLastHour": float(len(distinct_merchants)),
             "recipientSeenBefore": recipient_seen_before,
@@ -77,6 +83,9 @@ class VelocityStore:
             "merchantAmountLastHour": float(
                 sum(float(entry["amount"]) for entry in merchant_entries)
             ),
+            "customerTransactionsLastHour": hour_count,
+            "customerAmountLastHour": hour_amount,
+            "customerTransactionsLastDay": day_count,
         }
 
     async def _get_client(self) -> Redis | None:
@@ -138,13 +147,13 @@ class VelocityStore:
             )
 
         key = f"fraud:velocity:{customer_id}"
-        one_hour_ago = current_ms - 60 * 60 * 1000
+        one_day_ago = current_ms - 24 * 60 * 60 * 1000
 
-        await redis_client.zremrangebyscore(key, 0, one_hour_ago)
+        await redis_client.zremrangebyscore(key, 0, one_day_ago)
         serialized_entry = json.dumps(entry, separators=(",", ":"), sort_keys=True)
         await redis_client.zadd(key, {serialized_entry: current_ms})
-        await redis_client.expire(key, 3600)
-        raw_entries = await redis_client.zrangebyscore(key, one_hour_ago, "+inf")
+        await redis_client.expire(key, 86400)
+        raw_entries = await redis_client.zrangebyscore(key, one_day_ago, "+inf")
         entries = [json.loads(raw_entry) for raw_entry in raw_entries]
         return self._summarize_window(
             entries=entries,

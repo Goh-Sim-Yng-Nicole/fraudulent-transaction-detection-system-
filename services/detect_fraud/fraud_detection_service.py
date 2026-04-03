@@ -21,10 +21,12 @@ class FraudDetectionService:
             + float(ml_results["score"]) * settings.ml_weight
         )
 
-        flagged = bool(rule_results["flagged"]) or float(ml_results["score"]) >= settings.ml_flag_threshold
+        flagged = bool(rule_results["flagged"]) or float(ml_results["score"]) > settings.ml_flag_threshold
         reasons = list(rule_results["reasons"])
-        if float(ml_results["score"]) >= settings.ml_flag_threshold:
-            reasons.append(f"ml score exceeded threshold ({int(ml_results['score'])}/{int(settings.ml_flag_threshold)})")
+        if float(ml_results["score"]) > settings.ml_flag_threshold:
+            reasons.append(
+                f"ML model score {int(ml_results['score'])} exceeds threshold ({int(settings.ml_flag_threshold)})"
+            )
 
         return {
             "transactionId": transaction["id"],
@@ -36,7 +38,13 @@ class FraudDetectionService:
             "flagged": flagged,
             "reasons": reasons,
             "ruleResults": rule_results,
-            "mlResults": ml_results,
+            "mlResults": {
+                "score": ml_results["score"],
+                "modelVersion": ml_results["modelVersion"],
+                "confidence": ml_results.get("confidence"),
+                "features": ml_results.get("features") or {},
+                "isFallback": ml_results["modelVersion"] == "fallback-v1",
+            },
             "analyzedAt": datetime.now(timezone.utc).isoformat(),
             "analysisVersion": "2.0.0",
         }
