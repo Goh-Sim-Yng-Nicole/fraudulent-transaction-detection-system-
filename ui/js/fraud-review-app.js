@@ -9,7 +9,7 @@ import {
   formatNumber,
 } from './common.js';
 
-const loginUrl = '/staff-sign-in?redirect=/fraud-review';
+const loginUrl = '/staff?redirect=/analyst';
 
 const queueStatusClass = (status) => {
   const value = String(status || '').toLowerCase();
@@ -34,7 +34,7 @@ const App = () => {
 
   const handlers = useMemo(() => ({
     onUnauthorized: () => { window.location.href = loginUrl; },
-    onForbidden: () => { window.location.href = '/forbidden.html'; },
+    onForbidden: () => { window.location.href = '/forbidden'; },
   }), []);
 
   const currentUserId = state.user?.userId || '';

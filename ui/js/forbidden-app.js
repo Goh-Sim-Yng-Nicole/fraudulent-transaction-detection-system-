@@ -11,8 +11,8 @@ const App = () => html`
       <div className="card-body row space-between">
         <div className="muted small">Sign in with a role that has access, or return to the appropriate console.</div>
         <div className="row">
-          <a className="btn btn-ghost" href="/staff-sign-in">Staff sign in</a>
-          <a className="btn btn-primary" href="/manager">Manager console</a>
+          <a className="btn btn-ghost" href="/staff">Staff sign in</a>
+          <a className="btn btn-primary" href="/operations">Operations console</a>
         </div>
       </div>
     </section>

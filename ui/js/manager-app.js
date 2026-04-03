@@ -9,11 +9,15 @@ import {
   formatPercent,
 } from './common.js';
 
-const loginUrl = '/staff-sign-in?redirect=/manager';
+const loginUrl = '/staff?redirect=/manager';
 
 const roleIsOps = (role) => String(role || '').startsWith('ops_');
 
 const formatDecimal = (value) => Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 1 });
+const externalUrlForPort = (port) => {
+  const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+  return `${protocol}//${window.location.hostname}:${port}/`;
+};
 
 const App = () => {
   const [state, setState] = useState({
@@ -27,7 +31,7 @@ const App = () => {
 
   const handlers = useMemo(() => ({
     onUnauthorized: () => { window.location.href = loginUrl; },
-    onForbidden: () => { window.location.href = '/forbidden.html'; },
+    onForbidden: () => { window.location.href = '/forbidden'; },
   }), []);
 
   const refresh = async () => {
@@ -100,13 +104,13 @@ const App = () => {
   ];
 
   const opsLinks = [
-    { title: 'Grafana', description: 'Dashboards and service KPIs', href: 'http://localhost:3000/' },
-    { title: 'Jaeger', description: 'Distributed tracing and latency paths', href: 'http://localhost:16686/' },
-    { title: 'Prometheus', description: 'Metrics and target health', href: 'http://localhost:9090/' },
-    { title: 'cAdvisor', description: 'Container runtime resource telemetry', href: 'http://localhost:9091/' },
+    { title: 'Grafana', description: 'Dashboards and service KPIs', href: externalUrlForPort(3000) },
+    { title: 'Jaeger', description: 'Distributed tracing and latency paths', href: externalUrlForPort(16686) },
+    { title: 'Prometheus', description: 'Metrics and target health', href: externalUrlForPort(9090) },
+    { title: 'cAdvisor', description: 'Container runtime resource telemetry', href: externalUrlForPort(9091) },
   ];
   if (state.user?.role === 'ops_admin') {
-    opsLinks.push({ title: 'Mailpit', description: 'OTP and operational mail inbox', href: 'http://localhost:8025/' });
+    opsLinks.push({ title: 'Mailpit', description: 'OTP and operational mail inbox', href: externalUrlForPort(8025) });
   }
 
   return html`

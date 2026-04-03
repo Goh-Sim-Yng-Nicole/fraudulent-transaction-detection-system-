@@ -7,26 +7,31 @@ import {
   fetchJson,
 } from './common.js';
 
+const externalOriginForPort = (port) => {
+  const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+  return `${protocol}//${window.location.hostname}:${port}`;
+};
+
 const roleAccess = {
   fraud_analyst: {
-    defaultTarget: '/fraud-review',
-    allowedPaths: ['/fraud-review', '/fraud-review.html'],
-    allowedOrigins: [],
+    defaultTarget: '/analyst',
+    allowedPaths: ['/analyst', '/fraud-review', '/fraud-review.html'],
+    allowedPorts: [],
   },
   fraud_manager: {
     defaultTarget: '/manager',
-    allowedPaths: ['/fraud-review', '/fraud-review.html', '/manager', '/manager.html'],
-    allowedOrigins: [],
+    allowedPaths: ['/analyst', '/fraud-review', '/fraud-review.html', '/manager', '/manager.html', '/operations'],
+    allowedPorts: [],
   },
   ops_readonly: {
-    defaultTarget: '/manager',
-    allowedPaths: ['/manager', '/manager.html'],
-    allowedOrigins: ['http://localhost:3000', 'http://localhost:16686', 'http://localhost:9090', 'http://localhost:9091'],
+    defaultTarget: '/operations',
+    allowedPaths: ['/manager', '/manager.html', '/operations'],
+    allowedPorts: [3000, 16686, 9090, 9091],
   },
   ops_admin: {
-    defaultTarget: '/manager',
-    allowedPaths: ['/manager', '/manager.html'],
-    allowedOrigins: ['http://localhost:3000', 'http://localhost:16686', 'http://localhost:9090', 'http://localhost:9091', 'http://localhost:8025'],
+    defaultTarget: '/operations',
+    allowedPaths: ['/manager', '/manager.html', '/operations'],
+    allowedPorts: [3000, 16686, 9090, 9091, 8025],
   },
 };
 
@@ -60,6 +65,7 @@ const isRoleAllowedForRedirect = (role, target) => {
     const url = new URL(target, window.location.origin);
     if (
       url.pathname === '/staff-login.html'
+      || url.pathname === '/staff'
       || url.pathname === '/staff-sign-in'
       || url.pathname === '/forbidden.html'
       || url.pathname === '/forbidden'
@@ -67,7 +73,7 @@ const isRoleAllowedForRedirect = (role, target) => {
       return false;
     }
     if (url.origin === window.location.origin) return access.allowedPaths.includes(url.pathname);
-    return access.allowedOrigins.includes(url.origin);
+    return (access.allowedPorts || []).map((port) => externalOriginForPort(port)).includes(url.origin);
   } catch (_error) {
     return false;
   }

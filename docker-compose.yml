@@ -372,7 +372,7 @@ services:
       EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:-alerts@ftds.local}
       EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-FTDS Notifications}
       SMS_ENABLED: ${SMS_ENABLED:-false}
-      CUSTOMER_PORTAL_URL: ${CUSTOMER_PORTAL_URL:-http://localhost:8088/banking.html}
+      CUSTOMER_PORTAL_URL: ${CUSTOMER_PORTAL_URL:-http://localhost:8088/banking}
       NOTIFY_ON_APPROVED: ${NOTIFY_ON_APPROVED:-true}
       NOTIFY_ON_DECLINED: ${NOTIFY_ON_DECLINED:-true}
       NOTIFY_ON_FLAGGED: ${NOTIFY_ON_FLAGGED:-true}
@@ -523,6 +523,8 @@ services:
     build:
       context: .
       dockerfile: nginx/Dockerfile
+      args:
+        TLS_CERT_HOST: ${DEPLOYMENT_HOST:-localhost}
     ports:
       - '8088:8088'
       - '443:8443'
