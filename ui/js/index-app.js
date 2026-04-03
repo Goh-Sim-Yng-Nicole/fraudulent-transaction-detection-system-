@@ -30,7 +30,7 @@ const App = () => {
 
   useEffect(() => {
     if (readCustomerSession()) {
-      window.location.href = '/banking.html';
+      window.location.href = '/banking';
     }
   }, []);
 
@@ -56,7 +56,7 @@ const App = () => {
 
       if (payload.access_token && payload.customer) {
         writeCustomerSession(payload.access_token, payload.customer);
-        window.location.href = '/banking.html';
+        window.location.href = '/banking';
         return;
       }
 
@@ -83,7 +83,7 @@ const App = () => {
         }),
       });
       writeCustomerSession(payload.access_token, payload.customer);
-      window.location.href = '/banking.html';
+      window.location.href = '/banking';
     } catch (error) {
       setAlert({ type: 'danger', message: error.message });
     } finally {
@@ -104,7 +104,7 @@ const App = () => {
         }),
       });
       writeCustomerSession(payload.access_token, payload.customer);
-      window.location.href = '/banking.html';
+      window.location.href = '/banking';
     } catch (error) {
       setAlert({ type: 'danger', message: error.message });
       setOtpCode('');
@@ -288,7 +288,7 @@ const App = () => {
             <div className="title-sm">Staff sign-in</div>
             <div className="muted small">Fraud analysts, managers, and ops users sign in through the protected staff console.</div>
           </div>
-          <a className="btn btn-ghost" href="/staff-login.html">Open staff console</a>
+          <a className="btn btn-ghost" href="/staff-sign-in">Open staff console</a>
         </div>
       </section>
     </div>

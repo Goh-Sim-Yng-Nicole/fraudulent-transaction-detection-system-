@@ -9,7 +9,7 @@ import {
   formatPercent,
 } from './common.js';
 
-const loginUrl = '/staff-login.html?redirect=/manager.html';
+const loginUrl = '/staff-sign-in?redirect=/manager';
 
 const roleIsOps = (role) => String(role || '').startsWith('ops_');
 

@@ -9,7 +9,7 @@ import {
   formatNumber,
 } from './common.js';
 
-const loginUrl = '/staff-login.html?redirect=/fraud-review.html';
+const loginUrl = '/staff-sign-in?redirect=/fraud-review';
 
 const queueStatusClass = (status) => {
   const value = String(status || '').toLowerCase();

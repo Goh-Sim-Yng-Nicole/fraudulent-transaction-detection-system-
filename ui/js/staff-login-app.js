@@ -9,23 +9,23 @@ import {
 
 const roleAccess = {
   fraud_analyst: {
-    defaultTarget: '/fraud-review.html',
-    allowedPaths: ['/fraud-review.html'],
+    defaultTarget: '/fraud-review',
+    allowedPaths: ['/fraud-review', '/fraud-review.html'],
     allowedOrigins: [],
   },
   fraud_manager: {
-    defaultTarget: '/manager.html',
-    allowedPaths: ['/fraud-review.html', '/manager.html'],
+    defaultTarget: '/manager',
+    allowedPaths: ['/fraud-review', '/fraud-review.html', '/manager', '/manager.html'],
     allowedOrigins: [],
   },
   ops_readonly: {
-    defaultTarget: '/manager.html',
-    allowedPaths: ['/manager.html'],
+    defaultTarget: '/manager',
+    allowedPaths: ['/manager', '/manager.html'],
     allowedOrigins: ['http://localhost:3000', 'http://localhost:16686', 'http://localhost:9090', 'http://localhost:9091'],
   },
   ops_admin: {
-    defaultTarget: '/manager.html',
-    allowedPaths: ['/manager.html'],
+    defaultTarget: '/manager',
+    allowedPaths: ['/manager', '/manager.html'],
     allowedOrigins: ['http://localhost:3000', 'http://localhost:16686', 'http://localhost:9090', 'http://localhost:9091', 'http://localhost:8025'],
   },
 };
@@ -58,7 +58,14 @@ const isRoleAllowedForRedirect = (role, target) => {
   if (!access || !target) return false;
   try {
     const url = new URL(target, window.location.origin);
-    if (url.pathname === '/staff-login.html' || url.pathname === '/forbidden.html') return false;
+    if (
+      url.pathname === '/staff-login.html'
+      || url.pathname === '/staff-sign-in'
+      || url.pathname === '/forbidden.html'
+      || url.pathname === '/forbidden'
+    ) {
+      return false;
+    }
     if (url.origin === window.location.origin) return access.allowedPaths.includes(url.pathname);
     return access.allowedOrigins.includes(url.origin);
   } catch (_error) {
@@ -71,7 +78,7 @@ const resolveRedirect = (user, redirectTo) => {
   if (access && isRoleAllowedForRedirect(user.role, redirectTo)) {
     return new URL(redirectTo, window.location.origin).toString();
   }
-  return access?.defaultTarget || '/manager.html';
+  return access?.defaultTarget || '/manager';
 };
 
 const App = () => {
@@ -174,8 +181,8 @@ const App = () => {
                 ${loading ? 'Signing in...' : 'Sign in'}
               </button>
             </form>
-            <div className="muted small" style=${{ marginTop: '0.9rem' }}>
-              Customers continue through <a href="/index.html">the banking customer portal</a>.
+          <div className="muted small" style=${{ marginTop: '0.9rem' }}>
+              Customers continue through <a href="/banking">the banking customer portal</a>.
             </div>
           </div>
         </div>
