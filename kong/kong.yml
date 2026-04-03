@@ -7,18 +7,21 @@ services:
     routes:
       # Public: auth endpoints (register, login, OTP) — no JWT required
       - name: ftds-auth
+        preserve_host: true
         paths:
           - /api/auth
         strip_path: false
 
       # Public: static UI files
       - name: ftds-ui
+        preserve_host: true
         paths:
           - /
         strip_path: false
 
       # Protected: customer profile, transactions, fraud review — JWT required
       - name: ftds-protected
+        preserve_host: true
         paths:
           - /api/customers
           - /api/customer
@@ -40,3 +43,4 @@ consumers:
       - algorithm: HS256
         key: ftds-customer-service
         secret: ftds-dev-secret-change-in-production-32chars
+
