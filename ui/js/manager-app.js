@@ -14,6 +14,7 @@ const loginUrl = '/staff?redirect=/manager';
 const roleIsOps = (role) => String(role || '').startsWith('ops_');
 
 const formatDecimal = (value) => Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 1 });
+const appPathUrl = (path) => new URL(path, window.location.origin).toString();
 const externalUrlForPort = (port) => {
   const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
   return `${protocol}//${window.location.hostname}:${port}/`;
@@ -104,8 +105,8 @@ const App = () => {
   ];
 
   const opsLinks = [
-    { title: 'Grafana', description: 'Dashboards and service KPIs', href: externalUrlForPort(3000) },
-    { title: 'Jaeger', description: 'Distributed tracing and latency paths', href: externalUrlForPort(16686) },
+    { title: 'Grafana', description: 'Dashboards and service KPIs', href: appPathUrl('/grafana/') },
+    { title: 'Jaeger', description: 'Distributed tracing and latency paths', href: appPathUrl('/jaeger/') },
     { title: 'Prometheus', description: 'Metrics and target health', href: externalUrlForPort(9090) },
     { title: 'cAdvisor', description: 'Container runtime resource telemetry', href: externalUrlForPort(9091) },
   ];

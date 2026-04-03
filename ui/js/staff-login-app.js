@@ -25,12 +25,12 @@ const roleAccess = {
   },
   ops_readonly: {
     defaultTarget: '/operations',
-    allowedPaths: ['/manager', '/manager.html', '/operations'],
+    allowedPaths: ['/manager', '/manager.html', '/operations', '/grafana', '/grafana/', '/jaeger', '/jaeger/'],
     allowedPorts: [3000, 16686, 9090, 9091],
   },
   ops_admin: {
     defaultTarget: '/operations',
-    allowedPaths: ['/manager', '/manager.html', '/operations'],
+    allowedPaths: ['/manager', '/manager.html', '/operations', '/grafana', '/grafana/', '/jaeger', '/jaeger/'],
     allowedPorts: [3000, 16686, 9090, 9091, 8025],
   },
 };
