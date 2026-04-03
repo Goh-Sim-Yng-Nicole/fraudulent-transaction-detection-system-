@@ -99,6 +99,11 @@ class TokenResponse(BaseModel):
     customer: CustomerResponse
 
 
+class OtpChallengeResponse(BaseModel):
+    requires_otp: bool = True
+    message: str
+
+
 class CustomerUpdateRequest(BaseModel):
     full_name: str | None = None
     phone: str | None = None
@@ -253,7 +258,7 @@ async def health_ready() -> dict[str, str]:
 
 # ─── Auth ─────────────────────────────────────────────────────────────────────
 
-@app.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+@app.post("/register", response_model=OtpChallengeResponse, status_code=status.HTTP_201_CREATED)
 async def register(payload: CustomerRegisterRequest, db: AsyncSession = Depends(get_db)) -> Any:
     result = await db.execute(select(Customer).where(Customer.email == payload.email))
     customer = result.scalar_one_or_none()
@@ -279,8 +284,8 @@ async def register(payload: CustomerRegisterRequest, db: AsyncSession = Depends(
     await db.commit()
     await db.refresh(customer)
 
-    token = create_access_token(str(customer.customer_id))
-    return TokenResponse(access_token=token, customer=CustomerResponse.model_validate(customer))
+    await _create_and_send_otp(customer, db, purpose="register")
+    return OtpChallengeResponse(message=f"Verification code sent to {customer.email}")
 
 
 @app.post("/login")

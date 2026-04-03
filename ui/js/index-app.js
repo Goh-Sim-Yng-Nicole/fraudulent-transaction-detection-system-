@@ -82,8 +82,12 @@ const App = () => {
           password: registerForm.password,
         }),
       });
-      writeCustomerSession(payload.access_token, payload.customer);
-      window.location.href = '/banking.html';
+      if (!payload.requires_otp) {
+        throw new Error('Unexpected registration response');
+      }
+      setPendingEmail(registerForm.email.trim());
+      setOtpCode('');
+      setAlert({ type: 'success', message: payload.message || `Verification code sent to ${registerForm.email.trim()}.` });
     } catch (error) {
       setAlert({ type: 'danger', message: error.message });
     } finally {

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import httpx
-
 from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, patch
+
+import httpx
 
 from services.detect_fraud.config import decision_mode_uses_local_decisioning, settings
 from services.detect_fraud.decision_publisher import DecisionPublisher

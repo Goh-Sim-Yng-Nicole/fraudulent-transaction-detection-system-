@@ -25,7 +25,7 @@ const registerCustomer = async (customer) => {
     body: customer,
   });
 
-  assertStatus(result, [200, 201], `register ${customer.email}`);
+  assertStatus(result, 201, `register ${customer.email}`);
   assert.equal(result.body?.requires_otp, true, `register ${customer.email} should require OTP`);
   return {
     ...customer,

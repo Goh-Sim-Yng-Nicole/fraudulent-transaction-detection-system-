@@ -46,10 +46,9 @@ const registerCustomer = async (customer) => {
   });
 
   assertStatus(result, 201, `register ${customer.email}`);
+  assert.equal(result.body?.requires_otp, true, `register ${customer.email} should require OTP`);
   return {
     ...customer,
-    token: result.body.access_token,
-    customerId: result.body.customer.customer_id,
   };
 };
 
@@ -121,13 +120,16 @@ await waitForStack();
 
 logStep('Registering disposable end-to-end customers');
 let customerA = await registerCustomer(firstCustomer);
-const customerB = await registerCustomer(secondCustomer);
+let customerB = await registerCustomer(secondCustomer);
 let lifecycleCustomer = await registerCustomer(lifecycleCustomerSeed);
 
-logStep('Completing OTP verification for the primary customer');
-await loginCustomer(customerA);
+logStep('Completing OTP verification for the freshly registered customers');
 const primaryOtp = await waitForLatestOtp(customerA.email);
 customerA = await verifyOtp(customerA, primaryOtp);
+const recipientOtp = await waitForLatestOtp(customerB.email);
+customerB = await verifyOtp(customerB, recipientOtp);
+const lifecycleRegisterOtp = await waitForLatestOtp(lifecycleCustomer.email);
+lifecycleCustomer = await verifyOtp(lifecycleCustomer, lifecycleRegisterOtp);
 
 const profileResult = await request(`${platform.publicBase}/api/customers/me`, {
   headers: authHeaders(customerA.token),
@@ -189,10 +191,6 @@ const lookupResult = await request(
 );
 assertStatus(lookupResult, 200, 'customer lookup');
 assert.equal(lookupResult.body?.customer_id, customerB.customerId, 'customer lookup returned unexpected recipient');
-
-await loginCustomer(lifecycleCustomer);
-const lifecycleLoginOtp = await waitForLatestOtp(lifecycleCustomer.email);
-lifecycleCustomer = await verifyOtp(lifecycleCustomer, lifecycleLoginOtp);
 
 const lifecycleOtpRequest = await request(`${platform.publicBase}/api/customers/me/request-otp`, {
   method: 'POST',
