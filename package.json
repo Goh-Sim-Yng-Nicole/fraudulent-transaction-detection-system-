@@ -9,7 +9,7 @@
     "format:write": "prettier --write \"README.md\" \"package.json\" \"testing/package.json\" \"docker-compose.yml\" \"otel-collector-config.yml\" \".github/workflows/*.{yml,yaml}\" \"grafana/provisioning/**/*.yml\" \"kong/**/*.yml\" \"prometheus/**/*.yml\" \"jaeger/**/*.json\" \".prettierrc.json\"",
     "quality": "npm run lint && npm run format:check",
     "test:unit:py": "python -m unittest discover -s testing/unit_py -p \"*_test.py\"",
-    "test:unit:js": "node --test ./testing/unit/*.test.mjs",
+    "test:unit:js": "node ./testing/unit/run-tests.mjs",
     "test:unit": "npm run test:unit:py && npm run test:unit:js",
     "test:smoke": "node ./testing/smoke-health.mjs",
     "test:contracts": "node ./testing/service-contracts.mjs",

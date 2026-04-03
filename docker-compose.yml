@@ -88,6 +88,22 @@ services:
       timeout: 5s
       retries: 10
 
+  postgres-decision:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DECISION_DB:-ftds_decision}
+      POSTGRES_USER: ${POSTGRES_DECISION_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_DECISION_PASSWORD:-postgres}
+    ports:
+      - '5436:5432'
+    volumes:
+      - ftds_postgres_decision_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   redpanda:
     image: docker.redpanda.com/redpandadata/redpanda:latest
     command:
@@ -145,6 +161,7 @@ services:
         rpk topic create transaction.review.dlq --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true
         rpk topic create appeal.dlq --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true
         rpk topic create notification.dlq --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true
+        rpk topic create transaction.decision.dlq --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true
         echo "[kafka-init] ok"
 
   transaction:
@@ -204,6 +221,8 @@ services:
       OTEL_SERVICE_NAME: detect-fraud
       KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
       FRAUD_SCORE_URL: http://fraud-score:8001/score
+      DECISION_INTEGRATION_MODE: outsystems_kafka
+      ENABLE_LOCAL_DECISION_FALLBACK: 'false'
     ports:
       - '8008:8008'
     depends_on:
@@ -212,6 +231,51 @@ services:
       kafka-init:
         condition: service_completed_successfully
       fraud-score:
+        condition: service_healthy
+      decision:
+        condition: service_healthy
+
+  decision:
+    build:
+      context: ./services/decision
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      <<: *otel-env
+      OTEL_SERVICE_NAME: decision
+      KAFKA_BROKERS: redpanda:9092
+      DB_HOST: postgres-decision
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DECISION_DB:-ftds_decision}
+      DB_USER: ${POSTGRES_DECISION_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_DECISION_PASSWORD:-postgres}
+    ports:
+      - '3005:3005'
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      postgres-decision:
+        condition: service_healthy
+      decision-migrate:
+        condition: service_completed_successfully
+
+  decision-migrate:
+    build:
+      context: ./services/decision
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      DB_HOST: postgres-decision
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DECISION_DB:-ftds_decision}
+      DB_USER: ${POSTGRES_DECISION_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_DECISION_PASSWORD:-postgres}
+    command: ['npm', 'run', 'migrate']
+    restart: on-failure
+    depends_on:
+      postgres-decision:
         condition: service_healthy
 
   fraud-review:
@@ -437,6 +501,7 @@ services:
       FRAUD_REVIEW_BASE_URL: http://fraud-review:8002
       APPEAL_BASE_URL: http://appeal:8003
       CUSTOMER_BASE_URL: http://customer:8005
+      DECISION_ENGINE_SERVICE_URL: http://decision:3005
       REDIS_DISABLED: 'true'
       METRICS_ENABLED: 'true'
       METRICS_PORT: 9090
@@ -450,6 +515,8 @@ services:
       appeal:
         condition: service_healthy
       customer:
+        condition: service_healthy
+      decision:
         condition: service_healthy
 
   nginx:
@@ -578,5 +645,7 @@ volumes:
   ftds_postgres_fraud_review_data:
   ftds_postgres_customer_data:
   ftds_postgres_audit_data:
+  ftds_postgres_decision_data:
   ftds_prometheus_data:
   ftds_grafana_data:
+

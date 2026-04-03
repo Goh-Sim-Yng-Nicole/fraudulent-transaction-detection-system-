@@ -20,7 +20,7 @@ const services = [
     includePrefixes: ['/api/v1/auth'],
   },
   {
-    name: 'decision-engine-service',
+    name: 'decision-service',
     enabled: config.routeToggles.decisions,
     url: docsUrl(config.services.decisionEngine),
     includePrefixes: ['/api/v1/decisions', '/api/v1/thresholds'],
@@ -158,3 +158,4 @@ async function aggregateSwaggerSpecs() {
 }
 
 module.exports = aggregateSwaggerSpecs;
+

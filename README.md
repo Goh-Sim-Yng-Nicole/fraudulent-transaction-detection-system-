@@ -46,8 +46,8 @@ Fraud pipeline:
     -> detect_fraud
     -> fraud_score
     -> transaction.scored
-    -> OutSystems decision service (external, optional)
-    -> local decision fallback when OutSystems is not configured
+    -> decision (local Kafka consumer)
+    -> optional OutSystems decision handoff modes
 
 Decision events:
   -> transaction.flagged
@@ -66,22 +66,43 @@ Observability:
 
 ## Services
 
-| Service        | Runtime          | Port | Purpose                                                     |
-| -------------- | ---------------- | ---- | ----------------------------------------------------------- |
-| `customer`     | Python / FastAPI | 8005 | Registration, OTP auth, profile, sensitive account actions  |
-| `transaction`  | Python / FastAPI | 8000 | Transaction creation, listing, status, Kafka-driven updates |
-| `fraud_score`  | Node / Express   | 8001 | ML scoring endpoint                                         |
-| `detect_fraud` | Python           | 8008 | Rules + ML orchestration, decision handoff, local fallback  |
-| `fraud-review` | Node / Express   | 8002 | Flagged review queue and appeal review queue                |
-| `appeal`       | Node / Express   | 8003 | Customer appeals                                            |
-| `analytics`    | Node / Express   | 8006 | Manager metrics and realtime dashboard data                 |
-| `audit`        | Node / Express   | 8007 | Audit event storage and verification                        |
-| `notification` | Node / Express   | 8010 | Email / notification processing                             |
-| `gateway`      | Node / Express   | 8004 | Public API aggregation and staff auth                       |
+| Service        | Runtime          | Port | Purpose                                                                       |
+| -------------- | ---------------- | ---- | ----------------------------------------------------------------------------- |
+| `customer`     | Python / FastAPI | 8005 | Registration, OTP auth, profile, sensitive account actions                    |
+| `transaction`  | Python / FastAPI | 8000 | Transaction creation, listing, status, Kafka-driven updates                   |
+| `fraud_score`  | Node / Express   | 8001 | ML scoring endpoint                                                           |
+| `detect_fraud` | Python           | 8008 | Rules + ML orchestration, emits `transaction.scored`                          |
+| `decision` | Node / Express | 3005 | Consumes scored events, persists decisions, emits `transaction.flagged/finalised` |
+| `fraud-review` | Node / Express   | 8002 | Flagged review queue and appeal review queue                                  |
+| `appeal`       | Node / Express   | 8003 | Customer appeals                                                              |
+| `analytics`    | Node / Express   | 8006 | Manager metrics and realtime dashboard data                                   |
+| `audit`        | Node / Express   | 8007 | Audit event storage and verification                                          |
+| `notification` | Node / Express   | 8010 | Email / notification processing                                               |
+| `gateway`      | Node / Express   | 8004 | Public API aggregation and staff auth                                         |
 
-Decisioning belongs to OutSystems. This repo does not host a standalone `decision` service.
+Docker Compose now includes a local standalone `decision` service.
 
-If `OUTSYSTEMS_DECISION_URL` is unset, `detect_fraud` uses the local fallback flow so Docker development and automated tests still work.
+`detect_fraud` now supports 3 modes:
+
+- `local`: score and decide locally for Docker dev and automated tests
+- `outsystems_http`: score locally, then call an external OutSystems decision API
+- `outsystems_kafka`: score locally, publish `transaction.scored`, and wait for a Kafka consumer (the in-repo `decision` by default, or an external OutSystems consumer) to publish `transaction.flagged` or `transaction.finalised`
+
+For the Kafka decision architecture (now the default Docker setup), use:
+
+```env
+DECISION_INTEGRATION_MODE=outsystems_kafka
+ENABLE_LOCAL_DECISION_FALLBACK=false
+OUTSYSTEMS_DECISION_URL=
+```
+
+In that mode, the decision consumer is expected to:
+
+1. consume `transaction.scored`
+2. persist its own decision record internally
+3. publish either `transaction.flagged` or `transaction.finalised`
+
+Local Docker can now run fully self-contained using `outsystems_kafka` with the in-repo `decision`.
 
 ## UI And Access
 
@@ -312,6 +333,7 @@ services/
   transaction/
   fraud_score/
   detect_fraud/
+  decision/
   process_flagged_appeals/
   appeal/
   analytics/
@@ -339,4 +361,5 @@ testing/
 - OTPs are delivered to Mailpit at [http://localhost:8025](http://localhost:8025).
 - A self-signed cert warning on `https://localhost` is expected locally.
 - If the manager dashboard looks stale after a rebuild, refresh after new events are generated.
-- If OutSystems is connected, decisioning can come from the external service instead of the local fallback path.
+- If OutSystems is connected, decisioning can be handed off externally by switching `DECISION_INTEGRATION_MODE`.
+

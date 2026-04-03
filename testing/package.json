@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "unit:py": "python -m unittest discover -s unit_py -p \"*_test.py\"",
-    "unit:js": "node --test ./unit/*.test.mjs",
+    "unit:js": "node ./unit/run-tests.mjs",
     "unit": "npm run unit:py && npm run unit:js",
     "smoke": "node ./smoke-health.mjs",
     "contracts": "node ./service-contracts.mjs",

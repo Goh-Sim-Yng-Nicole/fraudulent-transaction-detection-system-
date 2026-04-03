@@ -39,7 +39,7 @@ const serviceRoutes = [
   {
     pathPrefix: '/decisions',
     target: config.services.decisionEngine,
-    serviceName: 'decision-engine-service',
+    serviceName: 'decision-service',
     enabled: config.routeToggles.decisions,
     useTransactionLimiter: false,
     rewriteTo: '/api/v1/decisions',
@@ -48,7 +48,7 @@ const serviceRoutes = [
   {
     pathPrefix: '/thresholds',
     target: config.services.decisionEngine,
-    serviceName: 'decision-engine-service',
+    serviceName: 'decision-service',
     enabled: config.routeToggles.decisions,
     useTransactionLimiter: false,
     rewriteTo: '/api/v1/thresholds',
@@ -184,3 +184,4 @@ serviceRoutes.forEach((route) => {
 });
 
 module.exports = router;
+
