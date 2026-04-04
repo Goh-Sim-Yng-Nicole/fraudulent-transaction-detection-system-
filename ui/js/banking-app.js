@@ -53,6 +53,8 @@ const App = () => {
   const token = session?.token || '';
   const customer = session?.customer || null;
   const headers = { Authorization: `Bearer ${token}` };
+  const appealedTransactionIds = new Set(appeals.map((appeal) => appeal.transaction_id));
+  const selectedTransactionAlreadyAppealed = appealedTransactionIds.has(appealDraft.transactionId);
 
   const logout = () => {
     clearCustomerSession();
@@ -183,6 +185,10 @@ const App = () => {
   const submitAppeal = async () => {
     if (!appealDraft.transactionId || !appealDraft.reason.trim()) {
       showMessage('danger', 'Pick a transaction and provide a reason for appeal.');
+      return;
+    }
+    if (selectedTransactionAlreadyAppealed) {
+      showMessage('danger', 'This transaction has already been appealed.');
       return;
     }
     setLoading('appeal', true);
@@ -343,7 +349,10 @@ const App = () => {
           <div className="card-body">
             <div className="field"><label>Selected transaction ID</label><input className="input mono" value=${appealDraft.transactionId} readonly /></div>
             <div className="field" style=${{ marginTop: '0.65rem' }}><label>Reason for appeal</label><textarea className="textarea" value=${appealDraft.reason} onInput=${(e) => setAppealDraft((p) => ({ ...p, reason: e.target.value }))}></textarea></div>
-            <button className="btn btn-warning" style=${{ marginTop: '0.65rem' }} onClick=${submitAppeal} disabled=${busy.appeal}>${busy.appeal ? 'Submitting...' : 'Submit appeal'}</button>
+            <button className="btn btn-warning" style=${{ marginTop: '0.65rem' }} onClick=${submitAppeal} disabled=${busy.appeal || selectedTransactionAlreadyAppealed || !appealDraft.transactionId}>${busy.appeal ? 'Submitting...' : selectedTransactionAlreadyAppealed ? 'Appeal already submitted' : 'Submit appeal'}</button>
+            ${selectedTransactionAlreadyAppealed
+              ? html`<div className="muted small" style=${{ marginTop: '0.65rem' }}>An appeal already exists for this transaction, so it cannot be submitted again.</div>`
+              : null}
             <div className="muted small" style=${{ marginTop: '0.65rem' }}>Tip: click "Appeal" from a transaction row to auto-fill the selected transaction ID.</div>
           </div>
         </article>
@@ -372,7 +381,9 @@ const App = () => {
                     <td className="muted small mono">${formatUtc(txn.created_at)}</td>
                     <td>
                       ${['FLAGGED', 'REJECTED'].includes(String(txn.status || '').toUpperCase())
-                        ? html`<button className="btn btn-ghost" onClick=${() => setAppealDraft((p) => ({ ...p, transactionId: txn.transaction_id }))}>Appeal</button>`
+                        ? appealedTransactionIds.has(txn.transaction_id)
+                          ? html`<span className="muted small">Appealed</span>`
+                          : html`<button className="btn btn-ghost" onClick=${() => setAppealDraft((p) => ({ ...p, transactionId: txn.transaction_id }))}>Appeal</button>`
                         : html`<span className="muted small">-</span>`}
                     </td>
                   </tr>
