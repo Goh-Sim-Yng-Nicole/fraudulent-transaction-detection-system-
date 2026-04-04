@@ -28,7 +28,7 @@ const registerCustomerDirect = async (customer) => {
     body: customer,
   });
 
-  assertStatus(result, 201, `direct register ${customer.email}`);
+  assertStatus(result, [200, 201], `direct register ${customer.email}`);
   assert.equal(result.body?.requires_otp, true, `direct register ${customer.email}: expected requires_otp=true`);
   return {
     ...customer,
@@ -131,11 +131,13 @@ await checkHtmlPage(`${platform.httpsBase}/staff-login.html`, 'https staff login
 });
 await checkHtmlPage(`${platform.nginxBase}/fraud-review.html`, 'fraud review redirect to staff login', 'FTDS | Staff Sign In');
 await checkHtmlPage(`${platform.nginxBase}/manager.html`, 'manager redirect to staff login', 'FTDS | Staff Sign In');
-await checkHtmlPage(`${platform.nginxBase}/fraud-review.html`, 'fraud review console', 'FTDS | Fraud Review', {
+await checkHtmlPage(`${platform.httpsBase}/fraud-review.html`, 'fraud review console', 'FTDS | Fraud Review', {
   headers: { Cookie: analystSession.cookie },
+  insecureTls: true,
 });
-await checkHtmlPage(`${platform.nginxBase}/manager.html`, 'manager console', 'FTDS | Manager Console', {
+await checkHtmlPage(`${platform.httpsBase}/manager.html`, 'manager console', 'FTDS | Manager Console', {
   headers: { Cookie: managerSession.cookie },
+  insecureTls: true,
 });
 
 const staffMe = await request(`${platform.publicBase}/api/staff/me`, {

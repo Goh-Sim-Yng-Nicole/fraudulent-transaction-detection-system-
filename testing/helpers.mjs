@@ -11,7 +11,7 @@ const execFileAsync = promisify(execFile);
 const workspaceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 export const platform = {
-  publicBase: process.env.PUBLIC_BASE_URL || 'http://localhost',
+  publicBase: process.env.PUBLIC_BASE_URL || 'https://localhost',
   httpsBase: process.env.HTTPS_BASE_URL || 'https://localhost',
   nginxBase: process.env.NGINX_BASE_URL || 'http://localhost:8088',
   gatewayBase: process.env.GATEWAY_BASE_URL || 'http://localhost:8004',
@@ -31,6 +31,47 @@ export const platform = {
   mailpitBase: process.env.MAILPIT_BASE_URL || 'http://localhost:8025',
   cadvisorBase: process.env.CADVISOR_BASE_URL || 'http://localhost:9091',
 };
+
+function shouldUseInsecureTls(url, requestedInsecureTls) {
+  if (requestedInsecureTls) {
+    return true;
+  }
+
+  try {
+    const parsedUrl = new URL(url);
+    return ['localhost', '127.0.0.1'].includes(parsedUrl.hostname);
+  } catch {
+    return requestedInsecureTls;
+  }
+}
+
+function getAlternateLocalSchemeUrl(url) {
+  try {
+    const parsedUrl = new URL(url);
+    if (!['localhost', '127.0.0.1'].includes(parsedUrl.hostname)) {
+      return null;
+    }
+
+    if (parsedUrl.protocol === 'http:') {
+      parsedUrl.protocol = 'https:';
+      return parsedUrl.toString();
+    }
+
+    if (parsedUrl.protocol === 'https:') {
+      parsedUrl.protocol = 'http:';
+      return parsedUrl.toString();
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function isTlsSchemeMismatch(error) {
+  return error?.cause?.code === 'ERR_SSL_WRONG_VERSION_NUMBER'
+    || /wrong version number/i.test(String(error));
+}
 
 export const tracing = {
   expectedServices: [
@@ -181,28 +222,55 @@ export async function request(url, options = {}) {
       : body;
   }
 
-  const originalTlsSetting = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-  if (insecureTls) {
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-  }
+  const fetchOnce = async (targetUrl) => {
+    const useInsecureTls = shouldUseInsecureTls(targetUrl, insecureTls);
+    const originalTlsSetting = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+    if (useInsecureTls) {
+      process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+    }
 
-  const response = await fetch(url, {
-    method,
-    headers: requestHeaders,
-    body: requestBody,
-    signal: AbortSignal.timeout(timeoutMs),
-    redirect,
-  }).finally(() => {
-    if (insecureTls) {
-      if (originalTlsSetting === undefined) {
-        delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-      } else {
-        process.env.NODE_TLS_REJECT_UNAUTHORIZED = originalTlsSetting;
+    try {
+      const response = await fetch(targetUrl, {
+        method,
+        headers: requestHeaders,
+        body: requestBody,
+        signal: AbortSignal.timeout(timeoutMs),
+        redirect,
+      });
+      const text = await response.text();
+      return { response, text };
+    } finally {
+      if (useInsecureTls) {
+        if (originalTlsSetting === undefined) {
+          delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+        } else {
+          process.env.NODE_TLS_REJECT_UNAUTHORIZED = originalTlsSetting;
+        }
       }
     }
-  });
+  };
 
-  const text = await response.text();
+  const alternateSchemeUrl = getAlternateLocalSchemeUrl(url);
+  let response;
+  let text;
+
+  try {
+    ({ response, text } = await fetchOnce(url));
+  } catch (error) {
+    if (!alternateSchemeUrl || !isTlsSchemeMismatch(error)) {
+      throw error;
+    }
+
+    ({ response, text } = await fetchOnce(alternateSchemeUrl));
+  }
+
+  if (
+    alternateSchemeUrl
+    && response.status === 400
+    && /plain http request was sent to https port/i.test(text)
+  ) {
+    ({ response, text } = await fetchOnce(alternateSchemeUrl));
+  }
   let parsed = null;
 
   if (text) {
