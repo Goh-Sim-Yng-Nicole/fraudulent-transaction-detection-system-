@@ -27,12 +27,17 @@ RUN mkdir -p /etc/nginx/tls \
       -config /tmp/localhost.cnf \
     && rm -f /tmp/localhost.cnf
 
+COPY nginx/entrypoint.sh /entrypoint.sh
 COPY nginx/nginx.conf /etc/nginx/nginx.conf
 
 # Copy Customer Banking UI static files
 COPY ui/ /usr/share/nginx/html/
 
+RUN chmod +x /entrypoint.sh
+
 EXPOSE 8088 8443 3000 16686 9090 9091 8025
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD wget -q -O /dev/null http://127.0.0.1:8088/healthz || exit 1
+
+ENTRYPOINT ["/entrypoint.sh"]

@@ -523,6 +523,8 @@ services:
       dockerfile: nginx/Dockerfile
       args:
         TLS_CERT_HOST: ${DEPLOYMENT_HOST:-localhost}
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt:ro
     ports:
       - '8088:8088'
       - '443:8443'
