@@ -1,30 +1,44 @@
-# FTDS - Fraudulent Transaction Detection System
+# Fraudulent Transaction Detection System
 
-FTDS is a Docker-based microservices platform for banking transactions, fraud scoring, analyst review, appeals, audit logging, analytics, and observability.
+Fraudulent Transaction Detection System (FTDS) is a microservices-based banking platform for end-to-end fraud operations. It brings together customer onboarding and authentication, transaction decisioning, manual fraud review, customer appeals, analytics, auditability, notifications, and observability in a single Docker-based stack.
 
-It is built to demonstrate an end-to-end fraud workflow:
+The project is designed to support three user-facing platform journeys:
 
-- customers register, log in with OTP, and submit transactions
-- suspicious transactions are flagged for analyst review
-- analysts claim and decide cases
-- customers can appeal rejected outcomes
-- managers monitor fraud and appeal outcomes
-- ops users access Grafana, Jaeger, Prometheus, cAdvisor, and Mailpit through protected ingress
+1. a fraudulent transaction is detected and rejected
+2. a risky transaction is flagged and manually reviewed
+3. a declined transaction is appealed and later reversed
 
-## What The Project Does
+## Project Scope
 
-- Customer banking flow with OTP-based sign-in
-- Transaction service with Kafka-backed status updates
-- Fraud scoring and fraud orchestration
-- Manual review queue with claim / release / decision ownership
-- Appeal flow with ownership and auditability
-- Analytics dashboard for fraud managers
-- Audit trail APIs with integrity verification
-- Notification service with local SMTP via Mailpit
-- Observability with Grafana, Prometheus, Jaeger, cAdvisor, and OpenTelemetry
-- Role-aware ingress for staff and ops through Nginx
+FTDS currently includes:
 
-## Core Architecture
+- customer registration, login, OTP verification, profile management, and account lifecycle actions
+- passwordless customer support for OAuth-backed accounts that must set a local password before sensitive actions
+- transaction creation, listing, decision lookup, and Kafka-driven status propagation
+- fraud scoring and fraud orchestration across rules, ML scoring, and decision services
+- analyst review queues with claim, release, and ownership tracking
+- customer appeal submission with one-time appeal enforcement
+- manager analytics dashboards and realtime fraud metrics
+- audit trail storage and audit-chain verification
+- notification delivery through external SMTP email and Twilio SMS, while OTP remains demo-safe through Mailpit
+- observability through Grafana, Jaeger, Prometheus, and cAdvisor
+- operational support surfaces such as Mailpit for OTP retrieval and demo verification
+
+## Branch Strategy
+
+The repository is maintained in two primary branches:
+
+| Branch       | Purpose                                                   |
+| ------------ | --------------------------------------------------------- |
+| `main`       | Localhost-first development branch for local Docker usage |
+| `deployment` | Deployment branch for the VM / HTTPS environment          |
+
+At a high level:
+
+- `main` is the baseline local stack for development and localhost demos
+- `deployment` carries the cloud-facing deployment behaviour, including the HTTPS host configuration and deployment-specific customer auth flow support
+
+## Architecture Overview
 
 ```text
 Customer UI / Staff UI / Manager UI
@@ -40,325 +54,308 @@ Gateway routes to:
   -> Analytics
   -> Audit
 
-Fraud pipeline:
+Event pipeline:
   Transaction
     -> transaction.created
     -> detect_fraud
     -> fraud_score
     -> transaction.scored
-    -> decision (local Kafka consumer)
-    -> optional OutSystems decision handoff modes
+    -> decision
+    -> transaction.flagged / transaction.finalised
 
-Decision events:
-  -> transaction.flagged
-  -> transaction.finalised
-  -> transaction.reviewed
-  -> appeal.created
-  -> appeal.resolved
+Manual review pipeline:
+  fraud-review
+    -> transaction.reviewed
+    -> appeal.created
+    -> appeal.resolved
 
 Observability:
-  -> OpenTelemetry Collector
-  -> Jaeger
-  -> Prometheus
-  -> Grafana
-  -> cAdvisor
+  OpenTelemetry Collector
+    -> Jaeger
+    -> Prometheus
+    -> Grafana
+    -> cAdvisor
 ```
 
 ## Services
 
-| Service        | Runtime          | Port | Purpose                                                                           |
-| -------------- | ---------------- | ---- | --------------------------------------------------------------------------------- |
-| `customer`     | Python / FastAPI | 8005 | Registration, OTP auth, profile, sensitive account actions                        |
-| `transaction`  | Python / FastAPI | 8000 | Transaction creation, listing, status, Kafka-driven updates                       |
-| `fraud_score`  | Node / Express   | 8001 | ML scoring endpoint                                                               |
-| `detect_fraud` | Python           | 8008 | Rules + ML orchestration, emits `transaction.scored`                              |
-| `decision`     | Node / Express   | 3005 | Consumes scored events, persists decisions, emits `transaction.flagged/finalised` |
-| `fraud-review` | Node / Express   | 8002 | Flagged review queue and appeal review queue                                      |
-| `appeal`       | Node / Express   | 8003 | Customer appeals                                                                  |
-| `analytics`    | Node / Express   | 8006 | Manager metrics and realtime dashboard data                                       |
-| `audit`        | Node / Express   | 8007 | Audit event storage and verification                                              |
-| `notification` | Node / Express   | 8010 | Email / notification processing                                                   |
-| `gateway`      | Node / Express   | 8004 | Public API aggregation and staff auth                                             |
+| Service        | Runtime          | Port   | Responsibility                                                   |
+| -------------- | ---------------- | ------ | ---------------------------------------------------------------- |
+| `customer`     | Python / FastAPI | `8005` | Registration, OTP auth, customer profile, and password lifecycle |
+| `transaction`  | Python / FastAPI | `8000` | Transaction submission, listing, and decision state              |
+| `fraud-score`  | Node / Express   | `8001` | Fraud score calculation                                          |
+| `detect-fraud` | Python           | `8008` | Fraud rules orchestration and scoring pipeline                   |
+| `decision`     | Node / Express   | `3005` | Decision persistence and Kafka decision events                   |
+| `fraud-review` | Node / Express   | `8002` | Analyst review queues for flagged transactions and appeals       |
+| `appeal`       | Node / Express   | `8003` | Appeal creation and appeal state management                      |
+| `analytics`    | Node / Express   | `8006` | Fraud and appeal analytics for managers                          |
+| `audit`        | Node / Express   | `8007` | Audit event storage and integrity verification                   |
+| `notification` | Node / Express   | `8010` | Customer and fraud-team notifications                            |
+| `gateway`      | Node / Express   | `8004` | Aggregated public API, legacy proxying, and staff authentication |
 
-Docker Compose now includes a local standalone `decision` service.
+## User Roles
 
-`detect_fraud` now supports 3 modes:
+| Role            | Default Credentials          | Responsibility                                     |
+| --------------- | ---------------------------- | -------------------------------------------------- |
+| `fraud_analyst` | `analyst` / `analyst123`     | Claim and resolve flagged transactions and appeals |
+| `fraud_manager` | `manager` / `manager123`     | Review analytics and fraud outcomes                |
+| `ops_readonly`  | `opsviewer` / `opsviewer123` | View observability and operational surfaces        |
+| `ops_admin`     | `opsadmin` / `opsadmin123`   | Ops access plus Mailpit administration             |
 
-- `local`: score and decide locally for Docker dev and automated tests
-- `outsystems_http`: score locally, then call an external OutSystems decision API
-- `outsystems_kafka`: score locally, publish `transaction.scored`, and wait for a Kafka consumer (the in-repo `decision` by default, or an external OutSystems consumer) to publish `transaction.flagged` or `transaction.finalised`
+These credentials are for local or demo use only.
 
-For the Kafka decision architecture (now the default Docker setup), use:
+## Customer Authentication Model
 
-```env
-DECISION_INTEGRATION_MODE=outsystems_kafka
-ENABLE_LOCAL_DECISION_FALLBACK=false
-OUTSYSTEMS_DECISION_URL=
-```
+FTDS now supports two customer account states:
 
-In that mode, the decision consumer is expected to:
+| Account State                        | Behaviour                                                        |
+| ------------------------------------ | ---------------------------------------------------------------- |
+| Local-password customer              | Can sign in with email/password plus OTP                         |
+| Passwordless / OAuth-backed customer | Must first set a local password before protected account changes |
 
-1. consume `transaction.scored`
-2. persist its own decision record internally
-3. publish either `transaction.flagged` or `transaction.finalised`
+Protected customer actions now require a local password to be present before they are allowed:
 
-Local Docker can now run fully self-contained using `outsystems_kafka` with the in-repo `decision`.
+- profile updates
+- password changes
+- account deletion
+- transaction submission
+- appeal submission
 
-## UI And Access
+In the banking UI:
 
-### Main URLs
+- the customer can request a setup OTP and set an initial local password
+- appeal submission is hidden entirely when no transactions exist
+- repeat appeals for the same transaction are blocked
 
-- Banking portal: [http://localhost:8088/banking.html](http://localhost:8088/banking.html)
-- Staff sign-in: [http://localhost:8088/staff-login.html](http://localhost:8088/staff-login.html)
-- Fraud review UI: [http://localhost:8088/fraud-review.html](http://localhost:8088/fraud-review.html)
-- Manager dashboard: [http://localhost:8088/manager.html](http://localhost:8088/manager.html)
-- Public edge root: [http://localhost/](http://localhost/)
-- HTTPS localhost ingress: [https://localhost/staff-login.html](https://localhost/staff-login.html)
+## Notification Model
 
-### Staff Roles
+The platform separates customer OTP delivery from normal business notifications.
 
-| Role            | Default Login                | Access                                                   |
-| --------------- | ---------------------------- | -------------------------------------------------------- |
-| `fraud_analyst` | `analyst` / `analyst123`     | Fraud review UI, flagged cases, appeal review            |
-| `fraud_manager` | `manager` / `manager123`     | Fraud review UI, manager dashboard                       |
-| `ops_readonly`  | `opsviewer` / `opsviewer123` | Manager dashboard, Grafana, Jaeger, Prometheus, cAdvisor |
-| `ops_admin`     | `opsadmin` / `opsadmin123`   | Everything ops-readonly can access, plus Mailpit         |
+| Channel            | Current Intended Behaviour                        |
+| ------------------ | ------------------------------------------------- |
+| Customer OTP       | Email via Mailpit for demo and verification flows |
+| Notification email | External SMTP provider                            |
+| Notification SMS   | External Twilio provider                          |
 
-These credentials are for local/demo use only.
+This means:
 
-### Protected Observability URLs
+- OTP messages remain visible in Mailpit for demos and automated tests
+- transaction and decision notifications can be routed to a real inbox and real phone number
 
-- Grafana: [http://localhost:3000](http://localhost:3000)
-- Jaeger: [http://localhost:16686](http://localhost:16686)
-- Prometheus: [http://localhost:9090](http://localhost:9090)
-- cAdvisor: [http://localhost:9091](http://localhost:9091)
-- Mailpit: [http://localhost:8025](http://localhost:8025)
+## Local Development
 
-These routes are served behind the Nginx reverse proxy and are intended for staff / ops access, not customers.
+### Prerequisites
 
-## Case Ownership
+- Docker Desktop with Docker Compose
+- Node.js 20+
+- Python 3.11+
 
-Flagged review cases and appeals both track who touched them.
+### Environment Setup
 
-The platform records:
-
-- who claimed the case
-- the role they had
-- when they claimed it
-- who made the final decision
-- the role they had when deciding
-- notes / reasons for the final outcome
-
-This is visible in the review APIs and reflected in the UI.
-
-## Quick Start
-
-### 1. Create your env file
+Create a local environment file:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-### 2. Start the full stack
+For local OTP demos, keep:
+
+```env
+CUSTOMER_SMTP_HOST=mailpit
+CUSTOMER_SMTP_PORT=1025
+CUSTOMER_SMTP_USER=
+CUSTOMER_SMTP_PASSWORD=
+CUSTOMER_SMTP_FROM=banking@ftds.local
+CUSTOMER_SMTP_STARTTLS=false
+```
+
+For external notification delivery, configure:
+
+```env
+EMAIL_ENABLED=true
+EMAIL_PROVIDER=smtp
+EMAIL_SMTP_HOST=your-smtp-host
+EMAIL_SMTP_PORT=587
+EMAIL_SMTP_SECURE=false
+EMAIL_SMTP_USER=your-user
+EMAIL_SMTP_PASSWORD=your-password
+EMAIL_FROM_ADDRESS=alerts@your-domain
+EMAIL_FROM_NAME=FTDS Notifications
+
+SMS_ENABLED=true
+SMS_PROVIDER=twilio
+TWILIO_ACCOUNT_SID=your-account-sid
+TWILIO_AUTH_TOKEN=your-auth-token
+TWILIO_PHONE_NUMBER=+1xxxxxxxxxx
+```
+
+### Start The Stack
 
 ```powershell
 docker compose up -d --build --remove-orphans
 ```
 
-### 3. Open the main entry points
+### Main Local URLs
 
-- Customer: [http://localhost:8088/banking.html](http://localhost:8088/banking.html)
-- Staff: [http://localhost:8088/staff-login.html](http://localhost:8088/staff-login.html)
-- HTTPS rehearsal: [https://localhost/staff-login.html](https://localhost/staff-login.html)
+| Surface                 | URL                                       |
+| ----------------------- | ----------------------------------------- |
+| Banking portal          | `http://localhost:8088/banking.html`      |
+| Staff login             | `http://localhost:8088/staff-login.html`  |
+| Fraud review UI         | `http://localhost:8088/fraud-review.html` |
+| Manager dashboard       | `http://localhost:8088/manager.html`      |
+| Mailpit                 | `http://localhost:8025`                   |
+| Grafana                 | `http://localhost:3000`                   |
+| Jaeger                  | `http://localhost:16686`                  |
+| Prometheus              | `http://localhost:9090`                   |
+| cAdvisor                | `http://localhost:9091`                   |
+| HTTPS ingress rehearsal | `https://localhost/staff-login.html`      |
 
-## Demo Guide
+## Deployment Notes
 
-This is the easiest way to demo the project end to end.
+Use the `deployment` branch when targeting the VM / HTTPS environment.
 
-### Customer Demo
+Key deployment-facing environment variables include:
 
-1. Open [http://localhost:8088/banking.html](http://localhost:8088/banking.html).
-2. Register a new customer account (or choose Google OAuth if configured).
-3. When prompted for OTP, open Mailpit at [http://localhost:8025](http://localhost:8025) and read the latest OTP email.
-4. Verify the OTP to enter the banking portal.
+- `PUBLIC_BASE_URL`
+- `CUSTOMER_PORTAL_URL`
+- `OAUTH_GOOGLE_CLIENT_ID`
+- `OAUTH_GOOGLE_CLIENT_SECRET`
+- `OAUTH_GOOGLE_REDIRECT_URI`
+- external `EMAIL_*` and `TWILIO_*` values for business notifications
 
-### Submit A Normal Transaction
+The deployment environment is intended to use:
 
-Use the new transaction form in the banking portal.
+- HTTPS customer access
+- Google OAuth support on the deployment branch
+- passwordless-to-local-password upgrade flow for OAuth-backed customers
+- Mailpit only for OTP demo visibility
 
-Example values:
+## Demo Scenarios
 
-- recipient type: `Pay Merchant (UEN)`
-- merchant ID: `FTDS_NORMAL_DEMO`
-- amount: `120.50`
-- currency: `SGD`
-- card type: `CREDIT`
-- country: `SG`
+The platform is aligned to three core scenarios.
 
-### Submit A Flagged Transaction
+### Scenario 1: Fraudulent Transaction Rejected
 
-Use these values to reliably create a flagged case in the current local stack:
+- customer submits a clearly risky transaction
+- fraud detection rejects the transaction
+- notification, audit, and analytics are updated
 
-- recipient type: `Pay Merchant (UEN)`
-- merchant ID: `FTDS_FLAGGED_DEMO`
-- amount: `3200`
-- currency: `USD`
-- card type: `PREPAID`
-- country: `NG`
+### Scenario 2: Risky Transaction Flagged Then Reviewed
 
-After a short delay, the transaction should move from `PENDING` to `FLAGGED`.
+- customer submits a transaction that should be flagged
+- analyst claims and resolves the review case
+- customer sees the updated transaction outcome
 
-### Analyst Review Demo
+### Scenario 3: Declined Transaction Then Appeal Reversal
 
-1. Sign in at [http://localhost:8088/staff-login.html](http://localhost:8088/staff-login.html) as:
-   `analyst` / `analyst123`
-2. Open [http://localhost:8088/fraud-review.html](http://localhost:8088/fraud-review.html).
-3. Claim the flagged case.
-4. Approve or reject it.
+- analyst declines a risky transaction
+- customer submits an appeal
+- analyst resolves the appeal
+- analytics, audit, and transaction state are updated accordingly
 
-If you reject it, the customer will see the transaction become `REJECTED`.
+## Postman Assets
 
-### Appeal Demo
+Importable Postman assets are provided in [`testing/postman`](testing/postman):
 
-1. Reject a flagged transaction in the analyst UI.
-2. Go back to the customer banking portal.
-3. Open the rejected transaction and submit an appeal.
-4. Return to the analyst UI.
-5. Claim the appeal and resolve it.
+- [`ftds-user-scenarios.postman_collection.json`](testing/postman/ftds-user-scenarios.postman_collection.json)
+- [`ftds-local.postman_environment.json`](testing/postman/ftds-local.postman_environment.json)
+- [`README.md`](testing/postman/README.md)
 
-### Manager Demo
+The collection includes:
 
-1. Sign in as `manager` / `manager123`.
-2. Open [http://localhost:8088/manager.html](http://localhost:8088/manager.html).
-3. Show:
-   - transaction totals
-   - approval / decline rates
-   - manual reviews
-   - appeal counts
-   - realtime decision quality metrics
-
-### Ops Demo
-
-1. Sign in as `opsviewer` or `opsadmin`.
-2. Open the manager dashboard and the observability links.
-3. Show:
-   - Grafana dashboards
-   - Jaeger service traces
-   - Prometheus targets / metrics
-   - cAdvisor container metrics
-   - Mailpit inbox with OTP and alert emails
+1. Bootstrap
+2. Scenario 1: Fraudulent Transaction Rejected
+3. Scenario 2: Risky Transaction Flagged Then Reviewed
+4. Scenario 3: Declined Transaction Then Appeal Reversal
 
 ## Testing
 
-### Available Commands
-
-From the repo root:
+### Key Commands
 
 ```powershell
+npm.cmd run quality
 npm.cmd run test:unit
 npm.cmd run test:smoke
 npm.cmd run test:contracts
 npm.cmd run test:e2e
+npm.cmd run test:journey
 npm.cmd run test:verify
 ```
 
-`test:verify` runs:
+`test:verify` runs the complete local verification chain:
 
 ```text
-unit -> smoke -> contracts -> e2e
+unit -> smoke -> contracts -> e2e -> journey
 ```
 
-### What The Tests Cover
+### Coverage Summary
 
-- Unit tests for active Python fraud and transaction logic, plus Node analytics logic
-- Smoke checks across all major service surfaces
-- Contract checks for APIs, protected UIs, observability endpoints, Kafka topics, and consumer lag
-- Full end-to-end flow for:
-  - registration
-  - OTP verification
-  - password rotation
-  - account deletion
-  - flagged transaction review
-  - appeal creation and resolution
-  - analytics updates
-  - audit trail presence
+The automated suites cover:
 
-### Recommended Verification Flow
+- unit logic for analytics, appeals, notifications, and Python fraud logic
+- smoke health across the platform surfaces
+- service contracts, observability endpoints, Kafka topic readiness, and consumer lag
+- passwordless customer setup flow
+- transaction review and appeal resolution flows
+- customer lifecycle actions such as password rotation and account deletion
+- full scenario-style end-to-end journeys
 
-```powershell
-docker compose up -d --build --remove-orphans
-npm.cmd run test:verify
-```
+## GitHub Actions
 
-## CI And Code Quality
+The main CI workflow lives at [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
-### CI
+It mirrors the local verification flow and currently performs:
 
-GitHub Actions runs:
+1. checkout and runtime setup
+2. `npm run quality`
+3. `npm run test:unit`
+4. `docker compose config -q`
+5. full Docker build
+6. stack startup
+7. `npm run test:smoke`
+8. `npm run test:contracts`
+9. `npm run test:e2e`
+10. `npm run test:journey`
 
-- `npm run quality`
-- `npm run test:unit`
-- Docker Compose validation
-- full-stack build
-- `test:smoke`
-- `test:contracts`
-- `test:e2e`
+On failure, Docker logs are exported as a workflow artifact.
 
-The workflow lives at [`.github/workflows/ci.yml`](C:/Users/Naren/Documents/SMU/y2s2/ESD/project2/fraudulent-transaction-detection-system-/.github/workflows/ci.yml).
-
-### Local Quality Commands
-
-```powershell
-npm.cmd run lint:js
-python -m ruff check services/customer services/transaction services/detect_fraud ftds testing/unit_py
-npm.cmd run format:check
-npm.cmd run quality
-```
-
-## Security And Local Deployment Notes
-
-- Nginx acts as the role-aware reverse proxy for staff pages and observability tools.
-- `https://localhost` uses a self-signed certificate for local rehearsal, so your browser will warn until you trust the cert.
-- Kong is the public API edge on port `80`.
-- Staff sessions are signed by the gateway and checked again by Nginx for protected pages.
-- Local Mailpit is used for OTP and notification email delivery.
-- Analytics currently runs with in-memory projections when Redis is disabled, so metrics reset if the analytics container is recreated.
-- Keep the default local credentials only for local development.
-
-## Repo Structure
+## Repository Layout
 
 ```text
 services/
-  customer/
-  transaction/
-  fraud_score/
-  detect_fraud/
-  decision/
-  process_flagged_appeals/
-  appeal/
   analytics/
+  appeal/
   audit/
-  notification/
+  customer/
+  decision/
+  detect_fraud/
+  fraud_score/
   gateway/
+  notification/
+  process_flagged_appeals/
+  transaction/
 
 ui/
+  js/
   banking.html
   staff-login.html
   fraud-review.html
   manager.html
-  forbidden.html
 
 testing/
   smoke-health.mjs
   service-contracts.mjs
   e2e-platform.mjs
+  full-platform-journey.mjs
+  postman/
   unit/
   unit_py/
 ```
 
-## Helpful Notes
+## Operational Notes
 
-- OTPs are delivered to Mailpit at [http://localhost:8025](http://localhost:8025).
-- A self-signed cert warning on `https://localhost` is expected locally.
-- If the manager dashboard looks stale after a rebuild, refresh after new events are generated.
-- If OutSystems is connected, decisioning can be handed off externally by switching `DECISION_INTEGRATION_MODE`.
+- `https://localhost` uses a self-signed certificate locally
+- analytics projections are rebuilt from fresh events in local/demo-style runs
+- Mailpit is intentionally retained for OTP retrieval and demos
+- Twilio trial accounts may still restrict SMS delivery to verified recipient numbers
+- for a truly clean environment reset, use `docker compose down -v --remove-orphans`
