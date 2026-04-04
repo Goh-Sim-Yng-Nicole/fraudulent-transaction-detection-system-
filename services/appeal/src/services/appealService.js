@@ -52,14 +52,22 @@ class AppealService {
       throw new Error(`Appeal allowed only for REJECTED or FLAGGED transactions (current: ${sourceStatus})`);
     }
 
-    const stored = await appealRepository.createAppeal({
-      transactionId,
-      customerId,
-      sourceTransactionStatus: sourceStatus,
-      appealReason: String(appealReason).trim(),
-      evidence: evidence || {},
-      correlationId: correlationId || transaction.correlationId || uuidv4(),
-    });
+    let stored;
+    try {
+      stored = await appealRepository.createAppeal({
+        transactionId,
+        customerId,
+        sourceTransactionStatus: sourceStatus,
+        appealReason: String(appealReason).trim(),
+        evidence: evidence || {},
+        correlationId: correlationId || transaction.correlationId || uuidv4(),
+      });
+    } catch (error) {
+      if (this._isDuplicateAppealError(error)) {
+        throw new Error(`Transaction ${transactionId} has already been appealed`);
+      }
+      throw error;
+    }
 
     if (this.producer) {
       const createdEvent = {
@@ -281,6 +289,14 @@ class AppealService {
       });
       throw new Error('Unable to validate transaction for appeal');
     }
+  }
+
+  _isDuplicateAppealError(error) {
+    const message = String(error?.message || '').toLowerCase();
+    return (
+      message.includes('already been appealed')
+      || (message.includes('duplicate key') && message.includes('transaction'))
+    );
   }
 }
 

@@ -56,6 +56,19 @@ class AppealRepository {
 
     try {
       await client.query('BEGIN');
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1::text));', [String(transactionId)]);
+
+      const { rows: existingRows } = await client.query(`
+        SELECT appeal_id
+        FROM appeals
+        WHERE transaction_id = $1
+        LIMIT 1;
+      `, [transactionId]);
+
+      if (existingRows[0]) {
+        throw new Error(`Transaction ${transactionId} has already been appealed`);
+      }
+
       const { rows } = await client.query(sql, values);
       await this._insertEvent(
         client,
