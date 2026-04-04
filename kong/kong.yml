@@ -43,4 +43,3 @@ consumers:
       - algorithm: HS256
         key: ftds-customer-service
         secret: ftds-dev-secret-change-in-production-32chars
-

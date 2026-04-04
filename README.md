@@ -66,19 +66,19 @@ Observability:
 
 ## Services
 
-| Service        | Runtime          | Port | Purpose                                                                       |
-| -------------- | ---------------- | ---- | ----------------------------------------------------------------------------- |
-| `customer`     | Python / FastAPI | 8005 | Registration, OTP auth, profile, sensitive account actions                    |
-| `transaction`  | Python / FastAPI | 8000 | Transaction creation, listing, status, Kafka-driven updates                   |
-| `fraud_score`  | Node / Express   | 8001 | ML scoring endpoint                                                           |
-| `detect_fraud` | Python           | 8008 | Rules + ML orchestration, emits `transaction.scored`                          |
-| `decision` | Node / Express | 3005 | Consumes scored events, persists decisions, emits `transaction.flagged/finalised` |
-| `fraud-review` | Node / Express   | 8002 | Flagged review queue and appeal review queue                                  |
-| `appeal`       | Node / Express   | 8003 | Customer appeals                                                              |
-| `analytics`    | Node / Express   | 8006 | Manager metrics and realtime dashboard data                                   |
-| `audit`        | Node / Express   | 8007 | Audit event storage and verification                                          |
-| `notification` | Node / Express   | 8010 | Email / notification processing                                               |
-| `gateway`      | Node / Express   | 8004 | Public API aggregation and staff auth                                         |
+| Service        | Runtime          | Port | Purpose                                                                           |
+| -------------- | ---------------- | ---- | --------------------------------------------------------------------------------- |
+| `customer`     | Python / FastAPI | 8005 | Registration, OTP auth, profile, sensitive account actions                        |
+| `transaction`  | Python / FastAPI | 8000 | Transaction creation, listing, status, Kafka-driven updates                       |
+| `fraud_score`  | Node / Express   | 8001 | ML scoring endpoint                                                               |
+| `detect_fraud` | Python           | 8008 | Rules + ML orchestration, emits `transaction.scored`                              |
+| `decision`     | Node / Express   | 3005 | Consumes scored events, persists decisions, emits `transaction.flagged/finalised` |
+| `fraud-review` | Node / Express   | 8002 | Flagged review queue and appeal review queue                                      |
+| `appeal`       | Node / Express   | 8003 | Customer appeals                                                                  |
+| `analytics`    | Node / Express   | 8006 | Manager metrics and realtime dashboard data                                       |
+| `audit`        | Node / Express   | 8007 | Audit event storage and verification                                              |
+| `notification` | Node / Express   | 8010 | Email / notification processing                                                   |
+| `gateway`      | Node / Express   | 8004 | Public API aggregation and staff auth                                             |
 
 Docker Compose now includes a local standalone `decision` service.
 
@@ -362,5 +362,3 @@ testing/
 - A self-signed cert warning on `https://localhost` is expected locally.
 - If the manager dashboard looks stale after a rebuild, refresh after new events are generated.
 - If OutSystems is connected, decisioning can be handed off externally by switching `DECISION_INTEGRATION_MODE`.
-
-
