@@ -28,11 +28,10 @@ const registerCustomerDirect = async (customer) => {
     body: customer,
   });
 
-  assertStatus(result, 201, `direct register ${customer.email}`);
+  assertStatus(result, [200, 201], `direct register ${customer.email}`);
+  assert.equal(result.body?.requires_otp, true, `direct register ${customer.email}: expected requires_otp=true`);
   return {
     ...customer,
-    registrationToken: result.body.access_token,
-    customerId: result.body.customer.customer_id,
   };
 };
 
@@ -60,6 +59,7 @@ const verifyCustomerOtpDirect = async (customer, otpCode) => {
   return {
     ...customer,
     verifiedToken: result.body.access_token,
+    customerId: result.body.customer.customer_id,
   };
 };
 
@@ -136,17 +136,19 @@ for (const check of directHealthChecks) {
 
 logStep('Validating protected UI and observability surfaces');
 await checkHtmlPage(`${platform.publicBase}/`, 'public edge root');
-await checkHtmlPage(`${platform.nginxBase}/staff-login.html`, 'staff login ui', 'Staff and Operations Sign In');
-await checkHtmlPage(`${platform.httpsBase}/staff-login.html`, 'https staff login ui', 'Staff and Operations Sign In', {
+await checkHtmlPage(`${platform.nginxBase}/staff-login.html`, 'staff login ui', 'FTDS | Staff Sign In');
+await checkHtmlPage(`${platform.httpsBase}/staff-login.html`, 'https staff login ui', 'FTDS | Staff Sign In', {
   insecureTls: true,
 });
-await checkHtmlPage(`${platform.nginxBase}/fraud-review.html`, 'fraud review redirect to staff login', 'Staff and Operations Sign In');
-await checkHtmlPage(`${platform.nginxBase}/manager.html`, 'manager redirect to staff login', 'Staff and Operations Sign In');
-await checkHtmlPage(`${platform.nginxBase}/fraud-review.html`, 'fraud review console', 'Fraud Review Console', {
+await checkHtmlPage(`${platform.nginxBase}/fraud-review.html`, 'fraud review redirect to staff login', 'FTDS | Staff Sign In');
+await checkHtmlPage(`${platform.nginxBase}/manager.html`, 'manager redirect to staff login', 'FTDS | Staff Sign In');
+await checkHtmlPage(`${platform.httpsBase}/fraud-review.html`, 'fraud review console', 'FTDS | Fraud Review', {
   headers: { Cookie: analystSession.cookie },
+  insecureTls: true,
 });
-await checkHtmlPage(`${platform.nginxBase}/manager.html`, 'manager console', 'Manager Console', {
+await checkHtmlPage(`${platform.httpsBase}/manager.html`, 'manager console', 'FTDS | Manager Console', {
   headers: { Cookie: managerSession.cookie },
+  insecureTls: true,
 });
 
 const staffMe = await request(`${platform.publicBase}/api/staff/me`, {
@@ -220,11 +222,13 @@ assert.equal(baselineRealtime.body?.success, true, 'analytics realtime baseline 
 
 logStep('Creating disposable customers for direct contract validation');
 let primaryCustomer = await registerCustomerDirect(makeCustomer('contracts-primary'));
-const recipientCustomer = await registerCustomerDirect(makeCustomer('contracts-recipient'));
+let recipientCustomer = await registerCustomerDirect(makeCustomer('contracts-recipient'));
 
 await loginCustomerDirect(primaryCustomer);
 const primaryOtp = await waitForLatestOtp(primaryCustomer.email);
 primaryCustomer = await verifyCustomerOtpDirect(primaryCustomer, primaryOtp);
+const recipientOtp = await waitForLatestOtp(recipientCustomer.email);
+recipientCustomer = await verifyCustomerOtpDirect(recipientCustomer, recipientOtp);
 
 const resendOtp = await request(`${platform.customerBase}/resend-otp`, {
   method: 'POST',

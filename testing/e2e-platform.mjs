@@ -45,11 +45,10 @@ const registerCustomer = async (customer) => {
     body: customer,
   });
 
-  assertStatus(result, 201, `register ${customer.email}`);
+  assertStatus(result, [200, 201], `register ${customer.email}`);
+  assert.equal(result.body?.requires_otp, true, `register ${customer.email} should require OTP`);
   return {
     ...customer,
-    token: result.body.access_token,
-    customerId: result.body.customer.customer_id,
   };
 };
 
@@ -77,9 +76,11 @@ const verifyOtp = async (customer, otpCode) => {
   });
 
   assertStatus(result, 200, `public verify otp ${customer.email}`);
+  assert.ok(result.body?.customer?.customer_id, `public verify otp ${customer.email} should return customer.customer_id`);
   return {
     ...customer,
     token: result.body.access_token,
+    customerId: result.body.customer.customer_id,
   };
 };
 
@@ -121,13 +122,16 @@ await waitForStack();
 
 logStep('Registering disposable end-to-end customers');
 let customerA = await registerCustomer(firstCustomer);
-const customerB = await registerCustomer(secondCustomer);
+let customerB = await registerCustomer(secondCustomer);
 let lifecycleCustomer = await registerCustomer(lifecycleCustomerSeed);
 
-logStep('Completing OTP verification for the primary customer');
-await loginCustomer(customerA);
+logStep('Completing OTP verification for the freshly registered customers');
 const primaryOtp = await waitForLatestOtp(customerA.email);
 customerA = await verifyOtp(customerA, primaryOtp);
+const recipientOtp = await waitForLatestOtp(customerB.email);
+customerB = await verifyOtp(customerB, recipientOtp);
+const lifecycleRegisterOtp = await waitForLatestOtp(lifecycleCustomer.email);
+lifecycleCustomer = await verifyOtp(lifecycleCustomer, lifecycleRegisterOtp);
 
 const profileResult = await request(`${platform.publicBase}/api/customers/me`, {
   headers: authHeaders(customerA.token),
