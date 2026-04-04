@@ -648,4 +648,3 @@ volumes:
   ftds_postgres_decision_data:
   ftds_prometheus_data:
   ftds_grafana_data:
-
