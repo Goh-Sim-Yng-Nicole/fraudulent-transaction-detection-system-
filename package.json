@@ -15,7 +15,7 @@
     "test:contracts": "node ./testing/service-contracts.mjs",
     "test:e2e": "node ./testing/e2e-platform.mjs",
     "test:journey": "node ./testing/full-platform-journey.mjs",
-    "test:verify": "npm run test:unit && npm run test:smoke && npm run test:contracts && npm run test:e2e"
+    "test:verify": "npm run test:unit && npm run test:smoke && npm run test:contracts && npm run test:e2e && npm run test:journey"
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",

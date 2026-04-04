@@ -396,8 +396,6 @@ services:
         condition: service_healthy
       customer:
         condition: service_healthy
-      mailpit:
-        condition: service_started
 
   audit:
     build:

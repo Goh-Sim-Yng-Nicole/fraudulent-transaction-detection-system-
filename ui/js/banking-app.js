@@ -53,6 +53,7 @@ const App = () => {
   const token = session?.token || '';
   const customer = session?.customer || null;
   const headers = { Authorization: `Bearer ${token}` };
+  const hasLocalPassword = customer?.has_password !== false;
   const appealedTransactionIds = new Set(appeals.map((appeal) => appeal.transaction_id));
   const selectedTransactionAlreadyAppealed = appealedTransactionIds.has(appealDraft.transactionId);
 
@@ -63,6 +64,18 @@ const App = () => {
 
   const setLoading = (key, value) => setBusy((prev) => ({ ...prev, [key]: value }));
   const showMessage = (type, text) => setMessage({ type, text });
+
+  const syncCustomerProfile = async () => {
+    if (!token) return;
+    const payload = await fetchJson(`${API_ROOT}/customers/me`, { headers });
+    writeCustomerSession(token, payload);
+    setSession({ token, customer: payload });
+    setProfileForm({
+      full_name: payload.full_name || '',
+      email: payload.email || '',
+      phone: payload.phone || '',
+    });
+  };
 
   const loadTransactions = async (currentDirection = direction) => {
     if (!customer) return;
@@ -98,8 +111,10 @@ const App = () => {
 
   useEffect(() => {
     if (!session) return;
-    loadTransactions().catch(() => {});
-    loadAppeals().catch(() => {});
+    if (typeof session.customer?.has_password === 'undefined') {
+      syncCustomerProfile().catch(() => {});
+    }
+    Promise.all([loadTransactions(), loadAppeals()]).catch(() => {});
   }, [session, direction]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -136,6 +151,10 @@ const App = () => {
   const submitTransaction = async (event) => {
     event.preventDefault();
     showMessage('', '');
+    if (!hasLocalPassword) {
+      showMessage('danger', 'Set a local password before creating transactions.');
+      return;
+    }
     const transferToCustomer = txnForm.recipientType === 'customer';
     if (transferToCustomer && !recipient?.customer_id) {
       showMessage('danger', 'Please look up and confirm recipient first.');
@@ -183,6 +202,10 @@ const App = () => {
   };
 
   const submitAppeal = async () => {
+    if (!hasLocalPassword) {
+      showMessage('danger', 'Set a local password before submitting appeals.');
+      return;
+    }
     if (!appealDraft.transactionId || !appealDraft.reason.trim()) {
       showMessage('danger', 'Pick a transaction and provide a reason for appeal.');
       return;
@@ -213,6 +236,10 @@ const App = () => {
   };
 
   const saveProfile = async () => {
+    if (!hasLocalPassword) {
+      showMessage('danger', 'Set a local password before updating your profile.');
+      return;
+    }
     setLoading('profile', true);
     try {
       const payload = await fetchJson(`${API_ROOT}/customers/me`, {
@@ -238,7 +265,7 @@ const App = () => {
     setLoading('otp', true);
     try {
       await fetchJson(`${API_ROOT}/customers/me/request-otp`, { method: 'POST', headers });
-      showMessage('success', `OTP sent to ${customer.email}`);
+      showMessage('success', hasLocalPassword ? `OTP sent to ${customer.email}` : `Setup OTP sent to ${customer.email}`);
     } catch (error) {
       showMessage('danger', error.message);
     } finally {
@@ -246,7 +273,35 @@ const App = () => {
     }
   };
 
+  const setInitialPassword = async () => {
+    setLoading('password', true);
+    try {
+      const payload = await fetchJson(`${API_ROOT}/customers/me/password/set`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          new_password: passwordForm.new_password,
+          otp_code: passwordForm.otp_code,
+        }),
+      });
+      setPasswordForm({ current_password: '', new_password: '', otp_code: '' });
+      if (payload.customer) {
+        writeCustomerSession(token, payload.customer);
+        setSession({ token, customer: payload.customer });
+      }
+      showMessage('success', payload.message || 'Password set successfully.');
+    } catch (error) {
+      showMessage('danger', error.message);
+    } finally {
+      setLoading('password', false);
+    }
+  };
+
   const changePassword = async () => {
+    if (!hasLocalPassword) {
+      showMessage('danger', 'Set a local password before changing your password.');
+      return;
+    }
     setLoading('password', true);
     try {
       await fetchJson(`${API_ROOT}/customers/me/password`, {
@@ -264,6 +319,10 @@ const App = () => {
   };
 
   const deleteAccount = async () => {
+    if (!hasLocalPassword) {
+      showMessage('danger', 'Set a local password before deleting this account.');
+      return;
+    }
     setLoading('delete', true);
     try {
       await fetchJson(`${API_ROOT}/customers/me`, {
@@ -336,26 +395,30 @@ const App = () => {
                 <div className="field"><label>Card type</label><select className="select" value=${txnForm.cardType} onChange=${(e) => setTxnForm((p) => ({ ...p, cardType: e.target.value }))}>${cardTypes.map((c) => html`<option value=${c}>${c}</option>`)}</select></div>
                 <div className="field"><label>Country</label><select className="select" value=${txnForm.country} onChange=${(e) => setTxnForm((p) => ({ ...p, country: e.target.value }))}>${countries.map((c) => html`<option value=${c}>${c}</option>`)}</select></div>
               </div>
-              <button className="btn btn-primary" type="submit" disabled=${busy.txn}>${busy.txn ? 'Submitting...' : 'Submit transaction'}</button>
+              <button className="btn btn-primary" type="submit" disabled=${busy.txn || !hasLocalPassword}>${busy.txn ? 'Submitting...' : 'Submit transaction'}</button>
+              ${hasLocalPassword ? null : html`<div className="muted small">Set a local password first to unlock outgoing transactions and other customer actions.</div>`}
             </form>
           </div>
         </article>
 
-        <article className="card">
-          <div className="card-head row space-between">
-            <h2 className="title-sm">Appeal Submission</h2>
-            <button className="btn btn-ghost" onClick=${() => loadAppeals().catch(() => {})}>Refresh appeals</button>
-          </div>
-          <div className="card-body">
-            <div className="field"><label>Selected transaction ID</label><input className="input mono" value=${appealDraft.transactionId} readonly /></div>
-            <div className="field" style=${{ marginTop: '0.65rem' }}><label>Reason for appeal</label><textarea className="textarea" value=${appealDraft.reason} onInput=${(e) => setAppealDraft((p) => ({ ...p, reason: e.target.value }))}></textarea></div>
-            <button className="btn btn-warning" style=${{ marginTop: '0.65rem' }} onClick=${submitAppeal} disabled=${busy.appeal || selectedTransactionAlreadyAppealed || !appealDraft.transactionId}>${busy.appeal ? 'Submitting...' : selectedTransactionAlreadyAppealed ? 'Appeal already submitted' : 'Submit appeal'}</button>
-            ${selectedTransactionAlreadyAppealed
-              ? html`<div className="muted small" style=${{ marginTop: '0.65rem' }}>An appeal already exists for this transaction, so it cannot be submitted again.</div>`
-              : null}
-            <div className="muted small" style=${{ marginTop: '0.65rem' }}>Tip: click "Appeal" from a transaction row to auto-fill the selected transaction ID.</div>
-          </div>
-        </article>
+        ${transactions.length ? html`
+          <article className="card">
+            <div className="card-head row space-between">
+              <h2 className="title-sm">Appeal Submission</h2>
+              <button className="btn btn-ghost" onClick=${() => loadAppeals().catch(() => {})}>Refresh appeals</button>
+            </div>
+            <div className="card-body">
+              <div className="field"><label>Selected transaction ID</label><input className="input mono" value=${appealDraft.transactionId} readonly /></div>
+              <div className="field" style=${{ marginTop: '0.65rem' }}><label>Reason for appeal</label><textarea className="textarea" value=${appealDraft.reason} onInput=${(e) => setAppealDraft((p) => ({ ...p, reason: e.target.value }))}></textarea></div>
+              <button className="btn btn-warning" style=${{ marginTop: '0.65rem' }} onClick=${submitAppeal} disabled=${busy.appeal || !hasLocalPassword || selectedTransactionAlreadyAppealed || !appealDraft.transactionId}>${busy.appeal ? 'Submitting...' : selectedTransactionAlreadyAppealed ? 'Appeal already submitted' : 'Submit appeal'}</button>
+              ${selectedTransactionAlreadyAppealed
+                ? html`<div className="muted small" style=${{ marginTop: '0.65rem' }}>An appeal already exists for this transaction, so it cannot be submitted again.</div>`
+                : null}
+              ${hasLocalPassword ? null : html`<div className="muted small" style=${{ marginTop: '0.65rem' }}>Set a local password first to unlock new appeals.</div>`}
+              <div className="muted small" style=${{ marginTop: '0.65rem' }}>Tip: click "Appeal" from a transaction row to auto-fill the selected transaction ID.</div>
+            </div>
+          </article>
+        ` : null}
       </section>
 
       <section className="card" style=${{ marginTop: '1rem' }}>
@@ -381,7 +444,9 @@ const App = () => {
                     <td className="muted small mono">${formatUtc(txn.created_at)}</td>
                     <td>
                       ${['FLAGGED', 'REJECTED'].includes(String(txn.status || '').toUpperCase())
-                        ? appealedTransactionIds.has(txn.transaction_id)
+                        ? !hasLocalPassword
+                          ? html`<span className="muted small">Locked</span>`
+                          : appealedTransactionIds.has(txn.transaction_id)
                           ? html`<span className="muted small">Appealed</span>`
                           : html`<button className="btn btn-ghost" onClick=${() => setAppealDraft((p) => ({ ...p, transactionId: txn.transaction_id }))}>Appeal</button>`
                         : html`<span className="muted small">-</span>`}
@@ -421,25 +486,30 @@ const App = () => {
         <article className="card">
           <div className="card-head"><h2 className="title-sm">Profile & Password</h2></div>
           <div className="card-body grid" style=${{ gap: '0.65rem' }}>
+            ${hasLocalPassword ? null : html`<div className="alert alert-warning">This account has no local password yet. Set one first to unlock profile changes and account deletion.</div>`}
             <div className="field"><label>Full name</label><input className="input" value=${profileForm.full_name} onInput=${(e) => setProfileForm((p) => ({ ...p, full_name: e.target.value }))} /></div>
             <div className="field"><label>Email</label><input className="input" value=${profileForm.email} readonly /></div>
             <div className="field"><label>Phone</label><input className="input" value=${profileForm.phone} onInput=${(e) => setProfileForm((p) => ({ ...p, phone: e.target.value }))} /></div>
-            <button className="btn btn-primary" onClick=${saveProfile} disabled=${busy.profile}>${busy.profile ? 'Saving...' : 'Save profile'}</button>
-            <div className="row"><button className="btn btn-ghost" onClick=${requestOtp} disabled=${busy.otp}>${busy.otp ? 'Sending OTP...' : 'Request OTP'}</button></div>
-            <div className="field"><label>Current password</label><input className="input" type="password" value=${passwordForm.current_password} onInput=${(e) => setPasswordForm((p) => ({ ...p, current_password: e.target.value }))} /></div>
+            <button className="btn btn-primary" onClick=${saveProfile} disabled=${busy.profile || !hasLocalPassword}>${busy.profile ? 'Saving...' : 'Save profile'}</button>
+            <div className="row"><button className="btn btn-ghost" onClick=${requestOtp} disabled=${busy.otp}>${busy.otp ? 'Sending OTP...' : hasLocalPassword ? 'Request OTP' : 'Request setup OTP'}</button></div>
+            ${hasLocalPassword ? html`<div className="field"><label>Current password</label><input className="input" type="password" value=${passwordForm.current_password} onInput=${(e) => setPasswordForm((p) => ({ ...p, current_password: e.target.value }))} /></div>` : null}
             <div className="field"><label>New password</label><input className="input" type="password" value=${passwordForm.new_password} onInput=${(e) => setPasswordForm((p) => ({ ...p, new_password: e.target.value }))} /></div>
             <div className="field"><label>Email OTP</label><input className="input mono" value=${passwordForm.otp_code} onInput=${(e) => setPasswordForm((p) => ({ ...p, otp_code: e.target.value }))} /></div>
-            <button className="btn btn-primary" onClick=${changePassword} disabled=${busy.password}>${busy.password ? 'Changing...' : 'Change password'}</button>
+            <button className="btn btn-primary" onClick=${hasLocalPassword ? changePassword : setInitialPassword} disabled=${busy.password}>${busy.password ? (hasLocalPassword ? 'Changing...' : 'Setting...') : (hasLocalPassword ? 'Change password' : 'Set password')}</button>
           </div>
         </article>
 
         <article className="card">
           <div className="card-head"><h2 className="title-sm">Delete Account</h2></div>
           <div className="card-body grid" style=${{ gap: '0.65rem' }}>
-            <div className="alert alert-warning">This action is irreversible. Your account will be deactivated immediately.</div>
-            <div className="field"><label>Password</label><input className="input" type="password" value=${deleteForm.password} onInput=${(e) => setDeleteForm((p) => ({ ...p, password: e.target.value }))} /></div>
-            <div className="field"><label>Email OTP</label><input className="input mono" value=${deleteForm.otp_code} onInput=${(e) => setDeleteForm((p) => ({ ...p, otp_code: e.target.value }))} /></div>
-            <button className="btn btn-danger" onClick=${deleteAccount} disabled=${busy.delete}>${busy.delete ? 'Deleting...' : 'Delete account'}</button>
+            <div className="alert alert-warning">${hasLocalPassword ? 'This action is irreversible. Your account will be deactivated immediately.' : 'Set a local password first before deleting this account.'}</div>
+            ${hasLocalPassword ? html`
+              <div className="field"><label>Password</label><input className="input" type="password" value=${deleteForm.password} onInput=${(e) => setDeleteForm((p) => ({ ...p, password: e.target.value }))} /></div>
+              <div className="field"><label>Email OTP</label><input className="input mono" value=${deleteForm.otp_code} onInput=${(e) => setDeleteForm((p) => ({ ...p, otp_code: e.target.value }))} /></div>
+            ` : html`
+              <div className="muted small">Request the setup OTP from the profile card, set a local password, then come back here if you still want to close the account.</div>
+            `}
+            <button className="btn btn-danger" onClick=${deleteAccount} disabled=${busy.delete || !hasLocalPassword}>${busy.delete ? 'Deleting...' : 'Delete account'}</button>
           </div>
         </article>
       </section>

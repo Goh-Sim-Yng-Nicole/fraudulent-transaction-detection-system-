@@ -11,6 +11,7 @@ import {
   platform,
   poll,
   request,
+  setCustomerPasswordless,
   staffLogin,
   waitForConsumerGroupsSettled,
   waitForLatestOtp,
@@ -132,6 +133,48 @@ const recipientOtp = await waitForLatestOtp(customerB.email);
 customerB = await verifyOtp(customerB, recipientOtp);
 const lifecycleRegisterOtp = await waitForLatestOtp(lifecycleCustomer.email);
 lifecycleCustomer = await verifyOtp(lifecycleCustomer, lifecycleRegisterOtp);
+
+logStep('Simulating an OAuth-style passwordless customer and validating the first-time password setup journey');
+await setCustomerPasswordless(customerA.customerId);
+
+const passwordlessProfileResult = await request(`${platform.publicBase}/api/customers/me`, {
+  headers: authHeaders(customerA.token),
+});
+assertStatus(passwordlessProfileResult, 200, 'passwordless customer profile');
+assert.equal(passwordlessProfileResult.body?.has_password, false, 'passwordless customer should report has_password=false');
+
+assertStatus(await request(`${platform.publicBase}/api/auth/login`, {
+  method: 'POST',
+  body: { email: customerA.email, password: customerA.password },
+}), 403, 'passwordless account should reject password login');
+
+assertStatus(await request(`${platform.publicBase}/api/customers/me`, {
+  method: 'PUT',
+  headers: authHeaders(customerA.token),
+  body: {
+    full_name: `${customerA.full_name} Blocked`,
+  },
+}), 428, 'passwordless account should not update profile before setting password');
+
+const passwordlessOtpRequest = await request(`${platform.publicBase}/api/customers/me/request-otp`, {
+  method: 'POST',
+  headers: authHeaders(customerA.token),
+});
+assertStatus(passwordlessOtpRequest, 200, 'passwordless account request setup otp');
+
+const setupPasswordOtp = await waitForLatestOtp(customerA.email);
+const initialLocalPassword = `${customerA.password}-local`;
+const setPasswordResult = await request(`${platform.publicBase}/api/customers/me/password/set`, {
+  method: 'POST',
+  headers: authHeaders(customerA.token),
+  body: {
+    new_password: initialLocalPassword,
+    otp_code: setupPasswordOtp,
+  },
+});
+assertStatus(setPasswordResult, 200, 'set initial local password');
+assert.equal(setPasswordResult.body?.customer?.has_password, true, 'set password should unlock local password state');
+customerA.password = initialLocalPassword;
 
 const profileResult = await request(`${platform.publicBase}/api/customers/me`, {
   headers: authHeaders(customerA.token),
