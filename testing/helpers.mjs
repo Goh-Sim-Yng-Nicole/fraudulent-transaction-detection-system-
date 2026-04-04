@@ -439,6 +439,30 @@ export async function fetchLatestOtpForEmail(email) {
   return stdout.trim();
 }
 
+export async function runCustomerSql(sql) {
+  const user = process.env.POSTGRES_CUSTOMER_USER || 'postgres';
+  const database = process.env.POSTGRES_CUSTOMER_DB || 'ftds_customer';
+  return dockerComposeExec('postgres-customer', [
+    'psql',
+    '-U',
+    user,
+    '-d',
+    database,
+    '-v',
+    'ON_ERROR_STOP=1',
+    '-t',
+    '-A',
+    '-c',
+    sql,
+  ]);
+}
+
+export async function setCustomerPasswordless(customerId) {
+  await runCustomerSql(
+    `UPDATE customers SET password_hash = NULL WHERE customer_id = '${escapeSqlLiteral(customerId)}';`
+  );
+}
+
 export async function waitForLatestOtp(email, options = {}) {
   return poll(
     `latest OTP for ${email}`,

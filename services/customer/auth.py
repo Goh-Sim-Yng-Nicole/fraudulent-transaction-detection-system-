@@ -9,6 +9,7 @@ from email.mime.text import MIMEText
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from passlib.exc import UnknownHashError
 
 from ftds.notifications import send_transfer_notification
 
@@ -26,6 +27,7 @@ __all__ = [
     "create_access_token",
     "decode_access_token",
     "generate_otp_code",
+    "has_local_password",
     "hash_password",
     "send_otp_email",
     "send_transfer_notification",
@@ -70,8 +72,17 @@ def hash_password(plain: str) -> str:
     return pwd_context.hash(plain)
 
 
+def has_local_password(hashed: str | None) -> bool:
+    return bool(hashed and str(hashed).strip())
+
+
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    if not has_local_password(hashed):
+        return False
+    try:
+        return pwd_context.verify(plain, hashed)
+    except UnknownHashError:
+        return False
 
 
 # ── JWT helpers ───────────────────────────────────────────────────────────────
@@ -119,6 +130,7 @@ async def send_otp_email(to_email: str, full_name: str, code: str, purpose: str 
 
     subject_map = {
         "login": "Your FTDS login verification code",
+        "set_password": "Set your FTDS account password",
         "register": "Verify your new FTDS account",
         "change_password": "Confirm your FTDS password change",
         "delete_account": "Confirm your FTDS account deletion",

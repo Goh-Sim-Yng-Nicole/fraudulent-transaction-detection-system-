@@ -31,8 +31,11 @@ router.get('/health', async (req, res) => {
   };
 
   let degraded = false;
+  let emailAvailable = false;
+  let smsAvailable = false;
   try {
     const emailHealthy = await emailService.verifyConnection();
+    emailAvailable = config.email.enabled && emailHealthy;
     health.dependencies.email = {
       status: config.email.enabled ? (emailHealthy ? 'healthy' : 'degraded') : 'disabled',
       enabled: config.email.enabled,
@@ -48,6 +51,7 @@ router.get('/health', async (req, res) => {
   }
   try {
     const smsHealthy = await smsService.verifyConnection();
+    smsAvailable = config.sms.enabled && smsHealthy;
     health.dependencies.sms = {
       status: config.sms.enabled ? (smsHealthy ? 'healthy' : 'degraded') : 'disabled',
       enabled: config.sms.enabled,
@@ -75,7 +79,8 @@ router.get('/health', async (req, res) => {
   };
 
   health.status = degraded ? 'degraded' : 'healthy';
-  res.status(degraded ? 503 : 200).json(health);
+  const anyChannelAvailable = emailAvailable || smsAvailable;
+  res.status(degraded && !anyChannelAvailable ? 503 : 200).json(health);
 });
 
 /**

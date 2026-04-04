@@ -22,6 +22,7 @@ from services.customer.auth import (
     create_access_token,
     decode_access_token,
     generate_otp_code,
+    has_local_password,
     hash_password,
     send_otp_email,
     verify_password,
@@ -90,6 +91,7 @@ class CustomerResponse(BaseModel):
     full_name: str
     phone: str | None
     is_active: bool
+    has_password: bool
     created_at: Any
     updated_at: Any
 
@@ -123,6 +125,18 @@ class ChangePasswordRequest(BaseModel):
         if len(value) < 8:
             raise ValueError("new password must be at least 8 characters")
         return value
+
+
+class SetPasswordRequest(BaseModel):
+    new_password: str
+    otp_code: str
+
+    @field_validator("new_password")
+    @classmethod
+    def password_min_length(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("new password must be at least 8 characters")
+        return v
 
 
 class DeleteAccountRequest(BaseModel):
@@ -311,7 +325,7 @@ async def _find_or_create_oauth_customer(*, email: str, full_name: str, db: Asyn
     customer = Customer(
         customer_id=uuid.uuid4(),
         email=email,
-        password_hash=hash_password(secrets.token_urlsafe(24)),
+        password_hash=None,
         full_name=full_name,
         phone=None,
         is_active=True,
@@ -321,6 +335,18 @@ async def _find_or_create_oauth_customer(*, email: str, full_name: str, db: Asyn
     await db.refresh(customer)
     return customer
 
+
+def _require_local_password(customer: Customer, action: str) -> None:
+    if has_local_password(customer.password_hash):
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_428_PRECONDITION_REQUIRED,
+        detail=f"Set a local password before you can {action}",
+    )
+
+
+# ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.get("/health")
 async def health() -> dict[str, str]:
@@ -373,6 +399,11 @@ async def login(payload: CustomerLoginRequest, db: AsyncSession = Depends(get_db
 
     if customer is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account does not exist")
+    if not has_local_password(customer.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account does not support password sign-in until a local password is set. Continue from an existing authenticated session and use the banking portal to set one first.",
+        )
     if not verify_password(payload.password, customer.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid password")
     if not customer.is_active:
@@ -570,6 +601,7 @@ async def update_me(
     current: Customer = Depends(get_current_customer),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
+    _require_local_password(current, "update your profile")
     if payload.full_name is not None:
         current.full_name = payload.full_name
     if payload.phone is not None:
@@ -587,6 +619,7 @@ async def change_password(
     current: Customer = Depends(get_current_customer),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
+    _require_local_password(current, "change your password")
     if not verify_password(payload.current_password, current.password_hash):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
 
@@ -600,12 +633,40 @@ async def change_password(
     return {"message": "Password changed successfully"}
 
 
+@app.post("/me/password/set")
+async def set_password(
+    payload: SetPasswordRequest,
+    current: Customer = Depends(get_current_customer),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    if has_local_password(current.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Password already exists for this account. Use the change password flow instead.",
+        )
+
+    valid = await _verify_otp(str(current.customer_id), payload.otp_code, db)
+    if not valid:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired OTP")
+
+    current.password_hash = hash_password(payload.new_password)
+    db.add(current)
+    await db.commit()
+    await db.refresh(current)
+    return {
+        "message": "Password set successfully",
+        "customer": CustomerResponse.model_validate(current),
+    }
+
+
 @app.post("/me/request-otp")
 async def request_sensitive_otp(
     current: Customer = Depends(get_current_customer),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
-    await _create_and_send_otp(current, db, purpose="change_password")
+    """Request an OTP for sensitive operations (change password, delete account)."""
+    otp_purpose = "change_password" if has_local_password(current.password_hash) else "set_password"
+    await _create_and_send_otp(current, db, purpose=otp_purpose)
     return {"message": f"Verification code sent to {current.email}"}
 
 
@@ -615,6 +676,7 @@ async def delete_account(
     current: Customer = Depends(get_current_customer),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
+    _require_local_password(current, "delete your account")
     if not verify_password(payload.password, current.password_hash):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect password")
 

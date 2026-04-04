@@ -67,6 +67,7 @@ const App = () => {
   }, []);
 
   const setBusy = (key, value) => setLoading((prev) => ({ ...prev, [key]: value }));
+  const passwordlessHint = 'If your account came from OAuth or another external sign-in, first continue from that authenticated session, then open the banking portal and set a local password with the emailed OTP.';
 
   const submitLogin = async (event) => {
     event.preventDefault();
@@ -249,6 +250,9 @@ const App = () => {
 
             ${tab === 'login' ? html`
               <form onSubmit=${submitLogin} className="grid" style=${{ gap: '0.8rem' }}>
+                <div className="muted small">
+                  ${passwordlessHint}
+                </div>
                 <div className="field">
                   <label>Email</label>
                   <input

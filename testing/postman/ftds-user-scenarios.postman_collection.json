@@ -1,0 +1,474 @@
+{
+  "info": {
+    "_postman_id": "37ff1f4c-4c9a-4f01-a3ab-5f8bfe42a001",
+    "name": "FTDS User Scenarios",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Importable collection covering the FTDS PDF user scenarios: 1) rejected fraudulent transaction, 2) flagged transaction with analyst review, 3) declined transaction followed by appeal reversal. Run the requests in order and set {{otpCode}} manually from Mailpit after login/register OTP requests."
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://localhost" },
+    { "key": "customerEmail", "value": "postman.customer@example.com" },
+    { "key": "customerPassword", "value": "Postman123!" },
+    { "key": "customerFullName", "value": "Postman Customer" },
+    { "key": "customerPhone", "value": "+6591234567" },
+    { "key": "otpCode", "value": "" },
+    { "key": "customerToken", "value": "" },
+    { "key": "customerId", "value": "" },
+    { "key": "analystUsername", "value": "analyst" },
+    { "key": "analystPassword", "value": "analyst123" },
+    { "key": "analystToken", "value": "" },
+    { "key": "fraudTransactionId", "value": "" },
+    { "key": "flaggedTransactionId", "value": "" },
+    { "key": "appealTransactionId", "value": "" },
+    { "key": "appealId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Bootstrap",
+      "description": "Authenticate the demo customer and analyst before running the scenario folders.",
+      "item": [
+        {
+          "name": "Register customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{customerEmail}}\",\n  \"password\": \"{{customerPassword}}\",\n  \"full_name\": \"{{customerFullName}}\",\n  \"phone\": \"{{customerPhone}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "register"]
+            },
+            "description": "Creates the customer account and triggers the OTP email."
+          }
+        },
+        {
+          "name": "Login customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{customerEmail}}\",\n  \"password\": \"{{customerPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Requests a fresh OTP. Read the OTP from Mailpit and paste it into {{otpCode}}."
+          }
+        },
+        {
+          "name": "Verify customer OTP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('OTP verified', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "var payload = pm.response.json();",
+                  "pm.collectionVariables.set('customerToken', payload.access_token || '');",
+                  "pm.collectionVariables.set('customerId', payload.customer && payload.customer.customer_id ? payload.customer.customer_id : '');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{customerEmail}}\",\n  \"otp_code\": \"{{otpCode}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/verify-otp",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "verify-otp"]
+            }
+          }
+        },
+        {
+          "name": "Analyst login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Analyst logged in', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "var payload = pm.response.json();",
+                  "pm.collectionVariables.set('analystToken', payload.access_token || '');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{analystUsername}}\",\n  \"password\": \"{{analystPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/staff/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "staff", "login"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Scenario 1 - Fraudulent Transaction Rejected",
+      "description": "PDF pages 8-12. Customer submits a fraudulent transaction, the platform rejects it, and the customer checks the final decision.",
+      "item": [
+        {
+          "name": "Submit rejected transaction",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Transaction created', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "var payload = pm.response.json();",
+                  "pm.collectionVariables.set('fraudTransactionId', payload.transaction_id || '');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": \"{{customerId}}\",\n  \"sender_name\": \"{{customerFullName}}\",\n  \"merchant_id\": \"FTDS_FRAUD_DEMO\",\n  \"amount\": 12000,\n  \"currency\": \"USD\",\n  \"card_type\": \"PREPAID\",\n  \"country\": \"NG\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/customer/transactions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "customer", "transactions"]
+            }
+          }
+        },
+        {
+          "name": "Check rejected transaction decision",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/customer/transactions/{{fraudTransactionId}}/decision",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "customer", "transactions", "{{fraudTransactionId}}", "decision"]
+            },
+            "description": "Rerun until the decision reaches REJECTED."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Scenario 2 - Risky Transaction Flagged Then Reviewed",
+      "description": "PDF pages 13-19. Customer submits a risky transaction, analyst claims the review case, resolves it, and the customer checks the updated status.",
+      "item": [
+        {
+          "name": "Submit flagged transaction",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Flagged candidate created', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "var payload = pm.response.json();",
+                  "pm.collectionVariables.set('flaggedTransactionId', payload.transaction_id || '');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": \"{{customerId}}\",\n  \"sender_name\": \"{{customerFullName}}\",\n  \"merchant_id\": \"FTDS_FLAGGED_DEMO\",\n  \"amount\": 3200,\n  \"currency\": \"USD\",\n  \"card_type\": \"PREPAID\",\n  \"country\": \"NG\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/customer/transactions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "customer", "transactions"]
+            }
+          }
+        },
+        {
+          "name": "List pending review cases",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{analystToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/review-cases?status=PENDING,IN_REVIEW&limit=50&offset=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "review-cases"],
+              "query": [
+                { "key": "status", "value": "PENDING,IN_REVIEW" },
+                { "key": "limit", "value": "50" },
+                { "key": "offset", "value": "0" }
+              ]
+            },
+            "description": "Confirm {{flaggedTransactionId}} is present before continuing."
+          }
+        },
+        {
+          "name": "Claim flagged review case",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{analystToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"claimTtlMinutes\": 5\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/review-cases/{{flaggedTransactionId}}/claim",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "review-cases", "{{flaggedTransactionId}}", "claim"]
+            }
+          }
+        },
+        {
+          "name": "Resolve flagged review case",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{analystToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"APPROVED\",\n  \"notes\": \"Postman scenario 2 approved the flagged case after analyst review.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/review-cases/{{flaggedTransactionId}}/resolve",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "review-cases", "{{flaggedTransactionId}}", "resolve"]
+            }
+          }
+        },
+        {
+          "name": "Check reviewed transaction decision",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/customer/transactions/{{flaggedTransactionId}}/decision",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "customer", "transactions", "{{flaggedTransactionId}}", "decision"]
+            },
+            "description": "Rerun until the decision reaches APPROVED."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Scenario 3 - Declined Transaction Then Appeal Reversal",
+      "description": "PDF pages 20-24. Analyst declines a risky transaction, customer submits an appeal, analyst resolves it, and the customer checks the appeal outcome.",
+      "item": [
+        {
+          "name": "Submit appeal candidate transaction",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Appeal candidate created', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "var payload = pm.response.json();",
+                  "pm.collectionVariables.set('appealTransactionId', payload.transaction_id || '');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": \"{{customerId}}\",\n  \"sender_name\": \"{{customerFullName}}\",\n  \"merchant_id\": \"FTDS_FLAGGED_DEMO\",\n  \"amount\": 3300,\n  \"currency\": \"USD\",\n  \"card_type\": \"PREPAID\",\n  \"country\": \"NG\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/customer/transactions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "customer", "transactions"]
+            }
+          }
+        },
+        {
+          "name": "Claim appeal candidate review case",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{analystToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"claimTtlMinutes\": 5\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/review-cases/{{appealTransactionId}}/claim",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "review-cases", "{{appealTransactionId}}", "claim"]
+            }
+          }
+        },
+        {
+          "name": "Decline appeal candidate review case",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{analystToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"DECLINED\",\n  \"notes\": \"Postman scenario 3 declined the risky transaction before appeal review.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reviews/{{appealTransactionId}}/decision",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "reviews", "{{appealTransactionId}}", "decision"]
+            }
+          }
+        },
+        {
+          "name": "Create appeal",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Appeal created', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "var payload = pm.response.json();",
+                  "pm.collectionVariables.set('appealId', payload.appeal_id || '');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transaction_id\": \"{{appealTransactionId}}\",\n  \"customer_id\": \"{{customerId}}\",\n  \"reason_for_appeal\": \"This is a legitimate payment and supporting evidence is available.\",\n  \"evidence\": {\n    \"source\": \"postman\",\n    \"note\": \"Scenario 3 appeal evidence\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/customer/appeals",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "customer", "appeals"]
+            }
+          }
+        },
+        {
+          "name": "Claim appeal",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{analystToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"claimTtlMinutes\": 5\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reviews/appeals/{{appealId}}/claim",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "reviews", "appeals", "{{appealId}}", "claim"]
+            }
+          }
+        },
+        {
+          "name": "Resolve appeal as REVERSE",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{analystToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resolution\": \"REVERSE\",\n  \"notes\": \"Postman scenario 3 reversed the declined decision after appeal review.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reviews/appeals/{{appealId}}/resolve",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "reviews", "appeals", "{{appealId}}", "resolve"]
+            }
+          }
+        },
+        {
+          "name": "List customer appeals",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/customer/appeals?customer_id={{customerId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "customer", "appeals"],
+              "query": [
+                { "key": "customer_id", "value": "{{customerId}}" }
+              ]
+            },
+            "description": "Confirm the returned appeal shows the final outcome after resolution."
+          }
+        }
+      ]
+    }
+  ]
+}

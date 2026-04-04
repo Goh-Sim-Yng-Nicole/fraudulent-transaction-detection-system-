@@ -41,6 +41,26 @@ const send = async (req, res, method, target, options, transform) => {
   return res.status(response.status).json(payload);
 };
 
+const requireCustomerLocalPassword = async (req, res, next) => {
+  try {
+    const response = await request(req, 'GET', `${config.services.user}/me`);
+    if (response.status !== 200) {
+      return res.status(response.status).json(response.data);
+    }
+
+    if (response.data?.has_password === false) {
+      return res.status(428).json({
+        error: 'Set a local password before making changes to this account',
+      });
+    }
+
+    req.customerProfile = response.data;
+    return next();
+  } catch (error) {
+    return next(error);
+  }
+};
+
 router.post('/auth/register', async (req, res) => {
   await send(
     req,
@@ -87,7 +107,7 @@ router.get('/customers/me', ...customerOnly, async (req, res) => {
   );
 });
 
-router.put('/customers/me', ...customerOnly, async (req, res) => {
+router.put('/customers/me', ...customerOnly, requireCustomerLocalPassword, async (req, res) => {
   await send(
     req,
     res,
@@ -97,12 +117,22 @@ router.put('/customers/me', ...customerOnly, async (req, res) => {
   );
 });
 
-router.put('/customers/me/password', ...customerOnly, async (req, res) => {
+router.put('/customers/me/password', ...customerOnly, requireCustomerLocalPassword, async (req, res) => {
   await send(
     req,
     res,
     'PUT',
     `${config.services.user}/me/password`,
+    { body: req.body }
+  );
+});
+
+router.post('/customers/me/password/set', ...customerOnly, async (req, res) => {
+  await send(
+    req,
+    res,
+    'POST',
+    `${config.services.user}/me/password/set`,
     { body: req.body }
   );
 });
@@ -116,7 +146,7 @@ router.post('/customers/me/request-otp', ...customerOnly, async (req, res) => {
   );
 });
 
-router.delete('/customers/me', ...customerOnly, async (req, res) => {
+router.delete('/customers/me', ...customerOnly, requireCustomerLocalPassword, async (req, res) => {
   await send(
     req,
     res,
@@ -141,7 +171,7 @@ router.get('/customer/transactions', ...customerOnly, async (req, res) => {
   );
 });
 
-router.post('/customer/transactions', ...customerOnly, async (req, res) => {
+router.post('/customer/transactions', ...customerOnly, requireCustomerLocalPassword, async (req, res) => {
   await send(
     req,
     res,
@@ -179,7 +209,7 @@ router.get('/customer/appeals', ...customerOnly, async (req, res) => {
   );
 });
 
-router.post('/customer/appeals', ...customerOnly, async (req, res) => {
+router.post('/customer/appeals', ...customerOnly, requireCustomerLocalPassword, async (req, res) => {
   await send(
     req,
     res,

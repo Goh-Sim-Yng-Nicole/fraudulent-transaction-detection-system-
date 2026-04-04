@@ -50,6 +50,7 @@ async def wait_for_db(engine: AsyncEngine, *, timeout_seconds: int = 30) -> None
 async def init_db(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.execute(text("ALTER TABLE customers ALTER COLUMN password_hash DROP NOT NULL"))
 
 
 def should_auto_create_tables() -> bool:

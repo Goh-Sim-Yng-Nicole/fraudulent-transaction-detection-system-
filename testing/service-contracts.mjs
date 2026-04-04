@@ -14,6 +14,7 @@ import {
   platform,
   poll,
   request,
+  setCustomerPasswordless,
   staffLogin,
   tracing,
   waitForConsumerGroupsSettled,
@@ -229,6 +230,44 @@ const primaryOtp = await waitForLatestOtp(primaryCustomer.email);
 primaryCustomer = await verifyCustomerOtpDirect(primaryCustomer, primaryOtp);
 const recipientOtp = await waitForLatestOtp(recipientCustomer.email);
 recipientCustomer = await verifyCustomerOtpDirect(recipientCustomer, recipientOtp);
+
+await setCustomerPasswordless(primaryCustomer.customerId);
+
+const passwordlessCustomerProfile = await request(`${platform.customerBase}/me`, {
+  headers: authHeaders(primaryCustomer.verifiedToken),
+});
+assertStatus(passwordlessCustomerProfile, 200, 'passwordless customer profile');
+assert.equal(passwordlessCustomerProfile.body?.has_password, false, 'passwordless direct customer should report has_password=false');
+
+assertStatus(await request(`${platform.customerBase}/login`, {
+  method: 'POST',
+  body: { email: primaryCustomer.email, password: primaryCustomer.password },
+}), 403, 'passwordless direct login should be forbidden');
+
+assertStatus(await request(`${platform.customerBase}/me`, {
+  method: 'PUT',
+  headers: authHeaders(primaryCustomer.verifiedToken),
+  body: { full_name: `${primaryCustomer.full_name} Blocked` },
+}), 428, 'passwordless customer update profile should be blocked');
+
+const passwordlessSetupOtpRequest = await request(`${platform.customerBase}/me/request-otp`, {
+  method: 'POST',
+  headers: authHeaders(primaryCustomer.verifiedToken),
+});
+assertStatus(passwordlessSetupOtpRequest, 200, 'passwordless request setup otp');
+
+const passwordlessSetupOtp = await waitForLatestOtp(primaryCustomer.email);
+const passwordlessSetupResult = await request(`${platform.customerBase}/me/password/set`, {
+  method: 'POST',
+  headers: authHeaders(primaryCustomer.verifiedToken),
+  body: {
+    new_password: `${primaryCustomer.password}-local`,
+    otp_code: passwordlessSetupOtp,
+  },
+});
+assertStatus(passwordlessSetupResult, 200, 'passwordless set password');
+assert.equal(passwordlessSetupResult.body?.customer?.has_password, true, 'passwordless set password should restore local password state');
+primaryCustomer.password = `${primaryCustomer.password}-local`;
 
 const resendOtp = await request(`${platform.customerBase}/resend-otp`, {
   method: 'POST',

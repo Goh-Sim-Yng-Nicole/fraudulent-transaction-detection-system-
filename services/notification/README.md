@@ -7,7 +7,8 @@ This service consumes fraud decision events and sends notifications by email or 
 - Email: `mock`, `smtp`
 - SMS: `mock`, `twilio`
 
-For local runs, the project uses `mock` mode by default. Real providers are configured in the project root `.env`.
+For local/CI demo stacks, `.env.example` keeps notification email on Mailpit and SMS disabled.
+For localhost and deployment environments, use the project root `.env` to point notification delivery at external providers while leaving `CUSTOMER_SMTP_*` on Mailpit for OTP demos. Mailpit only handles email in this repo; OTP delivery remains email-based for the demo flow.
 
 ## Important Environment Variables
 
@@ -33,6 +34,49 @@ SMS_PROVIDER=twilio
 TWILIO_ACCOUNT_SID=your-account-sid
 TWILIO_AUTH_TOKEN=your-auth-token
 TWILIO_PHONE_NUMBER=+1xxxxxxxxxx
+```
+
+Practical low-cost demo setup:
+
+- Email notifications: point `EMAIL_*` at an SMTP provider such as Brevo or Gmail
+- SMS notifications: point `SMS_*` and `TWILIO_*` at Twilio
+
+Keep customer OTP demo delivery separate:
+
+```env
+CUSTOMER_SMTP_HOST=mailpit
+CUSTOMER_SMTP_PORT=1025
+CUSTOMER_SMTP_USER=
+CUSTOMER_SMTP_PASSWORD=
+CUSTOMER_SMTP_FROM=banking@ftds.local
+CUSTOMER_SMTP_STARTTLS=false
+```
+
+Recommended localhost/deployment `.env` shape:
+
+```env
+EMAIL_ENABLED=true
+EMAIL_PROVIDER=smtp
+EMAIL_SMTP_HOST=smtp-relay.brevo.com
+EMAIL_SMTP_PORT=587
+EMAIL_SMTP_SECURE=false
+EMAIL_SMTP_USER=your-brevo-login
+EMAIL_SMTP_PASSWORD=your-brevo-smtp-key
+EMAIL_FROM_ADDRESS=alerts@your-domain.example
+EMAIL_FROM_NAME=FTDS Notifications
+
+SMS_ENABLED=true
+SMS_PROVIDER=twilio
+TWILIO_ACCOUNT_SID=your-twilio-account-sid
+TWILIO_AUTH_TOKEN=your-twilio-auth-token
+TWILIO_PHONE_NUMBER=+1xxxxxxxxxx
+
+CUSTOMER_SMTP_HOST=mailpit
+CUSTOMER_SMTP_PORT=1025
+CUSTOMER_SMTP_USER=
+CUSTOMER_SMTP_PASSWORD=
+CUSTOMER_SMTP_FROM=banking@ftds.local
+CUSTOMER_SMTP_STARTTLS=false
 ```
 
 ### Fallback recipients

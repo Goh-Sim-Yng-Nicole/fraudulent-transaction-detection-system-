@@ -68,8 +68,13 @@ Sensitive actions (password change, delete account) require a fresh OTP via `POS
 |---|---|
 | `JWT_SECRET` | HS256 signing secret |
 | `JWT_EXPIRE_MINUTES` | Token lifetime (default 60) |
-| `SMTP_HOST/PORT/USER/PASSWORD/FROM` | SMTP settings for OTP email |
+| `SMTP_HOST/PORT/USER/PASSWORD/FROM` | SMTP path used for OTP emails when running the service directly |
+| `CUSTOMER_SMTP_*` | Docker Compose OTP SMTP settings; keep these pointed at Mailpit for demo OTP retrieval |
 | `PUBLIC_BASE_URL` | UI base URL used by OAuth callback redirects |
 | `OAUTH_GOOGLE_CLIENT_ID` | Google OAuth client ID |
 | `OAUTH_GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
 | `OAUTH_GOOGLE_REDIRECT_URI` | Redirect URI registered in Google console |
+
+## Passwordless or OAuth-backed customers
+
+The service now supports customer rows with no local password hash. Those accounts can still use `GET /me`, request an OTP, and call `POST /me/password/set`, but they cannot update the profile, change password again, delete the account, create transactions, or submit appeals until a local password is set.
