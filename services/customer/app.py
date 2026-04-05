@@ -363,7 +363,7 @@ async def health_ready() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.post("/register")
+@app.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(payload: CustomerRegisterRequest, db: AsyncSession = Depends(get_db)) -> Any:
     result = await db.execute(select(Customer).where(Customer.email == payload.email))
     customer = result.scalar_one_or_none()
