@@ -41,8 +41,8 @@ module.exports = {
   thresholds: {
     approveMax: parseInt(process.env.THRESHOLD_APPROVE_MAX || process.env.APPROVE_MAX_SCORE, 10) || 49,
     flagMin: parseInt(process.env.THRESHOLD_FLAG_MIN, 10) || 50,
-    flagMax: parseInt(process.env.THRESHOLD_FLAG_MAX || process.env.FLAG_MAX_SCORE, 10) || 79,
-    declineMin: parseInt(process.env.THRESHOLD_DECLINE_MIN, 10) || 80,
+    flagMax: parseInt(process.env.THRESHOLD_FLAG_MAX || process.env.FLAG_MAX_SCORE, 10) || 75,
+    declineMin: parseInt(process.env.THRESHOLD_DECLINE_MIN, 10) || 76,
     rulesFlaggedAutoDecline: process.env.THRESHOLD_RULES_FLAGGED_AUTO_DECLINE === 'true',
     certaintyAutoDeclineEnabled: process.env.THRESHOLD_CERTAINTY_AUTO_DECLINE_ENABLED === 'true',
     certaintyDeclineMinScore: parseInt(process.env.THRESHOLD_CERTAINTY_DECLINE_MIN_SCORE, 10) || 70,

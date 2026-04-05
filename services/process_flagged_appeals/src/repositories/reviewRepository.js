@@ -355,6 +355,16 @@ class ReviewRepository {
   }
 
   _map(row) {
+    const payload = row.payload || {};
+    const originalTransaction = payload.originalTransaction || {};
+    const fraudAnalysis = payload.fraudAnalysis || {};
+    const ruleResults = fraudAnalysis.ruleResults || {};
+    const mlResults = fraudAnalysis.mlResults || {};
+    const decisionFactors = payload.decisionFactors || {};
+    const analysisReasons = Array.isArray(fraudAnalysis.reasons) ? fraudAnalysis.reasons : [];
+    const ruleReasons = Array.isArray(ruleResults.reasons) ? ruleResults.reasons : [];
+    const reasonHighlights = [...new Set([...analysisReasons, ...ruleReasons].filter(Boolean))];
+
     return {
       reviewId: row.review_id,
       transactionId: row.transaction_id,
@@ -365,7 +375,25 @@ class ReviewRepository {
       finalDecision: row.final_decision,
       decisionReason: row.decision_reason,
       riskScore: row.risk_score === null ? null : parseFloat(row.risk_score),
-      payload: row.payload,
+      payload,
+      originalTransaction,
+      fraudAnalysis,
+      decisionFactors,
+      amount: originalTransaction.amount ?? null,
+      currency: originalTransaction.currency || null,
+      cardType: originalTransaction.cardType || null,
+      transactionCountry: originalTransaction.location?.country || null,
+      transactionCreatedAt: originalTransaction.createdAt || null,
+      reasonHighlights,
+      ruleReasons,
+      analysisReasons,
+      adjustedScore: decisionFactors.adjustedScore ?? fraudAnalysis.riskScore ?? row.risk_score,
+      originalScore: decisionFactors.originalScore ?? fraudAnalysis.riskScore ?? row.risk_score,
+      mlScore: mlResults.score ?? null,
+      mlConfidence: mlResults.confidence ?? null,
+      modelVersion: mlResults.modelVersion || mlResults.model_version || null,
+      overrideReason: payload.overrideReason || null,
+      overrideType: payload.overrideType || null,
       reviewedBy: row.reviewed_by,
       reviewedRole: row.reviewed_role,
       reviewNotes: row.review_notes,

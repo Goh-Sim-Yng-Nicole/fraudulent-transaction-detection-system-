@@ -14,7 +14,7 @@
       }
     ]
   },
-  "description": "Real-time monitoring for the Fraud Detection Platform",
+  "description": "Deep-dive audit and Kafka reliability view for the fraud platform",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -903,14 +903,14 @@
   "refresh": "10s",
   "schemaVersion": 36,
   "style": "dark",
-  "tags": ["fraud-detection", "audit", "kafka"],
+  "tags": ["fraud-detection", "audit", "kafka", "deep-dive"],
   "templating": {
     "list": []
   },
   "time": { "from": "now-3h", "to": "now" },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Fraud Detection Platform",
-  "uid": "fraud-detection-platform",
+  "title": "Audit Pipeline Deep Dive",
+  "uid": "audit-pipeline-deep-dive",
   "version": 1
 }

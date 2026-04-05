@@ -95,6 +95,46 @@ class DecisionPublisherTests(IsolatedAsyncioTestCase):
         self.assertEqual(payload["decisionFactors"]["confidenceAdjustment"]["adjustment"], 10)
         self.assertEqual(payload["decisionFactors"]["adjustedScore"], 55)
 
+    async def test_declines_high_scores_even_when_high_value_and_geography_manual_review_rules_match(self) -> None:
+        settings.outsystems_decision_url = None
+        settings.local_decision_fallback_enabled = True
+        settings.auto_approve_whitelist = []
+        settings.auto_decline_blacklist = []
+        settings.require_manual_review_countries = ["NG"]
+        settings.threshold_high_value_auto_flag = True
+        settings.threshold_high_value_amount = 100
+        settings.threshold_decline_min = 76
+
+        producer = SimpleNamespace(send_and_wait=AsyncMock())
+        publisher = DecisionPublisher(SimpleNamespace())
+
+        await publisher.process(
+            producer=producer,
+            transaction={
+                "id": "txn-auto-decline-precedence",
+                "customerId": "customer-777",
+                "merchantId": "merchant-7",
+                "amount": 5000,
+                "location": {"country": "NG"},
+            },
+            fraud_analysis={
+                "customerId": "customer-777",
+                "riskScore": 88,
+                "ruleResults": {"flagged": False},
+                "mlResults": {"confidence": 0.72},
+            },
+            correlation_id="corr-auto-decline-precedence",
+        )
+
+        producer.send_and_wait.assert_awaited_once()
+        self.assertEqual(producer.send_and_wait.await_args.args[0], settings.kafka_finalised_topic)
+
+        payload = producer.send_and_wait.await_args.kwargs["value"]
+        self.assertEqual(payload["decision"], "DECLINED")
+        self.assertIn("decline threshold (76)", payload["decisionReason"])
+        self.assertNotIn("highValue", payload["decisionFactors"])
+        self.assertNotIn("geographicRisk", payload["decisionFactors"])
+
     async def test_fails_closed_when_external_handoff_fails_and_fallback_is_disabled(self) -> None:
         settings.outsystems_decision_url = "http://outsystems.example.local/decision"
         settings.local_decision_fallback_enabled = False

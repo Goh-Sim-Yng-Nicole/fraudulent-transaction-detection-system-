@@ -58,7 +58,7 @@ class Settings:
 
         approve_max = _env_int("THRESHOLD_APPROVE_MAX", _env_int("APPROVE_MAX_SCORE", 49))
         flag_min = _env_int("THRESHOLD_FLAG_MIN", approve_max + 1)
-        flag_max = _env_int("THRESHOLD_FLAG_MAX", _env_int("FLAG_MAX_SCORE", 79))
+        flag_max = _env_int("THRESHOLD_FLAG_MAX", _env_int("FLAG_MAX_SCORE", 75))
         decline_min = _env_int("THRESHOLD_DECLINE_MIN", flag_max + 1)
 
         self.env = _env("NODE_ENV", "development")

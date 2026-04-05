@@ -169,6 +169,15 @@ class DecisionPublisher:
             decision_factors["adjustedScore"] = adjusted_score
             return self._build_decision_result("DECLINED", reasons, decision_factors, None)
 
+        if adjusted_score >= settings.threshold_decline_min:
+            decision_factors["thresholdBased"] = True
+            decision_factors["adjustedScore"] = adjusted_score
+            decision_factors["originalScore"] = fraud_analysis["riskScore"]
+            reasons.append(
+                f"Risk score {adjusted_score} exceeds decline threshold ({settings.threshold_decline_min})"
+            )
+            return self._build_decision_result("DECLINED", reasons, decision_factors, None)
+
         high_value_override = self._check_high_value(transaction)
         if high_value_override is not None:
             reasons.append(high_value_override["reason"])
@@ -184,9 +193,6 @@ class DecisionPublisher:
         if adjusted_score <= settings.threshold_approve_max:
             decision = "APPROVED"
             reasons.append(f"Risk score {adjusted_score} below approval threshold ({settings.threshold_approve_max})")
-        elif adjusted_score >= settings.threshold_decline_min:
-            decision = "DECLINED"
-            reasons.append(f"Risk score {adjusted_score} exceeds decline threshold ({settings.threshold_decline_min})")
         else:
             decision = "FLAGGED"
             reasons.append(f"Risk score {adjusted_score} in manual review range ({settings.threshold_flag_min}-{settings.threshold_flag_max})")
