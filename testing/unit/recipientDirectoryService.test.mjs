@@ -60,8 +60,8 @@ test('recipient directory list uses the external header names and normalizes fav
   assert.equal(calls[0].method, 'GET');
   assert.equal(calls[0].url, 'https://outsystems.example.com/Recipient/rest/Recipient/Recipients/');
   assert.deepEqual(calls[0].params, { favorites_only: true });
-  assert.equal(calls[0].headers.XInternalApiKey, 'top-secret-key');
-  assert.equal(calls[0].headers.XUserID, 'cust-1');
+  assert.equal(calls[0].headers['X-Internal-Api-Key'], 'top-secret-key');
+  assert.equal(calls[0].headers['X-User-ID'], 'cust-1');
   assert.equal(calls[0].timeout, 4321);
   assert.deepEqual(result, {
     status: 200,
