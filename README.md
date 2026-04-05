@@ -158,18 +158,17 @@ Create a local environment file:
 Copy-Item .env.example .env
 ```
 
-For local OTP demos, keep:
+For OTP demos with a Mailpit copy, keep:
 
 ```env
 CUSTOMER_SMTP_HOST=mailpit
 CUSTOMER_SMTP_PORT=1025
 CUSTOMER_SMTP_USER=
 CUSTOMER_SMTP_PASSWORD=
-CUSTOMER_SMTP_FROM=banking@ftds.local
 CUSTOMER_SMTP_STARTTLS=false
 ```
 
-For external notification delivery, configure:
+For external email delivery, configure the shared sender once. Customer OTP emails will use the same sender and still mirror into Mailpit when `CUSTOMER_SMTP_*` points there:
 
 ```env
 EMAIL_ENABLED=true
@@ -179,7 +178,7 @@ EMAIL_SMTP_PORT=587
 EMAIL_SMTP_SECURE=false
 EMAIL_SMTP_USER=your-user
 EMAIL_SMTP_PASSWORD=your-password
-EMAIL_FROM_ADDRESS=alerts@your-domain
+EMAIL_FROM_ADDRESS=fraud.notifications@gmail.com
 EMAIL_FROM_NAME=FTDS Notifications
 
 SMS_ENABLED=true

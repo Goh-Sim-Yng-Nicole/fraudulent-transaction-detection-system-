@@ -1,6 +1,6 @@
 # Customer Service
 
-Handles customer registration, OTP verification, OAuth login, and profile management.
+Handles customer registration, authentication (JWT + OTP), and profile management.
 
 **Port:** 8005 | **Type:** Atomic microservice
 
@@ -10,19 +10,17 @@ Handles customer registration, OTP verification, OAuth login, and profile manage
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `POST` | `/register` | None | Register or reactivate account, then send OTP (no JWT until verified). |
-| `POST` | `/login` | None | Validate password and send OTP to registered email. |
-| `POST` | `/verify-otp` | None | Verify OTP and mint customer JWT. |
-| `POST` | `/resend-otp` | None | Resend OTP to email. |
-| `GET` | `/oauth/start?provider=google&next=/banking` | None | Start Google OAuth login. |
-| `GET` | `/oauth/callback` | None | OAuth callback, then redirect to UI with JWT in URL fragment. |
-| `GET` | `/me` | JWT | Get own profile. |
-| `PUT` | `/me` | JWT | Update full_name and phone. |
-| `POST` | `/me/request-otp` | JWT | Request OTP for sensitive operations. |
-| `PUT` | `/me/password` | JWT + OTP | Change password. |
-| `DELETE` | `/me` | JWT + password + OTP | Soft-delete account. |
-| `GET` | `/lookup?query=` | JWT | Lookup active customer by email or phone. |
-| `GET` | `/internal/contact/{customer_id}` | None | Internal contact lookup by customer ID. |
+| `POST` | `/register` | None | Register; sends OTP to email before first sign-in. Re-registers soft-deleted accounts. |
+| `POST` | `/login` | None | Sends OTP to registered email |
+| `POST` | `/verify-otp` | None | Submit OTP → returns JWT |
+| `POST` | `/resend-otp` | None | Resend OTP to email |
+| `GET` | `/me` | JWT | Get own profile |
+| `PUT` | `/me` | JWT | Update full_name and phone |
+| `POST` | `/me/request-otp` | JWT | Request OTP for sensitive operations |
+| `PUT` | `/me/password` | JWT + OTP | Change password |
+| `DELETE` | `/me` | JWT + password + OTP | Soft-delete account |
+| `GET` | `/lookup?query=` | JWT | Lookup active customer by email or phone |
+| `GET` | `/internal/contact/{customer_id}` | None | Internal: get name + email by ID |
 
 ---
 
@@ -34,31 +32,30 @@ Handles customer registration, OTP verification, OAuth login, and profile manage
 | `customer_id` | UUID PK |
 | `email` | Unique |
 | `password_hash` | bcrypt |
-| `full_name` | Required |
-| `phone` | Nullable; E.164 when present |
-| `is_active` | `false` means soft-deleted |
+| `full_name` | |
+| `phone` | E.164 e.g. +6591234567 |
+| `is_active` | False = soft deleted |
 
 **otp_codes**
 | Field | Notes |
 |---|---|
 | `customer_id` | FK to customers |
 | `code` | 6-digit numeric |
-| `expires_at` | 10 minutes from creation |
-| `used` | Invalid after first successful verification |
+| `purpose` | `login` / `change_password` / `delete_account` |
+| `expires_at` | 10 min from creation |
+| `used` | Invalidated after first use |
 
 ---
 
 ## Auth Flow
 
-```text
-Password flow:
-POST /register or POST /login -> OTP email -> POST /verify-otp -> JWT
-
-OAuth flow:
-GET /oauth/start -> provider callback -> redirect to UI with JWT fragment
+```
+POST /register or /login → OTP emailed → POST /verify-otp → JWT
 ```
 
-Sensitive actions (password change, delete account) require a fresh OTP via `POST /me/request-otp`.
+Sensitive actions (password change, delete) require a fresh OTP via `POST /me/request-otp`.
+
+Soft-deleted accounts can re-register with the same email — the existing row is reactivated with new credentials.
 
 ---
 
@@ -68,12 +65,9 @@ Sensitive actions (password change, delete account) require a fresh OTP via `POS
 |---|---|
 | `JWT_SECRET` | HS256 signing secret |
 | `JWT_EXPIRE_MINUTES` | Token lifetime (default 60) |
-| `SMTP_HOST/PORT/USER/PASSWORD/FROM` | SMTP path used for OTP emails when running the service directly |
-| `CUSTOMER_SMTP_*` | Docker Compose OTP SMTP settings; keep these pointed at Mailpit for demo OTP retrieval |
-| `PUBLIC_BASE_URL` | UI base URL used by OAuth callback redirects |
-| `OAUTH_GOOGLE_CLIENT_ID` | Google OAuth client ID |
-| `OAUTH_GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
-| `OAUTH_GOOGLE_REDIRECT_URI` | Redirect URI registered in Google console |
+| `SMTP_HOST/PORT/USER/PASSWORD/FROM` | Primary SMTP path used for OTP emails when running the service directly |
+| `SMTP_MIRROR_*` | Optional mirror SMTP path used to drop the same OTP into Mailpit or another demo inbox |
+| `CUSTOMER_SMTP_*` | Docker Compose mirror SMTP settings; keep these pointed at Mailpit when you want OTP visibility in the demo inbox |
 
 ## Passwordless or OAuth-backed customers
 

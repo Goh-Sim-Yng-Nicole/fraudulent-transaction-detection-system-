@@ -372,7 +372,7 @@ services:
       EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:-alerts@ftds.local}
       EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-FTDS Notifications}
       SMS_ENABLED: ${SMS_ENABLED:-false}
-      CUSTOMER_PORTAL_URL: ${CUSTOMER_PORTAL_URL:-http://localhost:8088/banking}
+      CUSTOMER_PORTAL_URL: ${CUSTOMER_PORTAL_URL:-http://localhost:8088/banking.html}
       NOTIFY_ON_APPROVED: ${NOTIFY_ON_APPROVED:-true}
       NOTIFY_ON_DECLINED: ${NOTIFY_ON_DECLINED:-true}
       NOTIFY_ON_FLAGGED: ${NOTIFY_ON_FLAGGED:-true}
@@ -461,12 +461,17 @@ services:
       <<: *otel-env
       OTEL_SERVICE_NAME: customer
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_CUSTOMER_USER:-postgres}:${POSTGRES_CUSTOMER_PASSWORD:-postgres}@postgres-customer:5432/${POSTGRES_CUSTOMER_DB:-ftds_customer}
-      SMTP_HOST: ${CUSTOMER_SMTP_HOST:-mailpit}
-      SMTP_PORT: ${CUSTOMER_SMTP_PORT:-1025}
-      SMTP_USER: ${CUSTOMER_SMTP_USER:-}
-      SMTP_PASSWORD: ${CUSTOMER_SMTP_PASSWORD:-}
-      SMTP_FROM: ${CUSTOMER_SMTP_FROM:-banking@ftds.local}
-      SMTP_STARTTLS: ${CUSTOMER_SMTP_STARTTLS:-false}
+      SMTP_HOST: ${EMAIL_SMTP_HOST:-mailpit}
+      SMTP_PORT: ${EMAIL_SMTP_PORT:-1025}
+      SMTP_USER: ${EMAIL_SMTP_USER:-}
+      SMTP_PASSWORD: ${EMAIL_SMTP_PASSWORD:-}
+      SMTP_FROM: ${EMAIL_FROM_ADDRESS:-alerts@ftds.local}
+      SMTP_MIRROR_HOST: ${CUSTOMER_SMTP_HOST:-}
+      SMTP_MIRROR_PORT: ${CUSTOMER_SMTP_PORT:-1025}
+      SMTP_MIRROR_USER: ${CUSTOMER_SMTP_USER:-}
+      SMTP_MIRROR_PASSWORD: ${CUSTOMER_SMTP_PASSWORD:-}
+      SMTP_MIRROR_FROM: ${EMAIL_FROM_ADDRESS:-alerts@ftds.local}
+      SMTP_MIRROR_STARTTLS: ${CUSTOMER_SMTP_STARTTLS:-false}
     ports:
       - '8005:8005'
     depends_on:
@@ -521,12 +526,6 @@ services:
     build:
       context: .
       dockerfile: nginx/Dockerfile
-      args:
-        TLS_CERT_HOST: ${DEPLOYMENT_HOST:-localhost}
-    environment:
-      DEPLOYMENT_HOST: ${DEPLOYMENT_HOST:-localhost}
-    volumes:
-      - /etc/letsencrypt:/etc/letsencrypt:ro
     ports:
       - '8088:8088'
       - '443:8443'
@@ -632,8 +631,6 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin123}
-      GF_SERVER_ROOT_URL: ${PUBLIC_BASE_URL:-http://localhost:8088}/grafana/
-      GF_SERVER_SERVE_FROM_SUB_PATH: 'true'
       GF_USERS_ALLOW_SIGN_UP: ${GRAFANA_ALLOW_SIGN_UP:-false}
       GF_AUTH_ANONYMOUS_ENABLED: ${GRAFANA_ANONYMOUS_ENABLED:-true}
       GF_AUTH_ANONYMOUS_ORG_ROLE: ${GRAFANA_ANONYMOUS_ORG_ROLE:-Viewer}

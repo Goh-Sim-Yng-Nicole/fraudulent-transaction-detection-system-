@@ -6,6 +6,7 @@ import string
 from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from typing import Any
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -116,22 +117,70 @@ def generate_otp_code() -> str:
     return "".join(random.choices(string.digits, k=6))
 
 
+def _read_smtp_config(prefix: str) -> dict[str, Any] | None:
+    host = os.getenv(f"{prefix}_HOST", "").strip()
+    if not host:
+        return None
+
+    user = os.getenv(f"{prefix}_USER", "").strip()
+    password = os.getenv(f"{prefix}_PASSWORD", "").strip()
+    port = int(os.getenv(f"{prefix}_PORT", "587"))
+    from_address = os.getenv(f"{prefix}_FROM", user or "noreply@ftds.local").strip()
+    starttls_raw = os.getenv(f"{prefix}_STARTTLS")
+
+    if starttls_raw is None:
+        # Default to STARTTLS for typical external SMTP relays while keeping local demo sinks simple.
+        start_tls = host not in {"mailpit", "localhost", "127.0.0.1"} and port == 587
+    else:
+        start_tls = starttls_raw.strip().lower() in {"1", "true", "yes", "on"}
+
+    return {
+        "host": host,
+        "port": port,
+        "user": user,
+        "password": password,
+        "from": from_address,
+        "start_tls": start_tls,
+    }
+
+
+def _same_smtp_target(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    return (
+        left["host"] == right["host"]
+        and left["port"] == right["port"]
+        and left["user"] == right["user"]
+        and left["from"] == right["from"]
+        and left["start_tls"] == right["start_tls"]
+    )
+
+
+async def _send_message_via_smtp(message: MIMEMultipart, smtp_config: dict[str, Any]) -> None:
+    import aiosmtplib
+
+    send_kwargs = {
+        "hostname": smtp_config["host"],
+        "port": smtp_config["port"],
+        "start_tls": smtp_config["start_tls"],
+    }
+    if smtp_config["user"] and smtp_config["password"]:
+        send_kwargs["username"] = smtp_config["user"]
+        send_kwargs["password"] = smtp_config["password"]
+
+    await aiosmtplib.send(message, **send_kwargs)
+
+
 async def send_otp_email(to_email: str, full_name: str, code: str, purpose: str = "login") -> None:
     """
-    Send OTP via SMTP. Falls back to console logging when SMTP is not configured
-    (useful for local development without an email service).
+    Send OTP via the configured customer SMTP path and optionally mirror the same
+    message into Mailpit for demo visibility.
     """
-    smtp_host = os.getenv("SMTP_HOST", "").strip()
-    smtp_user = os.getenv("SMTP_USER", "").strip()
-    smtp_password = os.getenv("SMTP_PASSWORD", "").strip()
-    smtp_port = int(os.getenv("SMTP_PORT", "587"))
-    smtp_from = os.getenv("SMTP_FROM", smtp_user or "noreply@ftds.local")
-    smtp_starttls = os.getenv("SMTP_STARTTLS", "true").strip().lower() in {"1", "true", "yes", "on"}
+    primary_smtp = _read_smtp_config("SMTP")
+    mirror_smtp = _read_smtp_config("SMTP_MIRROR")
 
     subject_map = {
         "login": "Your FTDS login verification code",
+        "register": "Verify your FTDS account email",
         "set_password": "Set your FTDS account password",
-        "register": "Verify your new FTDS account",
         "change_password": "Confirm your FTDS password change",
         "delete_account": "Confirm your FTDS account deletion",
     }
@@ -155,27 +204,51 @@ async def send_otp_email(to_email: str, full_name: str, code: str, purpose: str 
     </div>
     """
 
-    if not smtp_host:
+    text_body = (
+        f"Hi {full_name},\n\n"
+        f"Your one-time verification code is {code}.\n\n"
+        "This code expires in 10 minutes. Do not share it with anyone.\n"
+        "If you did not request this, please ignore this email.\n"
+    )
+
+    smtp_targets = []
+    if primary_smtp is not None:
+        smtp_targets.append(primary_smtp)
+    if mirror_smtp is not None and all(not _same_smtp_target(mirror_smtp, existing) for existing in smtp_targets):
+        smtp_targets.append(mirror_smtp)
+
+    if not smtp_targets:
         # Dev mode — print to container logs
         print(f"[OTP DEV] ✉  To: {to_email} | Code: {code} | Purpose: {purpose}", flush=True)
         return
 
-    import aiosmtplib
+    delivery_failures: list[str] = []
+    successful_deliveries = 0
 
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = smtp_from
-    msg["To"] = to_email
-    msg.attach(MIMEText(html_body, "html"))
+    for smtp_config in smtp_targets:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = smtp_config["from"]
+        msg["To"] = to_email
+        msg.attach(MIMEText(text_body, "plain"))
+        msg.attach(MIMEText(html_body, "html"))
 
-    send_kwargs = {
-        "hostname": smtp_host,
-        "port": smtp_port,
-        "start_tls": smtp_starttls,
-    }
-    if smtp_user and smtp_password:
-        send_kwargs["username"] = smtp_user
-        send_kwargs["password"] = smtp_password
+        try:
+            await _send_message_via_smtp(msg, smtp_config)
+            successful_deliveries += 1
+        except Exception as exc:  # pragma: no cover - exercised by integration/runtime checks
+            delivery_failures.append(f"{smtp_config['host']}:{smtp_config['port']} -> {exc}")
 
-    await aiosmtplib.send(msg, **send_kwargs)
+    if successful_deliveries == 0 and delivery_failures:
+        raise RuntimeError(
+            "Unable to deliver OTP email via any configured SMTP transport: "
+            + "; ".join(delivery_failures)
+        )
+
+    if delivery_failures:
+        print(
+            "[OTP WARN] Some OTP delivery mirrors failed but at least one send succeeded: "
+            + "; ".join(delivery_failures),
+            flush=True,
+        )
 
