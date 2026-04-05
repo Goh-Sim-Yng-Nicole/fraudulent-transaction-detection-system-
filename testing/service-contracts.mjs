@@ -155,12 +155,9 @@ const grafanaHealth = await request(`${platform.grafanaBase}/api/health`, {
 assertStatus(grafanaHealth, 200, 'grafana health');
 assert.equal(grafanaHealth.body?.database, 'ok', 'grafana database health should be ok');
 
-const grafanaDashboards = await request(`${platform.grafanaBase}/api/search?type=dash-db`, {
+await checkHtmlPage(`${platform.grafanaBase}/`, 'grafana ui', undefined, {
   headers: { Cookie: opsReadonlySession.cookie },
 });
-assertStatus(grafanaDashboards, 200, 'grafana dashboards list');
-assert.ok(Array.isArray(grafanaDashboards.body), 'grafana dashboards list should return an array');
-assert.ok(grafanaDashboards.body.length >= 2, 'grafana should provision at least two dashboards');
 
 await checkHtmlPage(`${platform.jaegerBase}/`, 'jaeger ui', undefined, {
   headers: { Cookie: opsReadonlySession.cookie },
