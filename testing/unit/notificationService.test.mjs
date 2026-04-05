@@ -6,6 +6,7 @@ import { loadCommonJsWithMocks } from './loadCommonJsWithMocks.mjs';
 function loadNotificationService() {
   const sentEmails = [];
   const sentSms = [];
+  const lookedUpCustomerIds = [];
   const captured = {
     approvedCustomer: null,
     flaggedCustomer: null,
@@ -47,6 +48,10 @@ function loadNotificationService() {
           },
         },
         customerPortalUrl: 'http://localhost:8088/banking.html',
+        customerService: {
+          baseUrl: 'http://customer:8005',
+          timeoutMs: 5000,
+        },
       },
       '../config/logger': {
         info: () => {},
@@ -63,6 +68,18 @@ function loadNotificationService() {
         sendSms: async (payload) => {
           sentSms.push(payload);
           return { success: true };
+        },
+      },
+      './customerContactService': {
+        getContact: async (customerId) => {
+          lookedUpCustomerIds.push(customerId);
+          if (customerId === 'oauth-customer-1') {
+            return {
+              email: 'oauth-customer@example.com',
+              phone: '+6591234567',
+            };
+          }
+          return null;
         },
       },
       '../templates/emailTemplates': {
@@ -87,7 +104,7 @@ function loadNotificationService() {
     }
   );
 
-  return { notificationService, sentEmails, sentSms, captured };
+  return { notificationService, sentEmails, sentSms, captured, lookedUpCustomerIds };
 }
 
 test('flagged decisions notify both the customer and fraud team with richer reason context', async () => {
@@ -166,4 +183,30 @@ test('approved decisions notify the customer with a portal link and support cont
   assert.equal(captured.approvedCustomer.portalUrl, 'http://localhost:8088/banking.html');
   assert.equal(captured.approvedCustomer.supportEmail, 'fraud-team@example.com');
   assert.equal(captured.approvedCustomer.referenceId, 'TXN-APPR');
+});
+
+test('declined decisions resolve missing OAuth customer email from the customer service before falling back', async () => {
+  const { notificationService, sentEmails, lookedUpCustomerIds } = loadNotificationService();
+
+  const result = await notificationService.processDecision({
+    transactionId: 'txn-declined-001',
+    customerId: 'oauth-customer-1',
+    decision: 'DECLINED',
+    originalTransaction: {
+      amount: 910,
+      currency: 'SGD',
+      location: { country: 'SG' },
+    },
+    fraudAnalysis: {
+      riskScore: 91,
+      flagged: false,
+      reasons: ['risk score exceeded decline threshold'],
+    },
+  });
+
+  assert.equal(result.total, 2);
+  assert.equal(result.successful, 2);
+  assert.deepEqual(lookedUpCustomerIds, ['oauth-customer-1']);
+  assert.equal(sentEmails[0].to, 'oauth-customer@example.com');
+  assert.equal(sentEmails[1].to, 'fraud-team@example.com');
 });

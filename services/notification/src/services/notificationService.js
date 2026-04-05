@@ -2,6 +2,7 @@ const config = require('../config');
 const logger = require('../config/logger');
 const emailService = require('./emailService');
 const smsService = require('./smsService');
+const customerContactService = require('./customerContactService');
 const {
   renderApprovedCustomerEmail,
   renderDeclinedCustomerEmail,
@@ -14,7 +15,8 @@ const { retryWithBackoff } = require('../utils/retry');
 class NotificationService {
   // Handles process decision.
   async processDecision(decisionEvent) {
-    const { decision, transactionId, customerId } = decisionEvent;
+    const enrichedEvent = await this._enrichCustomerContact(decisionEvent);
+    const { decision, transactionId, customerId } = enrichedEvent;
 
     logger.info('Processing notification', {
       transactionId,
@@ -24,11 +26,11 @@ class NotificationService {
 
     const notifications = [];
     if (decision === 'DECLINED' && config.notificationRules.notifyOnDeclined) {
-      notifications.push(...this._getDeclinedNotifications(decisionEvent));
+      notifications.push(...this._getDeclinedNotifications(enrichedEvent));
     } else if (decision === 'FLAGGED' && config.notificationRules.notifyOnFlagged) {
-      notifications.push(...this._getFlaggedNotifications(decisionEvent));
+      notifications.push(...this._getFlaggedNotifications(enrichedEvent));
     } else if (decision === 'APPROVED' && config.notificationRules.notifyOnApproved) {
-      notifications.push(...this._getApprovedNotifications(decisionEvent));
+      notifications.push(...this._getApprovedNotifications(enrichedEvent));
     }
     const results = await Promise.allSettled(
       notifications.map(notification => this._sendWithRetry(notification))
@@ -48,6 +50,27 @@ class NotificationService {
       successful: successful.length,
       failed: failed.length,
       results,
+    };
+  }
+
+  async _enrichCustomerContact(event) {
+    if (!event?.customerId) {
+      return event;
+    }
+
+    if (event.customerEmail && event.customerPhone) {
+      return event;
+    }
+
+    const contact = await customerContactService.getContact(event.customerId);
+    if (!contact) {
+      return event;
+    }
+
+    return {
+      ...event,
+      customerEmail: event.customerEmail || contact.email || undefined,
+      customerPhone: event.customerPhone || contact.phone || undefined,
     };
   }
 

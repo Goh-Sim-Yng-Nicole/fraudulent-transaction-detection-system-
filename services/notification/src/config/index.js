@@ -56,6 +56,10 @@ module.exports = {
       phoneNumber: process.env.TWILIO_PHONE_NUMBER || process.env.TWILIO_FROM_NUMBER,
     },
   },
+  customerService: {
+    baseUrl: process.env.CUSTOMER_BASE_URL || 'http://customer:8005',
+    timeoutMs: parseInt(process.env.CUSTOMER_SERVICE_TIMEOUT_MS, 10) || 5000,
+  },
 
   notificationRules: {
     notifyOnApproved: process.env.NOTIFY_ON_APPROVED === 'true',
