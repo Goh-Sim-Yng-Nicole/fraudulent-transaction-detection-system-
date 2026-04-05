@@ -24,6 +24,7 @@ const App = () => {
     updatedLabel: 'Refreshing...',
   });
   const [error, setError] = useState('');
+  const [profileOpen, setProfileOpen] = useState(false);
 
   const handlers = useMemo(() => ({
     onUnauthorized: () => { window.location.href = loginUrl; },
@@ -59,6 +60,16 @@ const App = () => {
   useEffect(() => {
     refresh().catch((err) => setError(err.message));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (!e.target.closest('.profile-dropdown') && !e.target.closest('.profile-trigger')) {
+        setProfileOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   const logout = async () => {
     await fetch('/api/v1/staff/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
@@ -143,10 +154,29 @@ const App = () => {
           <img src="/assets/images/app-logo.png" className="brand-logo" alt="FTDS" />
           Manager Console
         </div>
-        <div className="row">
-          <span className="badge">${state.user?.role || 'loading session...'}</span>
-          <span className="badge">${state.user?.displayName || state.user?.userId || '-'}</span>
-          <button className="btn btn-ghost" onClick=${logout}>Logout</button>
+        <div style=${{ position: 'relative' }}>
+          <button className="profile-trigger" onClick=${() => setProfileOpen((o) => !o)}>
+            <span className="profile-avatar">${(state.user?.displayName || 'M')[0].toUpperCase()}</span>
+            <div className="profile-trigger-info">
+              <span className="profile-trigger-name">${state.user?.displayName || state.user?.userId || 'Staff'}</span>
+              <span className="profile-trigger-sub">${state.user?.role || 'loading...'}</span>
+            </div>
+            <span className="profile-caret">▾</span>
+          </button>
+          ${profileOpen ? html`
+            <div className="profile-dropdown">
+              ${state.user?.role === 'fraud_manager' ? html`
+                <a href="/fraud-review.html" className="profile-dropdown-item" style=${{ textDecoration: 'none' }}>
+                  <span className="profile-dropdown-icon">🔍</span>
+                  <span>Fraud Review Console</span>
+                </a>
+              ` : null}
+              <button className="profile-dropdown-item profile-dropdown-item--danger" onClick=${logout}>
+                <span className="profile-dropdown-icon">⎋</span>
+                <span>Logout</span>
+              </button>
+            </div>
+          ` : null}
         </div>
       </div>
     </header>
