@@ -43,6 +43,14 @@ app.get('/api-docs.json', async (req, res, next) => {
     next(error);
   }
 });
+app.get('/swagger.json', async (req, res, next) => {
+  try {
+    const swaggerSpec = await aggregateSwaggerSpecs();
+    res.json(swaggerSpec);
+  } catch (error) {
+    next(error);
+  }
+});
 app.use('/api-docs', swaggerUi.serve);
 app.use('/api-docs', async (req, res, next) => {
   try {
@@ -56,6 +64,27 @@ app.use('/api-docs', async (req, res, next) => {
         defaultModelsExpandDepth: 1,
         tagsSorter: 'alpha',
         operationsSorter: 'alpha',
+      },
+    })(req, res, next);
+  } catch (error) {
+    next(error);
+  }
+});
+app.use('/swagger', swaggerUi.serve);
+app.use('/swagger', async (req, res, next) => {
+  try {
+    const swaggerSpec = await aggregateSwaggerSpecs();
+    swaggerUi.setup(swaggerSpec, {
+      customSiteTitle: 'Fraud Detection REST API Documentation',
+      customCss: '.swagger-ui .topbar { display: none }',
+      swaggerOptions: {
+        supportedSubmitMethods: [],
+        docExpansion: 'list',
+        defaultModelRendering: 'example',
+        defaultModelsExpandDepth: 1,
+        tagsSorter: 'alpha',
+        operationsSorter: 'alpha',
+        url: '/swagger.json',
       },
     })(req, res, next);
   } catch (error) {
