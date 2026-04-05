@@ -221,7 +221,7 @@ TWILIO_PHONE_NUMBER=+1xxxxxxxxxx
 **First run** (builds all images):
 
 ```powershell
-docker compose up -d --build --remove-orphans
+docker compose up -d --build
 ```
 
 **Subsequent runs** (no code changes):

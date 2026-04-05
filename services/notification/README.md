@@ -1,58 +1,80 @@
 # Notification Service
 
-This service consumes fraud decision events and sends notifications by email or SMS.
+Consumes fraud decision events and delivers notifications to customers and the fraud team via email or SMS.
+
+**Port:** `8010` | **Runtime:** Node.js / Express | **Type:** Atomic microservice
+
+---
+
+## Kafka
+
+| Direction | Topic                   | Effect                                                  |
+| --------- | ----------------------- | ------------------------------------------------------- |
+| Consumes  | `transaction.finalised` | Notifies customer of approval or rejection outcome      |
+| Consumes  | `transaction.flagged`   | Notifies fraud team of a flagged transaction            |
+
+If event contact details are missing, the service falls back to the fallback recipients configured in `.env`.
+
+---
 
 ## Supported Providers
 
-- Email: `mock`, `smtp`
-- SMS: `mock`, `twilio`
+| Channel | Providers           |
+| ------- | ------------------- |
+| Email   | `mock`, `smtp`      |
+| SMS     | `mock`, `twilio`    |
 
-For local/CI demo stacks, `.env.example` keeps notification email on Mailpit and SMS disabled.
-For localhost and deployment environments, use the project root `.env` to point notification delivery at external providers while leaving `CUSTOMER_SMTP_*` on Mailpit for OTP demos. Mailpit only handles email in this repo; OTP delivery remains email-based for the demo flow.
+For local and CI runs, `.env.example` keeps notifications on `mock` providers and leaves OTP delivery on Mailpit.
 
-## Important Environment Variables
+---
 
-### SMTP email
+## Environment Variables
 
-```env
-EMAIL_ENABLED=true
-EMAIL_PROVIDER=smtp
-EMAIL_SMTP_HOST=smtp.gmail.com
-EMAIL_SMTP_PORT=587
-EMAIL_SMTP_SECURE=false
-EMAIL_SMTP_USER=your-account@example.com
-EMAIL_SMTP_PASSWORD=your-app-password
-EMAIL_FROM_ADDRESS=your-account@example.com
-EMAIL_FROM_NAME=Fraud Detection System
-```
+### Email
 
-### Twilio SMS
+| Variable              | Description                                          |
+| --------------------- | ---------------------------------------------------- |
+| `EMAIL_ENABLED`       | `true` to enable email notifications                 |
+| `EMAIL_PROVIDER`      | `smtp` or `mock`                                     |
+| `EMAIL_SMTP_HOST`     | SMTP host (e.g. `smtp.gmail.com`)                    |
+| `EMAIL_SMTP_PORT`     | SMTP port (e.g. `587`)                               |
+| `EMAIL_SMTP_SECURE`   | `true` for TLS, `false` for STARTTLS                 |
+| `EMAIL_SMTP_USER`     | SMTP username                                        |
+| `EMAIL_SMTP_PASSWORD` | SMTP password or app password                        |
+| `EMAIL_FROM_ADDRESS`  | From address for notification emails                 |
+| `EMAIL_FROM_NAME`     | From name for notification emails                    |
 
-```env
-SMS_ENABLED=true
-SMS_PROVIDER=twilio
-TWILIO_ACCOUNT_SID=your-account-sid
-TWILIO_AUTH_TOKEN=your-auth-token
-TWILIO_PHONE_NUMBER=+1xxxxxxxxxx
-```
+### SMS
 
-Practical low-cost demo setup:
+| Variable              | Description                                          |
+| --------------------- | ---------------------------------------------------- |
+| `SMS_ENABLED`         | `true` to enable SMS notifications                   |
+| `SMS_PROVIDER`        | `twilio` or `mock`                                   |
+| `TWILIO_ACCOUNT_SID`  | Twilio account SID                                   |
+| `TWILIO_AUTH_TOKEN`   | Twilio auth token                                    |
+| `TWILIO_PHONE_NUMBER` | Twilio sender phone number (E.164)                   |
 
-- Email notifications: point `EMAIL_*` at an SMTP provider such as Brevo or Gmail
-- SMS notifications: point `SMS_*` and `TWILIO_*` at Twilio
+### Fallback recipients
 
-Keep customer OTP demo delivery separate:
+| Variable                              | Description                                    |
+| ------------------------------------- | ---------------------------------------------- |
+| `NOTIFICATION_CUSTOMER_FALLBACK_EMAIL`| Email used when customer email is not in event |
+| `NOTIFICATION_CUSTOMER_FALLBACK_PHONE`| Phone used when customer phone is not in event |
+| `NOTIFICATION_FRAUD_TEAM_EMAIL`       | Fraud team email for flagged alerts            |
+| `NOTIFICATION_FRAUD_TEAM_PHONE`       | Fraud team phone for flagged alerts            |
 
-```env
-CUSTOMER_SMTP_HOST=mailpit
-CUSTOMER_SMTP_PORT=1025
-CUSTOMER_SMTP_USER=
-CUSTOMER_SMTP_PASSWORD=
-CUSTOMER_SMTP_FROM=banking@ftds.local
-CUSTOMER_SMTP_STARTTLS=false
-```
+### Customer OTP (separate — keep on Mailpit)
 
-Recommended localhost/deployment `.env` shape:
+| Variable                | Description                                      |
+| ----------------------- | ------------------------------------------------ |
+| `CUSTOMER_SMTP_HOST`    | Keep set to `mailpit` for OTP demo retrieval     |
+| `CUSTOMER_SMTP_PORT`    | `1025`                                           |
+| `CUSTOMER_SMTP_FROM`    | `banking@ftds.local`                             |
+| `CUSTOMER_SMTP_STARTTLS`| `false`                                          |
+
+---
+
+## Example `.env` Configuration
 
 ```env
 EMAIL_ENABLED=true
@@ -79,66 +101,24 @@ CUSTOMER_SMTP_FROM=banking@ftds.local
 CUSTOMER_SMTP_STARTTLS=false
 ```
 
-### Fallback recipients
+---
 
-```env
-NOTIFICATION_CUSTOMER_FALLBACK_EMAIL=real-customer@example.com
-NOTIFICATION_CUSTOMER_FALLBACK_PHONE=+1xxxxxxxxxx
-NOTIFICATION_FRAUD_TEAM_EMAIL=fraud-team@example.com
-NOTIFICATION_FRAUD_TEAM_PHONE=+1xxxxxxxxxx
-```
-
-## Start
-
-From the project root:
-
-```bash
-docker compose up --build -d
-```
-
-If you only changed notification credentials:
-
-```bash
-docker compose up --build -d notification-service
-```
-
-## Verify
-
-Health endpoint:
+## Health Check
 
 ```powershell
-Invoke-RestMethod http://localhost:3006/api/v1/health | ConvertTo-Json -Depth 6
+Invoke-RestMethod http://localhost:8010/api/v1/health | ConvertTo-Json -Depth 6
 ```
 
-Check these fields:
+Fields to verify:
 
 - `dependencies.email.mode`
 - `dependencies.sms.mode`
 - `notificationProviders.realProviderEnabled`
 
-Proof script:
-
-```bash
-cd testing
-npm run proof:notification
-```
-
-To require a real external provider:
-
-```powershell
-cd testing
-$env:REQUIRE_REAL_NOTIFICATION_PROVIDER='true'
-npm run proof:notification
-```
-
-## API Docs
-
-- Swagger UI: `http://localhost:3006/api-docs`
-- Health endpoint: `http://localhost:3006/api/v1/health`
+---
 
 ## Notes
 
-- The service consumes `transaction.finalised` and `transaction.flagged`.
-- If event contact details are missing, the service falls back to the values in `.env`.
-- Gmail usually requires an app password for SMTP.
-- Twilio trial accounts can only send to verified numbers.
+- Gmail requires an app password for SMTP; standard passwords are blocked
+- Twilio trial accounts can only send to verified recipient numbers
+- OTP delivery remains email-based via Mailpit; configure `CUSTOMER_SMTP_*` separately from `EMAIL_*`
