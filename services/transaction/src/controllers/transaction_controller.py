@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 from typing import Any
 
 from services.transaction.src.config.settings import SERVICE_NAME, TOPIC_TRANSACTION_CREATED

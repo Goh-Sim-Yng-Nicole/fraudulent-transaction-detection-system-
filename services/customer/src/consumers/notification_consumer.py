@@ -10,7 +10,6 @@ from aiokafka import AIOKafkaConsumer
 from sqlalchemy import select
 
 from services.customer.src.models.customer import Customer
-from services.customer.src.utils.email_utils import send_otp_email
 
 logger = logging.getLogger("customer.notifications")
 
@@ -76,9 +75,10 @@ async def _send_transaction_notification(payload: dict[str, Any], session_factor
         logger.info("[NOTIFY DEV] To: %s | Subject: %s | Txn: %s", customer.email, subject, transaction_id)
         return
 
-    import aiosmtplib
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
+
+    import aiosmtplib
 
     smtp_user = os.getenv("SMTP_USER", "").strip()
     smtp_password = os.getenv("SMTP_PASSWORD", "").strip()
@@ -147,9 +147,10 @@ async def _send_appeal_notification(payload: dict[str, Any], session_factory: An
         logger.info("[NOTIFY DEV] To: %s | Appeal: %s | Resolution: %s", customer.email, appeal_id, resolution)
         return
 
-    import aiosmtplib
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
+
+    import aiosmtplib
 
     smtp_user = os.getenv("SMTP_USER", "").strip()
     smtp_password = os.getenv("SMTP_PASSWORD", "").strip()

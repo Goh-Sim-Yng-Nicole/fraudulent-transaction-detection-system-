@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from services.customer.src.consumers import notification_consumer
 from services.customer.src.db.connection import (
     create_engine,
     create_sessionmaker,
@@ -12,12 +13,15 @@ from services.customer.src.db.connection import (
     should_auto_create_tables,
     wait_for_db,
 )
-from services.customer.src.consumers import notification_consumer
 from services.customer.src.routes.auth import router as auth_router
 from services.customer.src.routes.health import router as health_router
 from services.customer.src.routes.profile import router as profile_router
 from services.customer.src.state import state
-from services.customer.src.utils.observability import instrument_fastapi, instrument_sqlalchemy, shutdown_tracing
+from services.customer.src.utils.observability import (
+    instrument_fastapi,
+    instrument_sqlalchemy,
+    shutdown_tracing,
+)
 
 
 @asynccontextmanager

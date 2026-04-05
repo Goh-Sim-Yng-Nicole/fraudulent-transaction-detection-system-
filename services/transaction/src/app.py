@@ -27,7 +27,10 @@ from services.transaction.src.config.settings import (
     TOPIC_TRANSACTION_FLAGGED,
     TOPIC_TRANSACTION_REVIEWED,
 )
-from services.transaction.src.consumers.transaction_consumer import normalize_status_update, send_to_dlq
+from services.transaction.src.consumers.transaction_consumer import (
+    normalize_status_update,
+    send_to_dlq,
+)
 from services.transaction.src.db.connection import (
     create_engine,
     create_sessionmaker,
@@ -39,7 +42,11 @@ from services.transaction.src.repositories.transaction_repository import Transac
 from services.transaction.src.routes.health import router as health_router
 from services.transaction.src.routes.transaction_routes import router as transaction_router
 from services.transaction.src.state import state
-from services.transaction.src.utils.observability import instrument_fastapi, instrument_sqlalchemy, shutdown_tracing
+from services.transaction.src.utils.observability import (
+    instrument_fastapi,
+    instrument_sqlalchemy,
+    shutdown_tracing,
+)
 
 
 class KafkaJSCompatibleRoundRobinAssignor(RoundRobinPartitionAssignor):

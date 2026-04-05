@@ -11,7 +11,10 @@ from services.transaction.src.config.settings import (
     TOPIC_TRANSACTION_FLAGGED,
     TOPIC_TRANSACTION_REVIEWED,
 )
-from services.transaction.src.controllers.transaction_controller import _as_int_or_none, _as_text_or_none
+from services.transaction.src.controllers.transaction_controller import (
+    _as_int_or_none,
+    _as_text_or_none,
+)
 
 
 def _bytes_header(name: str, value: str | None) -> tuple[str, bytes]:

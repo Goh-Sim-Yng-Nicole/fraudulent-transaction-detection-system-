@@ -9,7 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.customer.src.models.customer import Customer
 from services.customer.src.repositories.customer_repository import create_and_send_otp, verify_otp
-from services.customer.src.utils.password_utils import has_local_password, hash_password, verify_password
+from services.customer.src.utils.password_utils import (
+    has_local_password,
+    hash_password,
+    verify_password,
+)
 
 
 class ProfileController:
