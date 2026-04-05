@@ -78,6 +78,22 @@ class DecisionEngineService {
 
       return this._buildDecisionResult(decision, reasons, decisionFactors, null);
     }
+    if (adjustedScore >= config.thresholds.declineMin) {
+      decision = 'DECLINED';
+      reasons.push(`Risk score ${adjustedScore} exceeds decline threshold (${config.thresholds.declineMin})`);
+      decisionFactors.thresholdBased = true;
+      decisionFactors.adjustedScore = adjustedScore;
+      decisionFactors.originalScore = fraudAnalysis.riskScore;
+
+      log.info('Auto-declined by score threshold', {
+        decision,
+        originalScore: fraudAnalysis.riskScore,
+        adjustedScore,
+        confidence: fraudAnalysis.mlResults?.confidence,
+      });
+
+      return this._buildDecisionResult(decision, reasons, decisionFactors, null);
+    }
     const highValueOverride = this._checkHighValue(originalTransaction);
     if (highValueOverride) {
       decision = highValueOverride.decision;
@@ -107,9 +123,6 @@ class DecisionEngineService {
     if (adjustedScore <= config.thresholds.approveMax) {
       decision = 'APPROVED';
       reasons.push(`Risk score ${adjustedScore} below approval threshold (${config.thresholds.approveMax})`);
-    } else if (adjustedScore >= config.thresholds.declineMin) {
-      decision = 'DECLINED';
-      reasons.push(`Risk score ${adjustedScore} exceeds decline threshold (${config.thresholds.declineMin})`);
     } else {
       decision = 'FLAGGED';
       reasons.push(`Risk score ${adjustedScore} in manual review range (${config.thresholds.flagMin}-${config.thresholds.flagMax})`);

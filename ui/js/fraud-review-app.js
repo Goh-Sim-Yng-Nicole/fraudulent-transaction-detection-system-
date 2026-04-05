@@ -20,6 +20,92 @@ const queueStatusClass = (status) => {
   return '';
 };
 
+const manualDeclineThreshold = 76;
+
+const uniqueStrings = (values) => [...new Set((values || []).filter(Boolean).map((value) => String(value).trim()).filter(Boolean))];
+
+const extractReviewContext = (item) => {
+  const transaction = item.originalTransaction || item.payload?.originalTransaction || {};
+  const fraudAnalysis = item.fraudAnalysis || item.payload?.fraudAnalysis || {};
+  const ruleResults = fraudAnalysis.ruleResults || {};
+  const decisionFactors = item.decisionFactors || item.payload?.decisionFactors || {};
+  const reasons = uniqueStrings([
+    ...(item.reasonHighlights || []),
+    ...(item.analysisReasons || []),
+    ...(item.ruleReasons || []),
+  ]);
+
+  return {
+    amount: transaction.amount ?? item.amount ?? null,
+    currency: transaction.currency || item.currency || null,
+    country: transaction.location?.country || item.transactionCountry || null,
+    merchantId: transaction.merchantId || item.merchantId || null,
+    cardType: transaction.cardType || item.cardType || null,
+    createdAt: transaction.createdAt || item.transactionCreatedAt || null,
+    adjustedScore: decisionFactors.adjustedScore ?? item.adjustedScore ?? item.riskScore ?? null,
+    originalScore: decisionFactors.originalScore ?? item.originalScore ?? item.riskScore ?? null,
+    mlScore: fraudAnalysis.mlResults?.score ?? item.mlScore ?? null,
+    mlConfidence: fraudAnalysis.mlResults?.confidence ?? item.mlConfidence ?? null,
+    modelVersion: fraudAnalysis.mlResults?.modelVersion || fraudAnalysis.mlResults?.model_version || item.modelVersion || null,
+    decisionReason: item.decisionReason || item.payload?.decisionReason || 'Flagged for manual review',
+    reasons,
+    overrideReason: item.overrideReason || item.payload?.overrideReason || null,
+    overrideType: item.overrideType || item.payload?.overrideType || null,
+    ruleFlagged: Boolean(ruleResults.flagged),
+  };
+};
+
+const renderReviewFacts = (facts) => {
+  const detailItems = [
+    facts.amount !== null ? `${facts.currency || 'USD'} ${Number(facts.amount).toFixed(2)}` : null,
+    facts.country ? `Country ${facts.country}` : null,
+    facts.merchantId ? `Merchant ${facts.merchantId}` : null,
+    facts.cardType ? `Card ${facts.cardType}` : null,
+  ].filter(Boolean);
+
+  const scoreItems = [
+    facts.originalScore !== null ? `Original score ${facts.originalScore}` : null,
+    facts.adjustedScore !== null && facts.adjustedScore !== facts.originalScore ? `Adjusted score ${facts.adjustedScore}` : null,
+    facts.mlScore !== null ? `ML score ${facts.mlScore}` : null,
+    facts.mlConfidence !== null ? `Confidence ${formatNumber(Number(facts.mlConfidence) * 100)}%` : null,
+    facts.modelVersion ? `Model ${facts.modelVersion}` : null,
+  ].filter(Boolean);
+
+  return html`
+    <div style=${{ display: 'grid', gap: '0.45rem' }}>
+      <div>
+        <div className="small" style=${{ color: '#d8e4ff', fontWeight: 600 }}>Why it was flagged</div>
+        <div className="muted small" style=${{ marginTop: '0.25rem' }}>${facts.decisionReason}</div>
+      </div>
+      ${facts.reasons.length ? html`
+        <div style=${{ display: 'grid', gap: '0.25rem' }}>
+          ${facts.reasons.slice(0, 4).map((reason) => html`<div className="small muted">- ${reason}</div>`)}
+        </div>
+      ` : null}
+      ${facts.overrideReason ? html`
+        <div className="small muted">
+          Override: ${facts.overrideType || 'MANUAL_REVIEW'}${facts.overrideReason ? ` - ${facts.overrideReason}` : ''}
+        </div>
+      ` : null}
+      ${detailItems.length ? html`
+        <div className="row small muted" style=${{ gap: '0.35rem', flexWrap: 'wrap' }}>
+          ${detailItems.map((item) => html`<span className="pill">${item}</span>`)}
+        </div>
+      ` : null}
+      ${scoreItems.length ? html`
+        <div style=${{ display: 'grid', gap: '0.25rem' }}>
+          ${scoreItems.map((item) => html`<div className="small muted">${item}</div>`)}
+        </div>
+      ` : null}
+      ${facts.adjustedScore !== null && facts.adjustedScore >= manualDeclineThreshold ? html`
+        <div className="small" style=${{ color: '#ffcf8a' }}>
+          Current policy auto-declines scores above 75. This case may have been queued before the rule update if it still appears here.
+        </div>
+      ` : null}
+    </div>
+  `;
+};
+
 const App = () => {
   const [state, setState] = useState({
     user: null,
@@ -210,6 +296,7 @@ const App = () => {
               <thead>
                 <tr>
                   <th>Case</th>
+                  <th>Why flagged</th>
                   <th>Status</th>
                   <th>Claim owner</th>
                   <th>Decision owner</th>
@@ -218,36 +305,41 @@ const App = () => {
                 </tr>
               </thead>
               <tbody>
-                ${state.reviews.length ? state.reviews.map((item) => html`
-                  <tr>
-                    <td>
-                      <div className="mono">${item.transactionId}</div>
-                      <div className="row small muted" style=${{ marginTop: '0.35rem' }}>
-                        <span className="pill">Customer ${item.customerId || '-'}</span>
-                        <span className="pill">Risk ${item.riskScore ?? item.ruleScore ?? '-'}</span>
-                      </div>
-                    </td>
-                    <td><span className=${`pill ${queueStatusClass(item.queueStatus)}`}>${String(item.queueStatus || '').replace(/_/g, ' ')}</span></td>
-                    <td>
-                      <div>${item.claimedBy || 'Unclaimed'}</div>
-                      <div className="muted small">${item.claimedRole || 'Awaiting assignment'}</div>
-                    </td>
-                    <td>
-                      <div>${item.reviewedBy || 'Not decided'}</div>
-                      <div className="muted small">${item.reviewedRole || 'Pending'}</div>
-                    </td>
-                    <td>
-                      <textarea
-                        className="textarea"
-                        placeholder="Decision notes"
-                        value=${notes[`review:${item.transactionId}`] ?? (item.reviewNotes || '')}
-                        onInput=${(event) => setNotes((prev) => ({ ...prev, [`review:${item.transactionId}`]: event.target.value }))}
-                      ></textarea>
-                    </td>
-                    <td>${actionButtons('review', item.transactionId, item.claimedBy, item.queueStatus)}</td>
-                  </tr>
-                `) : html`
-                  <tr><td colspan="6" className="muted">No flagged transactions are waiting for review.</td></tr>
+                ${state.reviews.length ? state.reviews.map((item) => {
+                  const facts = extractReviewContext(item);
+                  return html`
+                    <tr>
+                      <td>
+                        <div className="mono">${item.transactionId}</div>
+                        <div className="row small muted" style=${{ marginTop: '0.35rem', gap: '0.35rem', flexWrap: 'wrap' }}>
+                          <span className="pill">Customer ${item.customerId || '-'}</span>
+                          <span className="pill">Risk ${facts.adjustedScore ?? item.riskScore ?? '-'}</span>
+                          ${facts.createdAt ? html`<span className="pill">${new Date(facts.createdAt).toLocaleString()}</span>` : null}
+                        </div>
+                      </td>
+                      <td>${renderReviewFacts(facts)}</td>
+                      <td><span className=${`pill ${queueStatusClass(item.queueStatus)}`}>${String(item.queueStatus || '').replace(/_/g, ' ')}</span></td>
+                      <td>
+                        <div>${item.claimedBy || 'Unclaimed'}</div>
+                        <div className="muted small">${item.claimedRole || 'Awaiting assignment'}</div>
+                      </td>
+                      <td>
+                        <div>${item.reviewedBy || 'Not decided'}</div>
+                        <div className="muted small">${item.reviewedRole || 'Pending'}</div>
+                      </td>
+                      <td>
+                        <textarea
+                          className="textarea"
+                          placeholder="Decision notes"
+                          value=${notes[`review:${item.transactionId}`] ?? (item.reviewNotes || '')}
+                          onInput=${(event) => setNotes((prev) => ({ ...prev, [`review:${item.transactionId}`]: event.target.value }))}
+                        ></textarea>
+                      </td>
+                      <td>${actionButtons('review', item.transactionId, item.claimedBy, item.queueStatus)}</td>
+                    </tr>
+                  `;
+                }) : html`
+                  <tr><td colspan="7" className="muted">No flagged transactions are waiting for review.</td></tr>
                 `}
               </tbody>
             </table>
