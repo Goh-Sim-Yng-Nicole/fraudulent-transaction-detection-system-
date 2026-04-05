@@ -124,6 +124,24 @@ const migrate = async () => {
       EXECUTE FUNCTION set_appeal_updated_at();
     `);
 
+    // Transaction cache — populated by Kafka consumer; used to validate appeals without HTTP
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS transactions_cache (
+        transaction_id  UUID PRIMARY KEY,
+        customer_id     VARCHAR(255) NOT NULL,
+        status          VARCHAR(50)  NOT NULL,
+        amount          NUMERIC(15,2),
+        currency        VARCHAR(10),
+        correlation_id  VARCHAR(255),
+        raw             JSONB NOT NULL DEFAULT '{}'::jsonb,
+        cached_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_txn_cache_customer_id ON transactions_cache(customer_id);
+    `);
+
     logger.info('Appeal schema migration complete');
   } finally {
     await closePool();

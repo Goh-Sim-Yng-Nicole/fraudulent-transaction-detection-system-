@@ -51,9 +51,19 @@ module.exports = {
     clientId: process.env.KAFKA_CLIENT_ID || 'appeal',
     sessionTimeout: parseInt(process.env.KAFKA_CONSUMER_SESSION_TIMEOUT, 10) || 30000,
     heartbeatInterval: parseInt(process.env.KAFKA_CONSUMER_HEARTBEAT_INTERVAL, 10) || 3000,
+    // Producers
     outputTopicCreated: process.env.KAFKA_OUTPUT_TOPIC_APPEAL_CREATED || 'appeal.created',
     outputTopicResolved: process.env.KAFKA_OUTPUT_TOPIC_APPEAL_RESOLVED || 'appeal.resolved',
+    outputTopicCommandResponses: process.env.KAFKA_OUTPUT_TOPIC_COMMAND_RESPONSES || 'appeal.command.responses',
     dlqTopic: process.env.KAFKA_DLQ_TOPIC || 'appeal.dlq',
+    // Transaction cache consumer
+    txnCacheGroupId: process.env.KAFKA_TXN_CACHE_GROUP_ID || 'appeal-txn-cache-group',
+    inputTopicTxnCreated: process.env.KAFKA_INPUT_TOPIC_TXN_CREATED || 'transaction.created',
+    inputTopicTxnFlagged: process.env.KAFKA_INPUT_TOPIC_TXN_FLAGGED || 'transaction.flagged',
+    inputTopicTxnFinalised: process.env.KAFKA_INPUT_TOPIC_TXN_FINALISED || 'transaction.finalised',
+    // Appeal command consumer
+    commandGroupId: process.env.KAFKA_COMMAND_GROUP_ID || 'appeal-command-group',
+    inputTopicCommands: process.env.KAFKA_INPUT_TOPIC_COMMANDS || 'appeal.commands',
     retry: {
       initialRetryTime: 100,
       retries: 8,

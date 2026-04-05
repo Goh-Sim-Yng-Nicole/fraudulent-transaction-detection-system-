@@ -32,17 +32,16 @@ const App = () => {
 
   const refresh = async () => {
     setError('');
-    const [session, legacyDashboardResponse, dashboardResponse, realtimeResponse] = await Promise.all([
-      fetchJson('/api/staff/me', {}, handlers),
-      fetchJson('/api/analytics/dashboard', {}, handlers),
+    const [session, dashboardResponse, realtimeResponse] = await Promise.all([
+      fetchJson('/api/v1/staff/me', {}, handlers),
       fetchJson('/api/v1/analytics/dashboard?timeRange=24h', {}, handlers),
       fetchJson('/api/v1/analytics/realtime', {}, handlers),
     ]);
 
-    const dashboard = dashboardResponse.data || {};
-    const realtime = realtimeResponse.data || {};
+    const dashboard = dashboardResponse.data || dashboardResponse || {};
+    const realtime = realtimeResponse.data || realtimeResponse || {};
     const generatedAt = new Date(
-      legacyDashboardResponse?.updated_at
+      dashboard?.updated_at
       || dashboard?.metadata?.generatedAt
       || realtime?.timestamp
       || Date.now(),
@@ -50,7 +49,7 @@ const App = () => {
 
     setState({
       user: session.user,
-      legacyDashboard: legacyDashboardResponse || {},
+      legacyDashboard: dashboard,
       dashboard,
       realtime,
       updatedLabel: `Updated ${generatedAt.toLocaleString()}`,
@@ -62,7 +61,7 @@ const App = () => {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const logout = async () => {
-    await fetch('/api/staff/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
+    await fetch('/api/v1/staff/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
     window.location.href = loginUrl;
   };
 
@@ -113,7 +112,7 @@ const App = () => {
     <header className="topbar">
       <div className="topbar-inner">
         <div className="brand">
-          <span className="brand-dot"></span>
+          <img src="/assets/images/app-logo.png" className="brand-logo" alt="FTDS" />
           Manager Console
         </div>
         <div className="row">

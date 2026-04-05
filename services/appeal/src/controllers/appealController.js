@@ -19,7 +19,6 @@ class AppealController {
         appealReason,
         evidence,
         correlationId: req.headers['x-correlation-id'] || null,
-        authHeader: req.headers.authorization || null,
       });
 
       res.status(201).json({ success: true, data });

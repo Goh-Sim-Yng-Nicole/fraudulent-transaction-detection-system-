@@ -1,9 +1,9 @@
 const { v4: uuidv4 } = require('uuid');
-const axios = require('axios');
 const config = require('../config');
 const logger = require('../config/logger');
 const { publish } = require('../config/kafka');
 const appealRepository = require('../repositories/appealRepository');
+const { getPool } = require('../db/pool');
 
 class AppealService {
   constructor() {
@@ -22,7 +22,6 @@ class AppealService {
     appealReason,
     evidence,
     correlationId,
-    authHeader,
   }) {
     if (!transactionId || !customerId) {
       throw new Error('transactionId and customerId are required');
@@ -37,7 +36,7 @@ class AppealService {
       throw new Error(`Transaction ${transactionId} has already been appealed`);
     }
 
-    const transaction = await this._fetchTransaction(transactionId, authHeader);
+    const transaction = await this._fetchTransaction(transactionId);
     if (!transaction) {
       throw new Error(`Transaction ${transactionId} not found`);
     }
@@ -262,28 +261,29 @@ class AppealService {
     return updated;
   }
 
-  // Handles fetch transaction.
-  async _fetchTransaction(transactionId, authHeader) {
+  // Handles fetch transaction — reads from local Kafka-populated cache.
+  async _fetchTransaction(transactionId) {
     try {
-      const response = await axios.get(
-        `${config.transactionServiceUrl}/transactions/${encodeURIComponent(transactionId)}`,
-        {
-          timeout: 4000,
-          headers: authHeader ? { Authorization: authHeader } : {},
-        }
+      const pool = getPool();
+      const result = await pool.query(
+        'SELECT * FROM transactions_cache WHERE transaction_id = $1',
+        [transactionId],
       );
-
-      if (response.status !== 200) {
-        return null;
-      }
-
-      return response.data || null;
+      if (result.rows.length === 0) return null;
+      const row = result.rows[0];
+      // Normalise to camelCase for callers
+      return {
+        transactionId: row.transaction_id,
+        customerId: row.customer_id,
+        customer_id: row.customer_id,
+        status: row.status,
+        amount: row.amount,
+        currency: row.currency,
+        correlationId: row.correlation_id,
+        ...(row.raw || {}),
+      };
     } catch (err) {
-      if (err.response?.status === 404) {
-        return null;
-      }
-
-      logger.error('Failed to fetch transaction for appeal validation', {
+      logger.error('Failed to read transaction from cache', {
         transactionId,
         error: err.message,
       });

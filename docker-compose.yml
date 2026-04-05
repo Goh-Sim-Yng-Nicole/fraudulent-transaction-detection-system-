@@ -155,6 +155,8 @@ services:
         rpk topic create transaction.reviewed --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true
         rpk topic create appeal.created --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true
         rpk topic create appeal.resolved --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true
+        rpk topic create appeal.commands --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true
+        rpk topic create appeal.command.responses --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true
         rpk topic create analytics.dlq --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true
         rpk topic create detect-fraud.dlq --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true
         rpk topic create transaction.dlq --brokers redpanda:9092 --partitions 1 --replicas 1 2>/dev/null || true
@@ -194,7 +196,7 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_TRANSACTION_USER:-postgres}:${POSTGRES_TRANSACTION_PASSWORD:-postgres}@postgres-transaction:5432/${POSTGRES_TRANSACTION_DB:-ftds_transaction}
-    command: ['python', '-m', 'services.transaction.migrate']
+    command: ['python', '-m', 'services.transaction.src.db.migrate']
     restart: on-failure
     depends_on:
       postgres-transaction:
@@ -482,7 +484,7 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_CUSTOMER_USER:-postgres}:${POSTGRES_CUSTOMER_PASSWORD:-postgres}@postgres-customer:5432/${POSTGRES_CUSTOMER_DB:-ftds_customer}
-    command: ['python', '-m', 'services.customer.migrate']
+    command: ['python', '-m', 'services.customer.src.db.migrate']
     depends_on:
       postgres-customer:
         condition: service_healthy

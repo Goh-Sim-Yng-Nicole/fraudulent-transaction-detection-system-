@@ -39,33 +39,35 @@ def _install_transaction_import_stubs() -> None:
         roundrobin_module.RoundRobinPartitionAssignor = RoundRobinPartitionAssignor
         sys.modules["aiokafka.coordinator.assignors.roundrobin"] = roundrobin_module
 
-    if "services.transaction.db" not in sys.modules:
-        db_module = ModuleType("services.transaction.db")
+    if "services.transaction.src.db.connection" not in sys.modules:
+        db_module = ModuleType("services.transaction.src.db.connection")
         db_module.create_engine = lambda *_args, **_kwargs: None
         db_module.create_sessionmaker = lambda *_args, **_kwargs: None
         db_module.init_db = _async_noop
         db_module.should_auto_create_tables = lambda: False
         db_module.wait_for_db = _async_noop
-        sys.modules["services.transaction.db"] = db_module
+        sys.modules["services.transaction.src.db.connection"] = db_module
 
-    if "services.transaction.observability" not in sys.modules:
-        observability_module = ModuleType("services.transaction.observability")
+    if "services.transaction.src.utils.observability" not in sys.modules:
+        observability_module = ModuleType("services.transaction.src.utils.observability")
         observability_module.instrument_fastapi = lambda *_args, **_kwargs: None
         observability_module.instrument_sqlalchemy = lambda *_args, **_kwargs: None
         observability_module.shutdown_tracing = lambda: None
-        sys.modules["services.transaction.observability"] = observability_module
+        sys.modules["services.transaction.src.utils.observability"] = observability_module
 
-    if "services.transaction.store" not in sys.modules:
-        store_module = ModuleType("services.transaction.store")
+    if "services.transaction.src.repositories.transaction_repository" not in sys.modules:
+        repo_module = ModuleType("services.transaction.src.repositories.transaction_repository")
 
-        class TransactionStore: ...
+        class TransactionRepository: ...
 
-        store_module.TransactionStore = TransactionStore
-        sys.modules["services.transaction.store"] = store_module
+        repo_module.TransactionRepository = TransactionRepository
+        sys.modules["services.transaction.src.repositories.transaction_repository"] = repo_module
 
 
 _install_transaction_import_stubs()
-transaction_app_module = importlib.import_module("services.transaction.app")
+transaction_routes_module = importlib.import_module("services.transaction.src.routes.transaction_routes")
+transaction_controller_module = importlib.import_module("services.transaction.src.controllers.transaction_controller")
+transaction_state_module = importlib.import_module("services.transaction.src.state")
 
 
 def make_record(**overrides):
@@ -99,10 +101,10 @@ def make_record(**overrides):
 
 class TransactionCreateTests(IsolatedAsyncioTestCase):
     def setUp(self) -> None:
-        self._original_store = transaction_app_module.state.store
+        self._original_store = transaction_state_module.state.store
 
     def tearDown(self) -> None:
-        transaction_app_module.state.store = self._original_store
+        transaction_state_module.state.store = self._original_store
 
     async def test_republishes_unpublished_idempotent_transaction_before_returning_it(self) -> None:
         existing = make_record(transaction_id="txn-replay-1")
@@ -118,9 +120,9 @@ class TransactionCreateTests(IsolatedAsyncioTestCase):
             find_by_id=AsyncMock(),
             create=AsyncMock(),
         )
-        transaction_app_module.state.store = fake_store
+        transaction_state_module.state.store = fake_store
 
-        payload = transaction_app_module.TransactionCreateRequest(
+        payload = transaction_routes_module.TransactionCreateRequest(
             customer_id="customer-1",
             amount=44.25,
             currency="SGD",
@@ -140,10 +142,10 @@ class TransactionCreateTests(IsolatedAsyncioTestCase):
             )
         )
 
-        with patch.object(transaction_app_module, "_publish_transaction_created", AsyncMock()) as publish:
-            result = await transaction_app_module.create_transaction(payload, request)
+        with patch.object(transaction_routes_module, "publish_transaction_created", AsyncMock()) as publish:
+            result = await transaction_routes_module.create_transaction(payload, request)
 
-        publish.assert_awaited_once_with(existing, "corr-existing-1")
+        publish.assert_awaited_once_with(None, existing, "corr-existing-1")
         fake_store.mark_outbound_event_published.assert_awaited_once_with("txn-replay-1")
         fake_store.mark_outbound_event_failed.assert_not_awaited()
         self.assertEqual(result["transaction_id"], "txn-replay-1")
@@ -170,9 +172,9 @@ class TransactionCreateTests(IsolatedAsyncioTestCase):
             mark_outbound_event_published=AsyncMock(),
             find_by_id=AsyncMock(),
         )
-        transaction_app_module.state.store = fake_store
+        transaction_state_module.state.store = fake_store
 
-        payload = transaction_app_module.TransactionCreateRequest(
+        payload = transaction_routes_module.TransactionCreateRequest(
             customer_id="customer-3",
             amount=120,
             country="SG",
@@ -189,12 +191,12 @@ class TransactionCreateTests(IsolatedAsyncioTestCase):
         )
 
         with patch.object(
-            transaction_app_module,
-            "_publish_transaction_created",
+            transaction_routes_module,
+            "publish_transaction_created",
             AsyncMock(side_effect=RuntimeError("kafka unavailable")),
         ):
             with self.assertRaisesRegex(RuntimeError, "kafka unavailable"):
-                await transaction_app_module.create_transaction(payload, request)
+                await transaction_routes_module.create_transaction(payload, request)
 
         fake_store.mark_outbound_event_failed.assert_awaited_once_with("txn-create-1", "kafka unavailable")
         fake_store.mark_outbound_event_published.assert_not_awaited()
@@ -214,9 +216,9 @@ class TransactionCreateTests(IsolatedAsyncioTestCase):
             mark_outbound_event_published=AsyncMock(),
             create=AsyncMock(),
         )
-        transaction_app_module.state.store = fake_store
+        transaction_state_module.state.store = fake_store
 
-        payload = transaction_app_module.TransactionCreateRequest(
+        payload = transaction_routes_module.TransactionCreateRequest(
             customer_id="customer-5",
             amount=88,
             country="SG",
@@ -229,8 +231,8 @@ class TransactionCreateTests(IsolatedAsyncioTestCase):
             )
         )
 
-        with patch.object(transaction_app_module, "_publish_transaction_created", AsyncMock()) as publish:
-            result = await transaction_app_module.create_transaction(payload, request)
+        with patch.object(transaction_routes_module, "publish_transaction_created", AsyncMock()) as publish:
+            result = await transaction_routes_module.create_transaction(payload, request)
 
         publish.assert_not_awaited()
         fake_store.mark_outbound_event_published.assert_not_awaited()

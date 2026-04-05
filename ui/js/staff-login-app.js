@@ -116,6 +116,10 @@ const App = () => {
   return html`
     <div className="app-shell">
       <section className="hero">
+        <div className="hero-brand">
+          <img src="/assets/images/app-logo.png" className="hero-logo" alt="FTDS" />
+          <span className="hero-brand-name">FTDS</span>
+        </div>
         <span className="hero-chip">Role-aware access</span>
         <h1>Staff and Operations Sign In</h1>
         <p>

@@ -76,6 +76,11 @@ module.exports = {
     inputTopicFlagged: process.env.KAFKA_INPUT_TOPIC_FLAGGED || 'transaction.flagged',
     outputTopicReviewed: process.env.KAFKA_OUTPUT_TOPIC_REVIEWED || 'transaction.reviewed',
     dlqTopic: process.env.KAFKA_DLQ_TOPIC || 'transaction.review.dlq',
+    // Appeal command bus
+    outputTopicAppealCommands: process.env.KAFKA_OUTPUT_TOPIC_APPEAL_COMMANDS || 'appeal.commands',
+    appealResponseGroupId: process.env.KAFKA_APPEAL_RESPONSE_GROUP_ID || 'fraud-review-appeal-response-group',
+    inputTopicAppealResponses: process.env.KAFKA_INPUT_TOPIC_APPEAL_RESPONSES || 'appeal.command.responses',
+    appealCommandTimeoutMs: parseInt(process.env.KAFKA_APPEAL_COMMAND_TIMEOUT_MS, 10) || 8000,
     retry: {
       initialRetryTime: 100,
       retries: 8,

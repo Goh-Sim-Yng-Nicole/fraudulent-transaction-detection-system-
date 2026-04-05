@@ -14,6 +14,7 @@ const logger = require('./config/logger');
 const { createPool, closePool } = require('./db/pool');
 const { createProducer } = require('./config/kafka');
 const appealService = require('./services/appealService');
+const { start: startTxnConsumer, stop: stopTxnConsumer } = require('./consumers/transactionConsumer');
 const routes = require('./routes');
 const legacyRoutes = require('./routes/legacyAppeals');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
@@ -57,6 +58,11 @@ const shutdown = async (signal) => {
     });
 
     try {
+      await stopTxnConsumer();
+    } catch (err) {
+      logger.error('Error stopping transaction consumer', { error: err.message });
+    }
+    try {
       if (producer) await producer.disconnect();
     } catch (err) {
       logger.error('Error disconnecting Kafka producer', { error: err.message });
@@ -97,6 +103,7 @@ const bootstrap = async () => {
   createPool();
   producer = await createProducer();
   appealService.setProducer(producer);
+  await startTxnConsumer();
 
   server = app.listen(config.port, () => {
     logger.info(`Appeal Service listening on port ${config.port}`, {

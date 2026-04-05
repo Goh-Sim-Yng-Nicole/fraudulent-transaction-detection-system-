@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { loadCommonJsWithMocks } from './loadCommonJsWithMocks.mjs';
 
 function loadAppealService({ existingAppeal = null, createAppealError = null } = {}) {
-  const fetchCalls = [];
+  const dbCalls = [];
   const publishCalls = [];
 
   const service = loadCommonJsWithMocks(
@@ -13,23 +13,8 @@ function loadAppealService({ existingAppeal = null, createAppealError = null } =
       uuid: {
         v4: () => 'generated-correlation-id',
       },
-      axios: {
-        get: async (...args) => {
-          fetchCalls.push(args);
-          return {
-            status: 200,
-            data: {
-              transactionId: 'txn-1',
-              customerId: 'customer-1',
-              status: 'REJECTED',
-              correlationId: 'txn-correlation-id',
-            },
-          };
-        },
-      },
       '../config': {
         serviceName: 'appeal',
-        transactionServiceUrl: 'http://transaction-service',
         kafka: {
           outputTopicCreated: 'appeal.created',
           outputTopicResolved: 'appeal.resolved',
@@ -43,6 +28,24 @@ function loadAppealService({ existingAppeal = null, createAppealError = null } =
         publish: async (...args) => {
           publishCalls.push(args);
         },
+      },
+      '../db/pool': {
+        getPool: () => ({
+          query: async (...args) => {
+            dbCalls.push(args);
+            return {
+              rows: [{
+                transaction_id: 'txn-1',
+                customer_id: 'customer-1',
+                status: 'REJECTED',
+                amount: null,
+                currency: null,
+                correlation_id: 'txn-correlation-id',
+                raw: {},
+              }],
+            };
+          },
+        }),
       },
       '../repositories/appealRepository': {
         getAnyByTransaction: async () => existingAppeal,
@@ -68,11 +71,11 @@ function loadAppealService({ existingAppeal = null, createAppealError = null } =
   );
 
   service.setProducer({ producer: 'mock' });
-  return { service, fetchCalls, publishCalls };
+  return { service, dbCalls, publishCalls };
 }
 
 test('appeal service blocks a second appeal before revalidating the transaction', async () => {
-  const { service, fetchCalls, publishCalls } = loadAppealService({
+  const { service, dbCalls, publishCalls } = loadAppealService({
     existingAppeal: {
       appealId: 'appeal-existing',
       transactionId: 'txn-1',
@@ -87,17 +90,17 @@ test('appeal service blocks a second appeal before revalidating the transaction'
       appealReason: 'This decision should be reviewed again.',
       evidence: {},
       correlationId: 'corr-1',
-      authHeader: 'Bearer token',
     }),
     /already been appealed/
   );
 
-  assert.equal(fetchCalls.length, 0);
+  // Should bail out before hitting the transaction cache
+  assert.equal(dbCalls.length, 0);
   assert.equal(publishCalls.length, 0);
 });
 
 test('appeal service normalizes duplicate writes into the one-time appeal error', async () => {
-  const { service, fetchCalls, publishCalls } = loadAppealService({
+  const { service, dbCalls, publishCalls } = loadAppealService({
     createAppealError: new Error('duplicate key value violates unique constraint "appeals_transaction_id_key"'),
   });
 
@@ -108,11 +111,11 @@ test('appeal service normalizes duplicate writes into the one-time appeal error'
       appealReason: 'This decision should be reviewed again.',
       evidence: {},
       correlationId: 'corr-1',
-      authHeader: 'Bearer token',
     }),
     /already been appealed/
   );
 
-  assert.equal(fetchCalls.length, 1);
+  // Should have hit the transaction cache lookup
+  assert.equal(dbCalls.length, 1);
   assert.equal(publishCalls.length, 0);
 });

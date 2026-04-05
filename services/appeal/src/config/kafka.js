@@ -54,4 +54,16 @@ const publish = async (producer, topic, partitionKey, payload, headers = {}) => 
   });
 };
 
-module.exports = { createProducer, publish };
+const createConsumer = async (groupId) => {
+  const consumer = getKafka().consumer({
+    groupId,
+    sessionTimeout: config.kafka.sessionTimeout,
+    heartbeatInterval: config.kafka.heartbeatInterval,
+    autoCommit: false,
+  });
+  await consumer.connect();
+  logger.info('Kafka consumer connected', { groupId });
+  return consumer;
+};
+
+module.exports = { createProducer, createConsumer, publish };

@@ -6,11 +6,11 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from services.detect_fraud.config import decision_mode_uses_local_decisioning, settings
-from services.detect_fraud.decision_publisher import DecisionPublisher
-from services.detect_fraud.ml_scoring_client import MlScoringClient
-from services.detect_fraud.rules_engine import FraudRulesEngine
-from services.detect_fraud.velocity_store import VelocityStore
+from services.detect_fraud.src.config.settings import decision_mode_uses_local_decisioning, settings
+from services.detect_fraud.src.controllers.decision_publisher import DecisionPublisher
+from services.detect_fraud.src.controllers.ml_scoring_client import MlScoringClient
+from services.detect_fraud.src.controllers.rules_engine import FraudRulesEngine
+from services.detect_fraud.src.utils.velocity_store import VelocityStore
 
 
 class DecisionPublisherTests(IsolatedAsyncioTestCase):

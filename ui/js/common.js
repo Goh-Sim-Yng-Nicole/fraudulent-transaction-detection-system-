@@ -6,6 +6,7 @@ export const html = htm.bind(React.createElement);
 export const {
   useState,
   useEffect,
+  useRef,
   useMemo,
   useCallback,
 } = React;
@@ -31,13 +32,14 @@ const toJsonSafely = async (response) => {
 };
 
 export const fetchJson = async (url, options = {}, handlers = {}) => {
+  const { headers: optionHeaders, ...restOptions } = options;
   const response = await fetch(url, {
     credentials: 'same-origin',
+    ...restOptions,
     headers: {
       'Content-Type': 'application/json',
-      ...(options.headers || {}),
+      ...(optionHeaders || {}),
     },
-    ...options,
   });
 
   if (response.status === 401 && handlers.onUnauthorized) {
@@ -52,12 +54,11 @@ export const fetchJson = async (url, options = {}, handlers = {}) => {
 
   const payload = await toJsonSafely(response);
   if (!response.ok) {
-    throw new Error(
-      payload.error
+    const errorMsg = (typeof payload.error === 'string' ? payload.error : payload.error?.message)
       || payload.detail
       || payload.message
-      || `Request failed with status ${response.status}`,
-    );
+      || `Request failed with status ${response.status}`;
+    throw new Error(errorMsg);
   }
   return payload;
 };
@@ -96,7 +97,14 @@ export const formatPercent = (value, maxFractionDigits = 1) =>
 
 export const formatUtc = (value) => {
   if (!value) return '-';
-  return new Date(value).toISOString().replace('T', ' ').replace('Z', ' UTC');
+  const d = new Date(value);
+  const utc = d.toISOString().replace('T', ' ').replace('Z', ' UTC');
+  const local = d.toLocaleString(undefined, {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    timeZoneName: 'short',
+  });
+  return `${utc} (${local})`;
 };
 
 export const nowTime = () => new Date().toLocaleTimeString([], {
