@@ -15,5 +15,5 @@ Run them in this order:
 Notes:
 
 - The collection stores customer and analyst tokens into collection variables automatically.
-- After register/login OTP requests, copy the OTP from Mailpit into `otpCode`.
+- After register/login OTP requests, the same OTP is emailed to the customer and mirrored into Mailpit. For demos, copy the OTP from Mailpit into `otpCode`.
 - Scenario 3 assumes the customer already has at least one declined or flagged transaction, which the collection creates earlier in the run.
