@@ -8,7 +8,6 @@ from unittest.mock import patch
 
 from services.customer.src.utils import email_utils
 
-
 OTP_ENV_KEYS = [
     "SMTP_HOST",
     "SMTP_PORT",
