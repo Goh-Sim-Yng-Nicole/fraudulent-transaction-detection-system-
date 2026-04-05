@@ -7,10 +7,17 @@ const { getPool } = require('../db/pool');
 
 let consumer = null;
 
-const upsertTransaction = async (pool, data) => {
+const upsertTransaction = async (pool, data, payload) => {
   const transactionId = data.transactionId || data.transaction_id || data.id;
   const customerId = data.customerId || data.customer_id;
-  const status = data.status || data.queueStatus || 'UNKNOWN';
+  // data.outcome covers transaction.finalised (APPROVED/REJECTED)
+  // payload.decision covers transaction.flagged (FLAGGED) and transaction.finalised
+  const status =
+    data.status ||
+    data.queueStatus ||
+    data.outcome ||
+    (payload && (payload.decision || payload.status)) ||
+    'UNKNOWN';
   if (!transactionId || !customerId) return;
 
   await pool.query(
@@ -54,7 +61,7 @@ const start = async () => {
         if (!raw) return;
         const payload = JSON.parse(raw);
         const data = payload.data || payload;
-        await upsertTransaction(pool, data);
+        await upsertTransaction(pool, data, payload);
         logger.debug('Transaction cache updated', {
           topic,
           transactionId: data.transactionId || data.transaction_id,
