@@ -183,6 +183,7 @@ export function buildFlaggedTransactionPayload({
   recipientCustomerId,
   recipientName,
   amount,
+  hourUtc,
 }) {
   return {
     customer_id: customerId,
@@ -194,6 +195,7 @@ export function buildFlaggedTransactionPayload({
     card_type: 'PREPAID',
     country: 'NG',
     merchant_id: 'FTDS_E2E_MERCHANT',
+    ...(hourUtc === undefined ? {} : { hour_utc: hourUtc }),
   };
 }
 

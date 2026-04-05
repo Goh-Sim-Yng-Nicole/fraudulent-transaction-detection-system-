@@ -53,7 +53,7 @@ const verifyCustomerOtpDirect = async (customer, otpCode) => {
   };
 };
 
-const createFlaggedTransactionDirect = async (customer, recipient, amount) => {
+const createFlaggedTransactionDirect = async (customer, recipient, amount, hourUtc = 2) => {
   const result = await request(`${platform.transactionBase}/transactions`, {
     method: 'POST',
     body: buildFlaggedTransactionPayload({
@@ -62,6 +62,7 @@ const createFlaggedTransactionDirect = async (customer, recipient, amount) => {
       recipientCustomerId: recipient.customerId,
       recipientName: recipient.full_name,
       amount,
+      hourUtc,
     }),
   });
 
@@ -347,10 +348,10 @@ const gatewayLogin = await request(`${platform.gatewayBase}/api/v1/auth/login`, 
 assertStatus(gatewayLogin, 200, 'gateway modern auth login');
 
 logStep('Creating flagged transactions for transaction, review, and appeal coverage');
-const reviewedTransactionId = await createFlaggedTransactionDirect(primaryCustomer, recipientCustomer, 5200);
+const reviewedTransactionId = await createFlaggedTransactionDirect(primaryCustomer, recipientCustomer, 50000);
 await waitForTransactionStatus(reviewedTransactionId, 'FLAGGED');
 
-const appealTransactionId = await createFlaggedTransactionDirect(primaryCustomer, recipientCustomer, 5300);
+const appealTransactionId = await createFlaggedTransactionDirect(primaryCustomer, recipientCustomer, 50000);
 await waitForTransactionStatus(appealTransactionId, 'FLAGGED');
 
 const directTransactionList = await request(
@@ -447,12 +448,12 @@ const modernPendingAppeals = await poll(
     headers: authHeaders(analystSession.token),
   }),
   (result) => result.status === 200 && Array.isArray(result.body?.data)
-    && result.body.data.some((item) => item.appealId === appealId && item.transactionSummary?.amount === 5300),
+    && result.body.data.some((item) => item.appealId === appealId && item.transactionSummary?.amount === 50000),
   { timeoutMs: 120000, intervalMs: 2500 }
 );
 assertArrayContains(modernPendingAppeals.body?.data, (item) => item.appealId === appealId, 'modern appeal queue should include created appeal');
 const enrichedAppeal = modernPendingAppeals.body?.data?.find((item) => item.appealId === appealId);
-assert.equal(enrichedAppeal?.transactionSummary?.amount, 5300, 'modern appeal queue should expose linked transaction amount');
+assert.equal(enrichedAppeal?.transactionSummary?.amount, 50000, 'modern appeal queue should expose linked transaction amount');
 assert.equal(enrichedAppeal?.transactionSummary?.transactionStatus, 'FLAGGED', 'modern appeal queue should expose linked transaction status');
 assert.ok(
   typeof enrichedAppeal?.transactionSummary?.fraudScore === 'number',

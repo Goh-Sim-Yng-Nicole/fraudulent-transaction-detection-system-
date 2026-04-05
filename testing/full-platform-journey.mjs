@@ -146,10 +146,11 @@ assert.equal(String(approvedDecision.body?.status || '').toUpperCase(), 'APPROVE
 logStep('Creating a medium-risk transaction, then exercising claim and release while keeping it flagged');
 const flaggedTransactionId = await createTransaction(journeyCustomer, {
   merchant_id: 'FTDS_FLAGGED_DEMO',
-  amount: 5200,
+  amount: 50000,
   currency: 'USD',
   card_type: 'PREPAID',
   country: 'NG',
+  hour_utc: 2,
 });
 await waitForTransactionStatus(journeyCustomer.token, flaggedTransactionId, 'FLAGGED');
 
@@ -182,10 +183,11 @@ await waitForTransactionStatus(journeyCustomer.token, flaggedTransactionId, 'FLA
 logStep('Creating a high-risk transaction and waiting for automatic decline');
 const declinedTransactionId = await createTransaction(journeyCustomer, {
   merchant_id: 'FTDS_DECLINED_DEMO',
-  amount: 15000,
+  amount: 100000,
   currency: 'USD',
   card_type: 'PREPAID',
   country: 'NG',
+  hour_utc: 2,
 });
 const declinedDecision = await waitForTransactionStatus(journeyCustomer.token, declinedTransactionId, 'REJECTED');
 assert.equal(String(declinedDecision.body?.status || '').toUpperCase(), 'REJECTED', 'declined transaction should be rejected');
