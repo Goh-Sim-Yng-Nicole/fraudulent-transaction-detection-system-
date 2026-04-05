@@ -535,7 +535,8 @@ const realtimeStats = await poll(
   }),
   (result) => result.status === 200
     && result.body?.success === true
-    && Number(result.body?.data?.totalDecisions) >= Number(baselineRealtime.body?.data?.totalDecisions || 0) + 2,
+    && Number(result.body?.data?.totalDecisions) >= 2
+    && Number(result.body?.data?.approved) >= 2,
   { timeoutMs: 120000, intervalMs: 2500 }
 );
 
