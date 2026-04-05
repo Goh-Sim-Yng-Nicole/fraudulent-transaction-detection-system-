@@ -106,3 +106,28 @@ test('score above 75 is declined even when manual review overrides would otherwi
   assert.equal(result.decisionFactors.highValue, undefined);
   assert.equal(result.decisionFactors.geographicRisk, undefined);
 });
+
+test('scores below 50 are approved even when manual review overrides would otherwise apply', () => {
+  const decisionEngineService = loadDecisionEngineService({
+    thresholds: {
+      highValueAutoFlag: true,
+      highValueAmount: 100,
+    },
+    businessRules: {
+      requireManualReviewCountries: ['NG'],
+    },
+  });
+
+  const result = decisionEngineService.makeDecision(
+    makeFraudAnalysis(37),
+    {
+      amount: 5000,
+      location: { country: 'NG' },
+    }
+  );
+
+  assert.equal(result.decision, 'APPROVED');
+  assert.match(result.decisionReason, /approval threshold \(49\)/);
+  assert.equal(result.decisionFactors.highValue, undefined);
+  assert.equal(result.decisionFactors.geographicRisk, undefined);
+});

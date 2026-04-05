@@ -153,6 +153,46 @@ const manualDeclineThreshold = 76;
 
 const uniqueStrings = (values) => [...new Set((values || []).filter(Boolean).map((value) => String(value).trim()).filter(Boolean))];
 
+const stopRowToggle = (event) => {
+  event.stopPropagation();
+};
+
+const toggleExpanded = (prev, key) => ({
+  ...prev,
+  [key]: !prev[key],
+});
+
+const formatTimestamp = (value) => {
+  if (!value) return '-';
+  return new Date(value).toLocaleString();
+};
+
+const formatFact = (value, fallback = '-') => {
+  if (value === null || value === undefined || value === '') return fallback;
+  return value;
+};
+
+const compactEvidence = (evidence) => {
+  if (!evidence) return [];
+  if (typeof evidence === 'string') return [evidence];
+  if (Array.isArray(evidence)) {
+    return uniqueStrings(
+      evidence.map((item) => (typeof item === 'string' ? item : JSON.stringify(item)))
+    );
+  }
+  if (typeof evidence === 'object') {
+    return Object.entries(evidence).map(([key, value]) => `${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`);
+  }
+  return [String(evidence)];
+};
+
+const onExpandableKeyDown = (event, toggle) => {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    toggle();
+  }
+};
+
 const extractReviewContext = (item) => {
   const transaction = item.originalTransaction || item.payload?.originalTransaction || {};
   const fraudAnalysis = item.fraudAnalysis || item.payload?.fraudAnalysis || {};
@@ -184,53 +224,150 @@ const extractReviewContext = (item) => {
   };
 };
 
-const renderReviewFacts = (facts) => {
-  const detailItems = [
+const extractAppealContext = (item) => {
+  const summary = item.transactionSummary || {};
+  const transaction = item.transaction || {};
+  const decision = item.transactionDecision || {};
+
+  return {
+    amount: summary.amount ?? transaction.amount ?? null,
+    currency: summary.currency ?? transaction.currency ?? null,
+    country: summary.country ?? transaction.country ?? null,
+    merchantId: summary.merchantId ?? transaction.merchant_id ?? null,
+    cardType: summary.cardType ?? transaction.card_type ?? null,
+    senderName: summary.senderName ?? transaction.sender_name ?? null,
+    recipientCustomerId: summary.recipientCustomerId ?? transaction.recipient_customer_id ?? null,
+    recipientName: summary.recipientName ?? transaction.recipient_name ?? null,
+    transactionStatus: summary.transactionStatus ?? transaction.status ?? decision.status ?? item.sourceTransactionStatus ?? null,
+    fraudScore: summary.fraudScore ?? decision.fraud_score ?? null,
+    outcomeReason: summary.outcomeReason ?? decision.outcome_reason ?? null,
+    createdAt: summary.createdAt ?? transaction.created_at ?? null,
+    updatedAt: summary.updatedAt ?? transaction.updated_at ?? decision.updated_at ?? null,
+    appealReason: item.appealReason || 'Customer dispute',
+    evidence: compactEvidence(item.evidence),
+  };
+};
+
+const renderFactList = (items) => {
+  const normalized = items.filter(Boolean);
+  if (!normalized.length) return null;
+  return html`
+    <div className="detail-list">
+      ${normalized.map((item, index) => html`<div key=${`${index}-${item}`} className="small muted">${item}</div>`)}
+    </div>
+  `;
+};
+
+const renderReviewSummary = (facts) => html`
+  <div style=${{ display: 'grid', gap: '0.35rem' }}>
+    <div className="small" style=${{ color: '#d8e4ff', fontWeight: 600 }}>
+      ${facts.decisionReason}
+    </div>
+    ${facts.reasons.length ? html`
+      <div className="muted small">${facts.reasons.slice(0, 2).join(' | ')}</div>
+    ` : html`
+      <div className="muted small">Click to inspect the linked transaction context and score breakdown.</div>
+    `}
+  </div>
+`;
+
+const renderReviewExpanded = (facts) => {
+  const scoreItems = [
+    facts.originalScore !== null ? `Original score ${facts.originalScore}` : null,
+    facts.adjustedScore !== null ? `Adjusted score ${facts.adjustedScore}` : null,
+    facts.mlScore !== null ? `ML score ${facts.mlScore}` : null,
+    facts.mlConfidence !== null ? `Model confidence ${formatNumber(Number(facts.mlConfidence) * 100)}%` : null,
+    facts.modelVersion ? `Model version ${facts.modelVersion}` : null,
+  ];
+
+  return html`
+    <div className="detail-panel">
+      <div className="details-grid">
+        <section className="detail-section">
+          <div className="detail-label">Flag summary</div>
+          <div className="detail-value">${facts.decisionReason}</div>
+          ${renderFactList(facts.reasons)}
+          ${facts.overrideReason ? html`
+            <div className="small muted">
+              Override applied: ${facts.overrideType || 'MANUAL_REVIEW'}${facts.overrideReason ? ` | ${facts.overrideReason}` : ''}
+            </div>
+          ` : null}
+        </section>
+
+        <section className="detail-section">
+          <div className="detail-label">Transaction snapshot</div>
+          <div className="row small muted">
+            <span className="pill">${facts.currency || 'USD'} ${facts.amount !== null ? Number(facts.amount).toFixed(2) : '-'}</span>
+            <span className="pill">Country ${formatFact(facts.country)}</span>
+            <span className="pill">Merchant ${formatFact(facts.merchantId)}</span>
+            <span className="pill">Card ${formatFact(facts.cardType)}</span>
+          </div>
+          <div className="small muted">Created ${formatTimestamp(facts.createdAt)}</div>
+        </section>
+
+        <section className="detail-section">
+          <div className="detail-label">Score reasoning</div>
+          ${renderFactList(scoreItems)}
+          ${facts.adjustedScore !== null && facts.adjustedScore >= manualDeclineThreshold ? html`
+            <div className="small" style=${{ color: '#ffcf8a' }}>
+              Current policy auto-declines scores above 75. If this case is still here, it likely entered the queue before the threshold update.
+            </div>
+          ` : null}
+        </section>
+      </div>
+    </div>
+  `;
+};
+
+const renderAppealExpanded = (facts, item) => {
+  const transactionFacts = [
     facts.amount !== null ? `${facts.currency || 'USD'} ${Number(facts.amount).toFixed(2)}` : null,
+    facts.transactionStatus ? `Status ${facts.transactionStatus}` : null,
+    facts.fraudScore !== null ? `Fraud score ${facts.fraudScore}` : null,
     facts.country ? `Country ${facts.country}` : null,
     facts.merchantId ? `Merchant ${facts.merchantId}` : null,
     facts.cardType ? `Card ${facts.cardType}` : null,
-  ].filter(Boolean);
+  ];
 
-  const scoreItems = [
-    facts.originalScore !== null ? `Original score ${facts.originalScore}` : null,
-    facts.adjustedScore !== null && facts.adjustedScore !== facts.originalScore ? `Adjusted score ${facts.adjustedScore}` : null,
-    facts.mlScore !== null ? `ML score ${facts.mlScore}` : null,
-    facts.mlConfidence !== null ? `Confidence ${formatNumber(Number(facts.mlConfidence) * 100)}%` : null,
-    facts.modelVersion ? `Model ${facts.modelVersion}` : null,
-  ].filter(Boolean);
+  const peopleFacts = [
+    facts.senderName ? `Sender ${facts.senderName}` : null,
+    facts.recipientName ? `Recipient ${facts.recipientName}` : null,
+    facts.recipientCustomerId ? `Recipient customer ${facts.recipientCustomerId}` : null,
+    item.customerId ? `Customer ${item.customerId}` : null,
+  ];
 
   return html`
-    <div style=${{ display: 'grid', gap: '0.45rem' }}>
-      <div>
-        <div className="small" style=${{ color: '#d8e4ff', fontWeight: 600 }}>Why it was flagged</div>
-        <div className="muted small" style=${{ marginTop: '0.25rem' }}>${facts.decisionReason}</div>
+    <div className="detail-panel">
+      <div className="details-grid">
+        <section className="detail-section">
+          <div className="detail-label">Appeal submission</div>
+          <div className="detail-value">${facts.appealReason}</div>
+          ${facts.evidence.length ? html`
+            <div className="detail-list">
+              ${facts.evidence.map((evidenceItem, index) => html`<div key=${`${item.appealId}-evidence-${index}`} className="small muted">${evidenceItem}</div>`)}
+            </div>
+          ` : html`
+            <div className="small muted">No supporting evidence was attached to this appeal.</div>
+          `}
+        </section>
+
+        <section className="detail-section">
+          <div className="detail-label">Linked transaction</div>
+          <div className="row small muted">
+            ${transactionFacts.filter(Boolean).map((fact) => html`<span key=${`${item.appealId}-${fact}`} className="pill">${fact}</span>`)}
+          </div>
+          <div className="small muted">Created ${formatTimestamp(facts.createdAt)}</div>
+          <div className="small muted">Last updated ${formatTimestamp(facts.updatedAt)}</div>
+          ${facts.outcomeReason ? html`
+            <div className="small muted">Decision reason: ${facts.outcomeReason}</div>
+          ` : null}
+        </section>
+
+        <section className="detail-section">
+          <div className="detail-label">Parties involved</div>
+          ${renderFactList(peopleFacts)}
+        </section>
       </div>
-      ${facts.reasons.length ? html`
-        <div style=${{ display: 'grid', gap: '0.25rem' }}>
-          ${facts.reasons.slice(0, 4).map((reason) => html`<div className="small muted">- ${reason}</div>`)}
-        </div>
-      ` : null}
-      ${facts.overrideReason ? html`
-        <div className="small muted">
-          Override: ${facts.overrideType || 'MANUAL_REVIEW'}${facts.overrideReason ? ` - ${facts.overrideReason}` : ''}
-        </div>
-      ` : null}
-      ${detailItems.length ? html`
-        <div className="row small muted" style=${{ gap: '0.35rem', flexWrap: 'wrap' }}>
-          ${detailItems.map((item) => html`<span className="pill">${item}</span>`)}
-        </div>
-      ` : null}
-      ${scoreItems.length ? html`
-        <div style=${{ display: 'grid', gap: '0.25rem' }}>
-          ${scoreItems.map((item) => html`<div className="small muted">${item}</div>`)}
-        </div>
-      ` : null}
-      ${facts.adjustedScore !== null && facts.adjustedScore >= manualDeclineThreshold ? html`
-        <div className="small" style=${{ color: '#ffcf8a' }}>
-          Current policy auto-declines scores above 75. This case may have been queued before the rule update if it still appears here.
-        </div>
-      ` : null}
     </div>
   `;
 };
@@ -243,6 +380,7 @@ const App = () => {
     refreshLabel: 'Refreshing...',
   });
   const [notes, setNotes] = useState({});
+  const [expandedRows, setExpandedRows] = useState({});
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [busyKey, setBusyKey] = useState('');
@@ -302,45 +440,60 @@ const App = () => {
     return () => clearInterval(id);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const toggleRow = (type, id) => {
+    const key = `${type}:${id}`;
+    setExpandedRows((prev) => toggleExpanded(prev, key));
+  };
+
   const actionButtons = (type, itemId, claimedBy, status) => {
     const mineNow = mine(claimedBy);
     const normalized = String(status || '').toUpperCase();
     const inReview = ['IN_REVIEW', 'UNDER_REVIEW'].includes(normalized);
     const open = ['PENDING', 'OPEN'].includes(normalized);
+
+    const trigger = (event, action, resolution = null) => {
+      event.stopPropagation();
+      if (type === 'appeal' && action === 'resolve') {
+        setPending({ type, id: itemId, action, resolution });
+        return;
+      }
+      callAction(type, itemId, action, resolution);
+    };
+
     return html`
-      <div style=${{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', alignItems: 'center' }}>
+      <div className="row table-actions" onClick=${stopRowToggle} onMouseDown=${stopRowToggle}>
         <button
           className="btn btn-ghost"
           style=${{ whiteSpace: 'nowrap' }}
           disabled=${!open || busyKey === `${type}:${itemId}:claim`}
-          onClick=${() => callAction(type, itemId, 'claim')}
-        >Claim</button>
+          onClick=${(event) => trigger(event, 'claim')}
+        >
+          Claim
+        </button>
         <button
           className="btn btn-ghost"
           style=${{ whiteSpace: 'nowrap' }}
           disabled=${!(mineNow && inReview) || busyKey === `${type}:${itemId}:release`}
-          onClick=${() => callAction(type, itemId, 'release')}
-        >Release</button>
+          onClick=${(event) => trigger(event, 'release')}
+        >
+          Release
+        </button>
         <button
           className="btn btn-success"
           style=${{ whiteSpace: 'nowrap' }}
           disabled=${!(mineNow && inReview) || busyKey === `${type}:${itemId}:approve`}
-          onClick=${() => {
-            const resolution = type === 'review' ? 'APPROVED' : 'REVERSE';
-            if (type === 'appeal') { setPending({ type, id: itemId, action: 'resolve', resolution }); }
-            else { callAction(type, itemId, 'resolve', resolution); }
-          }}
-        >${type === 'review' ? 'Approve' : 'Reverse'}</button>
+          onClick=${(event) => trigger(event, 'resolve', type === 'review' ? 'APPROVED' : 'REVERSE')}
+        >
+          ${type === 'review' ? 'Approve' : 'Reverse'}
+        </button>
         <button
           className="btn btn-danger"
           style=${{ whiteSpace: 'nowrap' }}
           disabled=${!(mineNow && inReview) || busyKey === `${type}:${itemId}:decline`}
-          onClick=${() => {
-            const resolution = type === 'review' ? 'DECLINED' : 'UPHOLD';
-            if (type === 'appeal') { setPending({ type, id: itemId, action: 'resolve', resolution }); }
-            else { callAction(type, itemId, 'resolve', resolution); }
-          }}
-        >${type === 'review' ? 'Decline' : 'Uphold'}</button>
+          onClick=${(event) => trigger(event, 'resolve', type === 'review' ? 'DECLINED' : 'UPHOLD')}
+        >
+          ${type === 'review' ? 'Decline' : 'Uphold'}
+        </button>
       </div>
     `;
   };
@@ -368,17 +521,15 @@ const App = () => {
           url = `/api/v1/reviews/${encodeURIComponent(id)}/decision`;
           body = { decision: resolution, notes: note };
         }
+      } else if (action === 'claim') {
+        url = `/api/v1/reviews/appeals/${encodeURIComponent(id)}/claim`;
+        body = { claimTtlMinutes: 10 };
+      } else if (action === 'release') {
+        url = `/api/v1/reviews/appeals/${encodeURIComponent(id)}/release`;
+        body = { notes: note };
       } else {
-        if (action === 'claim') {
-          url = `/api/v1/reviews/appeals/${encodeURIComponent(id)}/claim`;
-          body = { claimTtlMinutes: 10 };
-        } else if (action === 'release') {
-          url = `/api/v1/reviews/appeals/${encodeURIComponent(id)}/release`;
-          body = { notes: note };
-        } else {
-          url = `/api/v1/reviews/appeals/${encodeURIComponent(id)}/resolve`;
-          body = { resolution, notes: note };
-        }
+        url = `/api/v1/reviews/appeals/${encodeURIComponent(id)}/resolve`;
+        body = { resolution, notes: note };
       }
 
       await fetchJson(url, {
@@ -499,46 +650,76 @@ const App = () => {
                 </tr>
               </thead>
               <tbody>
-                ${state.reviews.length ? state.reviews.map((item) => {
+                ${state.reviews.length ? state.reviews.flatMap((item) => {
                   const facts = extractReviewContext(item);
-                  return html`
-                    <tr>
-                      <td
-                        style=${{ verticalAlign: 'top', cursor: mine(item.claimedBy) ? 'pointer' : 'default' }}
-                        onClick=${() => mine(item.claimedBy) && openCaseDetail(item, 'review')}
+                  const rowKey = `review:${item.transactionId}`;
+                  const expanded = Boolean(expandedRows[rowKey]);
+                  const toggle = () => toggleRow('review', item.transactionId);
+
+                  return [
+                    html`
+                      <tr
+                        key=${`${rowKey}:summary`}
+                        className=${`expandable-row${expanded ? ' is-expanded' : ''}`}
+                        role="button"
+                        tabIndex="0"
+                        aria-expanded=${expanded}
+                        onClick=${toggle}
+                        onKeyDown=${(event) => onExpandableKeyDown(event, toggle)}
                       >
-                        <div className="mono" style=${{ wordBreak: 'break-all', color: mine(item.claimedBy) ? 'var(--accent)' : 'inherit', textDecoration: mine(item.claimedBy) ? 'underline' : 'none', textUnderlineOffset: '3px' }}>${item.transactionId}</div>
-                        ${mine(item.claimedBy) ? html`<div className="muted small" style=${{ marginTop: '0.2rem', fontSize: '0.7rem' }}>Click to view details</div>` : null}
-                        <div className="row small muted" style=${{ marginTop: '0.35rem', gap: '0.35rem', flexWrap: 'wrap' }}>
-                          <span className="pill">Customer ${item.customerId || '-'}</span>
-                          <span className="pill">Risk ${facts.adjustedScore ?? item.riskScore ?? '-'}</span>
-                          ${facts.createdAt ? html`<span className="pill">${new Date(facts.createdAt).toLocaleString()}</span>` : null}
-                        </div>
-                      </td>
-                      <td style=${{ verticalAlign: 'top' }}>${renderReviewFacts(facts)}</td>
-                      <td style=${{ verticalAlign: 'top' }}><span className=${`pill ${queueStatusClass(item.queueStatus)}`}>${String(item.queueStatus || '').replace(/_/g, ' ')}</span></td>
-                      <td style=${{ verticalAlign: 'top' }}>
-                        <div>${item.claimedBy || 'Unclaimed'}</div>
-                        <div className="muted small">${item.claimedRole || 'Awaiting assignment'}</div>
-                      </td>
-                      <td style=${{ verticalAlign: 'top' }}>
-                        <div>${item.reviewedBy || 'Not decided'}</div>
-                        <div className="muted small">${item.reviewedRole || 'Pending'}</div>
-                      </td>
-                      <td style=${{ verticalAlign: 'top' }}>
-                        <textarea
-                          className="textarea"
-                          placeholder="Decision notes"
-                          style=${{ width: '100%', minHeight: '60px' }}
-                          value=${notes[`review:${item.transactionId}`] ?? (item.reviewNotes || '')}
-                          onInput=${(event) => setNotes((prev) => ({ ...prev, [`review:${item.transactionId}`]: event.target.value }))}
-                        ></textarea>
-                      </td>
-                      <td style=${{ verticalAlign: 'top' }}>${actionButtons('review', item.transactionId, item.claimedBy, item.queueStatus)}</td>
-                    </tr>
-                  `;
+                        <td>
+                          <div className="row row-preview" style=${{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div>
+                              <button
+                                className="inline-detail-link"
+                                onClick=${(event) => {
+                                  event.stopPropagation();
+                                  openCaseDetail(item, 'review');
+                                }}
+                              >
+                                <span className="mono">${item.transactionId}</span>
+                              </button>
+                              <div className="row small muted" style=${{ marginTop: '0.35rem', gap: '0.35rem', flexWrap: 'wrap' }}>
+                                <span className="pill">Customer ${item.customerId || '-'}</span>
+                                <span className="pill">Risk ${facts.adjustedScore ?? item.riskScore ?? '-'}</span>
+                                ${facts.createdAt ? html`<span className="pill">${new Date(facts.createdAt).toLocaleString()}</span>` : null}
+                              </div>
+                            </div>
+                            <span className=${`expand-toggle${expanded ? ' open' : ''}`}>></span>
+                          </div>
+                        </td>
+                        <td>${renderReviewSummary(facts)}</td>
+                        <td><span className=${`pill ${queueStatusClass(item.queueStatus)}`}>${String(item.queueStatus || '').replace(/_/g, ' ')}</span></td>
+                        <td>
+                          <div>${item.claimedBy || 'Unclaimed'}</div>
+                          <div className="muted small">${item.claimedRole || 'Awaiting assignment'}</div>
+                        </td>
+                        <td>
+                          <div>${item.reviewedBy || 'Not decided'}</div>
+                          <div className="muted small">${item.reviewedRole || 'Pending'}</div>
+                        </td>
+                        <td>
+                          <textarea
+                            className="textarea"
+                            placeholder="Decision notes"
+                            value=${notes[`review:${item.transactionId}`] ?? (item.reviewNotes || '')}
+                            onClick=${stopRowToggle}
+                            onFocus=${stopRowToggle}
+                            onMouseDown=${stopRowToggle}
+                            onInput=${(event) => setNotes((prev) => ({ ...prev, [`review:${item.transactionId}`]: event.target.value }))}
+                          ></textarea>
+                        </td>
+                        <td>${actionButtons('review', item.transactionId, item.claimedBy, item.queueStatus)}</td>
+                      </tr>
+                    `,
+                    expanded ? html`
+                      <tr key=${`${rowKey}:detail`} className="detail-row">
+                        <td colSpan="7">${renderReviewExpanded(facts)}</td>
+                      </tr>
+                    ` : null,
+                  ].filter(Boolean);
                 }) : html`
-                  <tr><td colspan="7" className="muted">No flagged transactions are waiting for review.</td></tr>
+                  <tr><td colSpan="7" className="muted">No flagged transactions are waiting for review.</td></tr>
                 `}
               </tbody>
             </table>
@@ -573,42 +754,78 @@ const App = () => {
                 </tr>
               </thead>
               <tbody>
-                ${state.appeals.length ? state.appeals.map((item) => html`
-                  <tr>
-                    <td
-                      style=${{ verticalAlign: 'top', cursor: mine(item.claimedBy) ? 'pointer' : 'default' }}
-                      onClick=${() => mine(item.claimedBy) && openCaseDetail(item, 'appeal')}
-                    >
-                      <div className="mono" style=${{ wordBreak: 'break-all', color: mine(item.claimedBy) ? 'var(--accent)' : 'inherit', textDecoration: mine(item.claimedBy) ? 'underline' : 'none', textUnderlineOffset: '3px' }}>${item.appealId}</div>
-                      ${mine(item.claimedBy) ? html`<div className="muted small" style=${{ marginTop: '0.2rem', fontSize: '0.7rem' }}>Click to view details</div>` : null}
-                      <div className="row small muted" style=${{ marginTop: '0.35rem', flexWrap: 'wrap' }}>
-                        <span className="pill">Txn ${item.transactionId || '-'}</span>
-                        <span className="pill">Customer ${item.customerId || '-'}</span>
-                      </div>
-                      <div className="muted small" style=${{ marginTop: '0.35rem' }}>${item.appealReason || 'Customer dispute'}</div>
-                    </td>
-                    <td style=${{ verticalAlign: 'top' }}><span className=${`pill ${queueStatusClass(item.currentStatus)}`}>${String(item.currentStatus || '').replace(/_/g, ' ')}</span></td>
-                    <td style=${{ verticalAlign: 'top' }}>
-                      <div>${item.claimedBy || 'Unclaimed'}</div>
-                      <div className="muted small">${item.claimedRole || 'Awaiting'}</div>
-                    </td>
-                    <td style=${{ verticalAlign: 'top' }}>
-                      <div>${item.reviewedBy || 'Not decided'}</div>
-                      <div className="muted small">${item.resolvedRole || 'Pending'}</div>
-                    </td>
-                    <td style=${{ verticalAlign: 'top' }}>
-                      <textarea
-                        className="textarea"
-                        placeholder="Resolution notes"
-                        style=${{ width: '100%', minHeight: '60px' }}
-                        value=${notes[`appeal:${item.appealId}`] ?? (item.resolutionNotes || '')}
-                        onInput=${(event) => setNotes((prev) => ({ ...prev, [`appeal:${item.appealId}`]: event.target.value }))}
-                      ></textarea>
-                    </td>
-                    <td style=${{ verticalAlign: 'top' }}>${actionButtons('appeal', item.appealId, item.claimedBy, item.currentStatus)}</td>
-                  </tr>
-                `) : html`
-                  <tr><td colspan="6" className="muted">No appeals are waiting for manual review.</td></tr>
+                ${state.appeals.length ? state.appeals.flatMap((item) => {
+                  const facts = extractAppealContext(item);
+                  const rowKey = `appeal:${item.appealId}`;
+                  const expanded = Boolean(expandedRows[rowKey]);
+                  const toggle = () => toggleRow('appeal', item.appealId);
+
+                  return [
+                    html`
+                      <tr
+                        key=${`${rowKey}:summary`}
+                        className=${`expandable-row${expanded ? ' is-expanded' : ''}`}
+                        role="button"
+                        tabIndex="0"
+                        aria-expanded=${expanded}
+                        onClick=${toggle}
+                        onKeyDown=${(event) => onExpandableKeyDown(event, toggle)}
+                      >
+                        <td>
+                          <div className="row row-preview" style=${{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div>
+                              <button
+                                className="inline-detail-link"
+                                onClick=${(event) => {
+                                  event.stopPropagation();
+                                  openCaseDetail(item, 'appeal');
+                                }}
+                              >
+                                <span className="mono">${item.appealId}</span>
+                              </button>
+                              <div className="row small muted" style=${{ marginTop: '0.35rem' }}>
+                                <span className="pill">Txn ${item.transactionId || '-'}</span>
+                                <span className="pill">Customer ${item.customerId || '-'}</span>
+                                ${facts.transactionStatus ? html`<span className="pill">${facts.transactionStatus}</span>` : null}
+                              </div>
+                              <div className="muted small" style=${{ marginTop: '0.35rem' }}>
+                                ${facts.appealReason}
+                              </div>
+                            </div>
+                            <span className=${`expand-toggle${expanded ? ' open' : ''}`}>></span>
+                          </div>
+                        </td>
+                        <td><span className=${`pill ${queueStatusClass(item.currentStatus)}`}>${String(item.currentStatus || '').replace(/_/g, ' ')}</span></td>
+                        <td>
+                          <div>${item.claimedBy || 'Unclaimed'}</div>
+                          <div className="muted small">${item.claimedRole || 'Awaiting assignment'}</div>
+                        </td>
+                        <td>
+                          <div>${item.reviewedBy || 'Not decided'}</div>
+                          <div className="muted small">${item.resolvedRole || 'Pending'}</div>
+                        </td>
+                        <td>
+                          <textarea
+                            className="textarea"
+                            placeholder="Resolution notes"
+                            value=${notes[`appeal:${item.appealId}`] ?? (item.resolutionNotes || '')}
+                            onClick=${stopRowToggle}
+                            onFocus=${stopRowToggle}
+                            onMouseDown=${stopRowToggle}
+                            onInput=${(event) => setNotes((prev) => ({ ...prev, [`appeal:${item.appealId}`]: event.target.value }))}
+                          ></textarea>
+                        </td>
+                        <td>${actionButtons('appeal', item.appealId, item.claimedBy, item.currentStatus)}</td>
+                      </tr>
+                    `,
+                    expanded ? html`
+                      <tr key=${`${rowKey}:detail`} className="detail-row">
+                        <td colSpan="6">${renderAppealExpanded(facts, item)}</td>
+                      </tr>
+                    ` : null,
+                  ].filter(Boolean);
+                }) : html`
+                  <tr><td colSpan="6" className="muted">No appeals are waiting for manual review.</td></tr>
                 `}
               </tbody>
             </table>
