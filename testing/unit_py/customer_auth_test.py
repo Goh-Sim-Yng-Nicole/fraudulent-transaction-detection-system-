@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import importlib
 import os
 import sys
 from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import patch
 
-from services.customer.src.utils import email_utils
+email_utils = importlib.import_module("services.customer.src.utils.email_utils")
 
 OTP_ENV_KEYS = [
     "SMTP_HOST",
