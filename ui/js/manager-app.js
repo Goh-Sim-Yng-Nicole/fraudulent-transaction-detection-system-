@@ -76,6 +76,8 @@ const App = () => {
   const declineRate = totalTransactions > 0 ? (declined / totalTransactions) * 100 : 0;
   const analystImpact = dashboard.analystImpact || {};
   const appealImpact = dashboard.appealImpact || {};
+  const decisionBreakdown = Array.isArray(dashboard.decisions) ? dashboard.decisions : [];
+  const decisionMap = Object.fromEntries(decisionBreakdown.map((item) => [item.decision, item]));
   const reviewShare = totalTransactions > 0
     ? (Number(analystImpact.totalManualReviews || legacy.transactions_reviewed || 0) / totalTransactions) * 100
     : 0;
@@ -96,6 +98,32 @@ const App = () => {
     ['Review turnaround (min)', formatDecimal(analystImpact.avgReviewTurnaroundMinutes), 'Average analyst completion time'],
     ['Appeal reverse rate', `${formatDecimal(appealImpact.reverseRate)}%`, 'Portion of appeals resolved as reverse'],
     ['Appeals pending', formatNumber(appealImpact.appealsPending), 'Open appeals awaiting decision'],
+  ];
+  const outcomeCards = [
+    {
+      label: 'Approved transactions',
+      total: approved,
+      fiveMinuteValue: realtime.approved,
+      share: approvalRate,
+      avgRiskScore: decisionMap.APPROVED?.avgRiskScore ?? 0,
+      tone: 'var(--ok)',
+    },
+    {
+      label: 'Rejected transactions',
+      total: declined,
+      fiveMinuteValue: realtime.declined,
+      share: declineRate,
+      avgRiskScore: decisionMap.DECLINED?.avgRiskScore ?? 0,
+      tone: 'var(--danger)',
+    },
+    {
+      label: 'Flagged transactions',
+      total: flagged,
+      fiveMinuteValue: realtime.flagged,
+      share: totalTransactions > 0 ? (flagged / totalTransactions) * 100 : 0,
+      avgRiskScore: decisionMap.FLAGGED?.avgRiskScore ?? 0,
+      tone: 'var(--warning, #ffcf8a)',
+    },
   ];
 
   const opsLinks = [
@@ -130,9 +158,9 @@ const App = () => {
         <p>Fraud analytics and role-aware operations surfaces in one control view.</p>
         <div className="grid cols-4" style=${{ marginTop: '1rem' }}>
           <div className="metric"><div className="metric-label">Transactions</div><div className="metric-value">${formatNumber(totalTransactions)}</div></div>
-          <div className="metric"><div className="metric-label">Approval rate</div><div className="metric-value">${formatPercent(approvalRate)}</div></div>
-          <div className="metric"><div className="metric-label">Appeals</div><div className="metric-value">${formatNumber(legacy.appeals_created)}</div></div>
-          <div className="metric"><div className="metric-label">Review pressure</div><div className="metric-value">${formatPercent(reviewShare)}</div></div>
+          <div className="metric"><div className="metric-label">Approved</div><div className="metric-value">${formatNumber(approved)}</div></div>
+          <div className="metric"><div className="metric-label">Rejected</div><div className="metric-value">${formatNumber(declined)}</div></div>
+          <div className="metric"><div className="metric-label">Flagged</div><div className="metric-value">${formatNumber(flagged)}</div></div>
         </div>
       </section>
 
@@ -150,6 +178,29 @@ const App = () => {
               <div className="metric-label">${label}</div>
               <div className="metric-value">${value}</div>
               <div className="muted small" style=${{ marginTop: '0.45rem' }}>${note}</div>
+            </div>
+          </article>
+        `)}
+      </section>
+
+      <section className="grid cols-3" style=${{ marginTop: '1rem' }}>
+        ${outcomeCards.map((item) => html`
+          <article className="card">
+            <div className="card-body">
+              <div className="metric-label">${item.label}</div>
+              <div className="metric-value" style=${{ color: item.tone }}>${formatNumber(item.total)}</div>
+              <div className="row space-between small muted" style=${{ marginTop: '0.6rem' }}>
+                <span>Share</span>
+                <span>${formatPercent(item.share)}</span>
+              </div>
+              <div className="row space-between small muted" style=${{ marginTop: '0.35rem' }}>
+                <span>Last 5 min</span>
+                <span>${formatNumber(item.fiveMinuteValue)}</span>
+              </div>
+              <div className="row space-between small muted" style=${{ marginTop: '0.35rem' }}>
+                <span>Avg risk score</span>
+                <span>${formatDecimal(item.avgRiskScore)}</span>
+              </div>
             </div>
           </article>
         `)}
