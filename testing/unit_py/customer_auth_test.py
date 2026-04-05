@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import os
 import sys
 from types import ModuleType, SimpleNamespace
@@ -60,7 +61,7 @@ def _install_customer_auth_import_stubs() -> None:
 
 _install_customer_auth_import_stubs()
 
-from services.customer import auth
+auth = importlib.import_module("services.customer.auth")
 
 
 OTP_ENV_KEYS = [
