@@ -526,6 +526,10 @@ services:
     build:
       context: .
       dockerfile: nginx/Dockerfile
+    environment:
+      DEPLOYMENT_HOST: ${DEPLOYMENT_HOST:-localhost}
+    volumes:
+      - ${LETSENCRYPT_HOST_PATH:-./nginx/certs}:/etc/letsencrypt:ro
     ports:
       - '8088:8088'
       - '443:8443'
