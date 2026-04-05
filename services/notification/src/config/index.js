@@ -101,7 +101,7 @@ module.exports = {
       fallbackPhone: process.env.NOTIFICATION_CUSTOMER_FALLBACK_PHONE || '+15550000000',
     },
     fraudTeam: {
-      email: process.env.NOTIFICATION_FRAUD_TEAM_EMAIL || 'fraud-team@frauddetection.com',
+      email: process.env.NOTIFICATION_FRAUD_TEAM_EMAIL || 'fraud.notifications@frauddetection.com',
       phone: process.env.NOTIFICATION_FRAUD_TEAM_PHONE || '+15550000001',
     },
   },
