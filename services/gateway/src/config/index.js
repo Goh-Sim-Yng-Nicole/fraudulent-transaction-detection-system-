@@ -147,6 +147,14 @@ const externalDecisionUrl = (
   || process.env.DECISION_BASE_URL
   || ''
 ).trim();
+const recipientDirectoryBaseUrl = String(
+  process.env.RECIPIENT_DIRECTORY_BASE_URL
+  || ''
+).trim().replace(/\/+$/, '');
+const recipientDirectoryApiKey = String(
+  process.env.RECIPIENT_DIRECTORY_API_KEY
+  || ''
+).trim();
 
 const jwtSecret = requireSafeSecret('JWT_SECRET', process.env.JWT_SECRET);
 const corsOrigin = parseCorsOrigins(process.env.CORS_ORIGIN);
@@ -208,6 +216,12 @@ module.exports = {
     analytics: process.env.ANALYTICS_SERVICE_URL || process.env.ANALYTICS_BASE_URL || 'http://analytics:8006',
     humanVerification: process.env.HUMAN_VERIFICATION_SERVICE_URL || process.env.FRAUD_REVIEW_BASE_URL || 'http://fraud-review:8002',
     appeal: process.env.APPEAL_SERVICE_URL || process.env.APPEAL_BASE_URL || 'http://appeal:8003',
+    recipientDirectory: recipientDirectoryBaseUrl || null,
+  },
+  recipientDirectory: {
+    baseUrl: recipientDirectoryBaseUrl || null,
+    apiKey: recipientDirectoryApiKey,
+    timeoutMs: parseInt(process.env.RECIPIENT_DIRECTORY_TIMEOUT_MS, 10) || 15000,
   },
   routeToggles: {
     auth: flagEnabled(process.env.ENABLE_AUTH_ROUTES),
@@ -217,6 +231,8 @@ module.exports = {
     analytics: flagEnabled(process.env.ENABLE_ANALYTICS_ROUTES),
     humanVerification: flagEnabled(process.env.ENABLE_HUMAN_VERIFICATION_ROUTES),
     appeals: flagEnabled(process.env.ENABLE_APPEAL_ROUTES),
+    recipientDirectory: Boolean(recipientDirectoryBaseUrl && recipientDirectoryApiKey)
+      && flagEnabled(process.env.ENABLE_RECIPIENT_DIRECTORY_ROUTES, true),
   },
 
   circuitBreaker: {

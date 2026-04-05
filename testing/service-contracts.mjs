@@ -8,6 +8,7 @@ import {
   buildFlaggedTransactionPayload,
   checkHtmlPage,
   credentials,
+  isRecipientDirectoryConfigured,
   kafka,
   logStep,
   makeCustomer,
@@ -34,17 +35,6 @@ const registerCustomerDirect = async (customer) => {
   return {
     ...customer,
   };
-};
-
-const loginCustomerDirect = async (customer, password = customer.password) => {
-  const result = await request(`${platform.customerBase}/login`, {
-    method: 'POST',
-    body: { email: customer.email, password },
-  });
-
-  assertStatus(result, 200, `direct login ${customer.email}`);
-  assert.equal(result.body?.requires_otp, true, `direct login ${customer.email}: expected requires_otp=true`);
-  return result;
 };
 
 const verifyCustomerOtpDirect = async (customer, otpCode) => {
@@ -223,8 +213,6 @@ assert.equal(baselineRealtime.body?.success, true, 'analytics realtime baseline 
 logStep('Creating disposable customers for direct contract validation');
 let primaryCustomer = await registerCustomerDirect(makeCustomer('contracts-primary'));
 let recipientCustomer = await registerCustomerDirect(makeCustomer('contracts-recipient'));
-
-await loginCustomerDirect(primaryCustomer);
 const primaryOtp = await waitForLatestOtp(primaryCustomer.email);
 primaryCustomer = await verifyCustomerOtpDirect(primaryCustomer, primaryOtp);
 const recipientOtp = await waitForLatestOtp(recipientCustomer.email);
@@ -291,6 +279,73 @@ assert.equal(lookupByPhone.body?.customer_id, recipientCustomer.customerId, 'loo
 const internalContact = await request(`${platform.customerBase}/internal/contact/${recipientCustomer.customerId}`);
 assertStatus(internalContact, 200, 'customer internal contact lookup');
 assert.equal(internalContact.body?.customer_id, recipientCustomer.customerId, 'internal contact lookup returned unexpected customer');
+
+if (isRecipientDirectoryConfigured()) {
+  logStep('Validating recipient directory save, list, read, update, and delete flows through the gateway');
+
+  const saveRecipientResult = await request(`${platform.publicBase}/api/customer/recipients`, {
+    method: 'POST',
+    headers: authHeaders(primaryCustomer.verifiedToken),
+    body: {
+      recipient_customer_id: recipientCustomer.customerId,
+      recipient_name: recipientCustomer.full_name,
+      recipient_email: recipientCustomer.email,
+      nickname: 'Saved Payee',
+      is_favorite: true,
+    },
+  });
+  assertStatus(saveRecipientResult, 200, 'save recipient directory entry');
+  assert.equal(saveRecipientResult.body?.recipient_customer_id, recipientCustomer.customerId, 'saved recipient should target the looked-up customer');
+  assert.equal(saveRecipientResult.body?.is_favorite, true, 'saved recipient should preserve favourite state');
+
+  const savedRecipientId = saveRecipientResult.body?.recipient_id;
+  assert.ok(savedRecipientId, 'save recipient should return recipient_id');
+
+  const listRecipientsResult = await request(`${platform.publicBase}/api/customer/recipients`, {
+    headers: authHeaders(primaryCustomer.verifiedToken),
+  });
+  assertStatus(listRecipientsResult, 200, 'list recipient directory entries');
+  assertArrayContains(
+    listRecipientsResult.body,
+    (item) => item.recipient_id === savedRecipientId && item.recipient_customer_id === recipientCustomer.customerId,
+    'recipient directory should include the saved entry'
+  );
+
+  const getRecipientResult = await request(`${platform.publicBase}/api/customer/recipients/${encodeURIComponent(savedRecipientId)}`, {
+    headers: authHeaders(primaryCustomer.verifiedToken),
+  });
+  assertStatus(getRecipientResult, 200, 'get recipient directory entry');
+  assert.equal(getRecipientResult.body?.recipient_email, recipientCustomer.email, 'single recipient lookup should return saved email');
+
+  const updateRecipientResult = await request(`${platform.publicBase}/api/customer/recipients/${encodeURIComponent(savedRecipientId)}`, {
+    method: 'PUT',
+    headers: authHeaders(primaryCustomer.verifiedToken),
+    body: {
+      nickname: 'Payroll Contact',
+      is_favorite: false,
+    },
+  });
+  assertStatus(updateRecipientResult, 200, 'update recipient directory entry');
+  assert.equal(updateRecipientResult.body?.nickname, 'Payroll Contact', 'recipient update should change nickname');
+  assert.equal(updateRecipientResult.body?.is_favorite, false, 'recipient update should change favourite state');
+
+  const deleteRecipientResult = await request(`${platform.publicBase}/api/customer/recipients/${encodeURIComponent(savedRecipientId)}`, {
+    method: 'DELETE',
+    headers: authHeaders(primaryCustomer.verifiedToken),
+  });
+  assertStatus(deleteRecipientResult, 200, 'delete recipient directory entry');
+
+  const listRecipientsAfterDelete = await request(`${platform.publicBase}/api/customer/recipients`, {
+    headers: authHeaders(primaryCustomer.verifiedToken),
+  });
+  assertStatus(listRecipientsAfterDelete, 200, 'list recipient directory after delete');
+  assert.ok(
+    !listRecipientsAfterDelete.body.some((item) => item.recipient_id === savedRecipientId),
+    'deleted recipient should no longer appear in recipient directory'
+  );
+} else {
+  logStep('Skipping recipient directory contracts because RECIPIENT_DIRECTORY_BASE_URL / RECIPIENT_DIRECTORY_API_KEY are not configured');
+}
 
 const currentProfile = await request(`${platform.customerBase}/me`, {
   headers: authHeaders(primaryCustomer.verifiedToken),

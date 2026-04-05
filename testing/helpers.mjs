@@ -30,6 +30,14 @@ export const platform = {
   jaegerBase: process.env.JAEGER_BASE_URL || 'http://localhost:16686',
   mailpitBase: process.env.MAILPIT_BASE_URL || 'http://localhost:8025',
   cadvisorBase: process.env.CADVISOR_BASE_URL || 'http://localhost:9091',
+  recipientDirectoryBase: process.env.RECIPIENT_DIRECTORY_BASE_URL || '',
+};
+
+export const integrations = {
+  recipientDirectory: {
+    baseUrl: process.env.RECIPIENT_DIRECTORY_BASE_URL || '',
+    apiKey: process.env.RECIPIENT_DIRECTORY_API_KEY || '',
+  },
 };
 
 function shouldUseInsecureTls(url, requestedInsecureTls) {
@@ -165,6 +173,10 @@ export function basicAuthHeaders(username, password, extraHeaders = {}) {
     Authorization: `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`,
     ...extraHeaders,
   };
+}
+
+export function isRecipientDirectoryConfigured() {
+  return Boolean(integrations.recipientDirectory.baseUrl && integrations.recipientDirectory.apiKey);
 }
 
 export function makeCustomer(prefix) {

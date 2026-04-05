@@ -24,6 +24,32 @@ const statusClass = (status) => {
 const currencies = ['SGD', 'USD', 'EUR', 'GBP', 'MYR', 'CNY'];
 const countries = ['SG', 'AU', 'BR', 'CA', 'CN', 'DE', 'FR', 'GB', 'ID', 'IN', 'JP', 'MY', 'NG', 'PH', 'PK', 'RU', 'UA', 'US'];
 const cardTypes = ['CREDIT', 'DEBIT', 'PREPAID'];
+const blankRecipientSaveForm = () => ({ nickname: '', isFavorite: false });
+
+const normalizeSavedRecipient = (recipient = {}) => ({
+  recipient_id: String(recipient.recipient_id || ''),
+  owner_customer_id: recipient.owner_customer_id || '',
+  recipient_customer_id: recipient.recipient_customer_id || '',
+  recipient_name: recipient.recipient_name || '',
+  recipient_email: recipient.recipient_email || '',
+  nickname: recipient.nickname || '',
+  is_favorite: Boolean(recipient.is_favorite ?? recipient.is_favourite),
+  is_active: recipient.is_active !== false,
+  created_on: recipient.created_on || null,
+  updated_on: recipient.updated_on || null,
+});
+
+const sortSavedRecipients = (items) => {
+  return [...items].sort((left, right) => {
+    if (Boolean(left.is_favorite) !== Boolean(right.is_favorite)) {
+      return Number(Boolean(right.is_favorite)) - Number(Boolean(left.is_favorite));
+    }
+
+    const leftLabel = String(left.nickname || left.recipient_name || '').toLowerCase();
+    const rightLabel = String(right.nickname || right.recipient_name || '').toLowerCase();
+    return leftLabel.localeCompare(rightLabel);
+  });
+};
 
 const App = () => {
   const [session, setSession] = useState(null);
@@ -31,6 +57,14 @@ const App = () => {
   const [transactions, setTransactions] = useState([]);
   const [appeals, setAppeals] = useState([]);
   const [recipient, setRecipient] = useState(null);
+  const [savedRecipients, setSavedRecipients] = useState([]);
+  const [selectedSavedRecipientId, setSelectedSavedRecipientId] = useState('');
+  const [recipientSaveForm, setRecipientSaveForm] = useState(blankRecipientSaveForm());
+  const [recipientDirectory, setRecipientDirectory] = useState({
+    configured: true,
+    initialized: false,
+    error: '',
+  });
   const [message, setMessage] = useState({ type: '', text: '' });
   const [busy, setBusy] = useState({});
 
@@ -56,6 +90,9 @@ const App = () => {
   const hasLocalPassword = customer?.has_password !== false;
   const appealedTransactionIds = new Set(appeals.map((appeal) => appeal.transaction_id));
   const selectedTransactionAlreadyAppealed = appealedTransactionIds.has(appealDraft.transactionId);
+  const matchedSavedRecipient = recipient?.customer_id
+    ? savedRecipients.find((item) => item.recipient_customer_id === recipient.customer_id)
+    : null;
 
   const logout = () => {
     clearCustomerSession();
@@ -95,6 +132,37 @@ const App = () => {
     setAppeals(Array.isArray(payload) ? payload : []);
   };
 
+  const loadSavedRecipients = async ({ quiet = true } = {}) => {
+    if (!token) return;
+    setLoading('recipients', true);
+    try {
+      const payload = await fetchJson(`${API_ROOT}/customer/recipients`, { headers });
+      const normalized = sortSavedRecipients(
+        Array.isArray(payload) ? payload.map(normalizeSavedRecipient) : [],
+      );
+      setSavedRecipients(normalized);
+      setRecipientDirectory({
+        configured: true,
+        initialized: true,
+        error: '',
+      });
+    } catch (error) {
+      const errorMessage = String(error.message || '');
+      const unavailable = /saved recipients are not configured/i.test(errorMessage);
+      setSavedRecipients([]);
+      setRecipientDirectory({
+        configured: !unavailable,
+        initialized: true,
+        error: unavailable ? '' : errorMessage,
+      });
+      if (!quiet && !unavailable) {
+        showMessage('danger', errorMessage);
+      }
+    } finally {
+      setLoading('recipients', false);
+    }
+  };
+
   useEffect(() => {
     const saved = readCustomerSession();
     if (!saved) {
@@ -114,8 +182,13 @@ const App = () => {
     if (typeof session.customer?.has_password === 'undefined') {
       syncCustomerProfile().catch(() => {});
     }
-    Promise.all([loadTransactions(), loadAppeals()]).catch(() => {});
-  }, [session, direction]); // eslint-disable-line react-hooks/exhaustive-deps
+    Promise.all([loadTransactions(direction), loadAppeals(), loadSavedRecipients()]).catch(() => {});
+  }, [session]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!session) return;
+    loadTransactions(direction).catch(() => {});
+  }, [direction, session]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const id = setInterval(() => setNowUtc(formatUtc(new Date())), 1000);
@@ -139,12 +212,168 @@ const App = () => {
         { headers },
       );
       setRecipient(payload);
-      showMessage('success', `Recipient found: ${payload.full_name}`);
+      const existingSavedRecipient = savedRecipients.find(
+        (item) => item.recipient_customer_id === payload.customer_id,
+      );
+      setSelectedSavedRecipientId(existingSavedRecipient?.recipient_id || '');
+      setRecipientSaveForm({
+        nickname: existingSavedRecipient?.nickname || payload.full_name || '',
+        isFavorite: Boolean(existingSavedRecipient?.is_favorite),
+      });
+      showMessage(
+        'success',
+        existingSavedRecipient
+          ? `Recipient found: ${payload.full_name}. This recipient is already saved in your directory.`
+          : `Recipient found: ${payload.full_name}`,
+      );
     } catch (error) {
       showMessage('danger', error.message);
       setRecipient(null);
+      setSelectedSavedRecipientId('');
+      setRecipientSaveForm(blankRecipientSaveForm());
     } finally {
       setLoading('lookup', false);
+    }
+  };
+
+  const useSavedRecipient = (savedRecipient) => {
+    setTxnForm((prev) => ({
+      ...prev,
+      recipientType: 'customer',
+      recipientQuery: savedRecipient.recipient_email,
+    }));
+    setRecipient({
+      customer_id: savedRecipient.recipient_customer_id,
+      full_name: savedRecipient.recipient_name,
+      email: savedRecipient.recipient_email,
+    });
+    setSelectedSavedRecipientId(savedRecipient.recipient_id);
+    setRecipientSaveForm({
+      nickname: savedRecipient.nickname || savedRecipient.recipient_name,
+      isFavorite: Boolean(savedRecipient.is_favorite),
+    });
+    showMessage('success', `Using saved recipient: ${savedRecipient.nickname || savedRecipient.recipient_name}`);
+  };
+
+  const upsertSavedRecipient = (savedRecipient) => {
+    setSavedRecipients((previous) => {
+      const next = previous.some((item) => item.recipient_id === savedRecipient.recipient_id)
+        ? previous.map((item) => (item.recipient_id === savedRecipient.recipient_id ? savedRecipient : item))
+        : [...previous, savedRecipient];
+      return sortSavedRecipients(next);
+    });
+  };
+
+  const saveRecipient = async () => {
+    if (!recipient?.customer_id) {
+      showMessage('danger', 'Look up a recipient first before saving them.');
+      return;
+    }
+
+    setLoading('saveRecipient', true);
+    try {
+      const existingSavedRecipient = savedRecipients.find(
+        (item) => item.recipient_customer_id === recipient.customer_id,
+      );
+      const payload = await fetchJson(
+        existingSavedRecipient
+          ? `${API_ROOT}/customer/recipients/${encodeURIComponent(existingSavedRecipient.recipient_id)}`
+          : `${API_ROOT}/customer/recipients`,
+        {
+          method: existingSavedRecipient ? 'PUT' : 'POST',
+          headers,
+          body: JSON.stringify(
+            existingSavedRecipient
+              ? {
+                nickname: recipientSaveForm.nickname.trim() || recipient.full_name,
+                is_favorite: recipientSaveForm.isFavorite,
+              }
+              : {
+                recipient_customer_id: recipient.customer_id,
+                recipient_name: recipient.full_name,
+                recipient_email: recipient.email,
+                nickname: recipientSaveForm.nickname.trim() || recipient.full_name,
+                is_favorite: recipientSaveForm.isFavorite,
+              },
+          ),
+        },
+      );
+      const normalized = normalizeSavedRecipient(payload);
+      upsertSavedRecipient(normalized);
+      setSelectedSavedRecipientId(normalized.recipient_id);
+      setRecipientSaveForm({
+        nickname: normalized.nickname || normalized.recipient_name,
+        isFavorite: Boolean(normalized.is_favorite),
+      });
+      showMessage(
+        'success',
+        existingSavedRecipient
+          ? 'Saved recipient updated successfully.'
+          : 'Recipient saved for quicker future transfers.',
+      );
+    } catch (error) {
+      showMessage('danger', error.message);
+    } finally {
+      setLoading('saveRecipient', false);
+    }
+  };
+
+  const updateSavedRecipientFavorite = async (savedRecipient) => {
+    setLoading('favoriteRecipient', savedRecipient.recipient_id);
+    try {
+      const payload = await fetchJson(
+        `${API_ROOT}/customer/recipients/${encodeURIComponent(savedRecipient.recipient_id)}`,
+        {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify({
+            nickname: savedRecipient.nickname || savedRecipient.recipient_name,
+            is_favorite: !savedRecipient.is_favorite,
+          }),
+        },
+      );
+      const normalized = normalizeSavedRecipient(payload);
+      upsertSavedRecipient(normalized);
+      if (selectedSavedRecipientId === normalized.recipient_id) {
+        setRecipientSaveForm({
+          nickname: normalized.nickname || normalized.recipient_name,
+          isFavorite: Boolean(normalized.is_favorite),
+        });
+      }
+      showMessage('success', normalized.is_favorite ? 'Recipient marked as favourite.' : 'Recipient removed from favourites.');
+    } catch (error) {
+      showMessage('danger', error.message);
+    } finally {
+      setLoading('favoriteRecipient', '');
+    }
+  };
+
+  const deleteSavedRecipient = async (savedRecipient) => {
+    if (!window.confirm(`Remove ${savedRecipient.nickname || savedRecipient.recipient_name} from saved recipients?`)) {
+      return;
+    }
+
+    setLoading('deleteRecipient', savedRecipient.recipient_id);
+    try {
+      await fetchJson(
+        `${API_ROOT}/customer/recipients/${encodeURIComponent(savedRecipient.recipient_id)}`,
+        {
+          method: 'DELETE',
+          headers,
+        },
+      );
+      setSavedRecipients((previous) => previous.filter((item) => item.recipient_id !== savedRecipient.recipient_id));
+      if (selectedSavedRecipientId === savedRecipient.recipient_id) {
+        setSelectedSavedRecipientId('');
+        setRecipient(null);
+        setRecipientSaveForm(blankRecipientSaveForm());
+        setTxnForm((prev) => ({ ...prev, recipientQuery: '' }));
+      }
+      showMessage('success', 'Saved recipient removed.');
+    } catch (error) {
+      showMessage('danger', error.message);
+    } finally {
+      setLoading('deleteRecipient', '');
     }
   };
 
@@ -370,20 +599,106 @@ const App = () => {
           <div className="card-body">
             <form className="grid" style=${{ gap: '0.75rem' }} onSubmit=${submitTransaction}>
               <div className="tabs">
-                <button type="button" className=${`tab ${txnForm.recipientType === 'merchant' ? 'active' : ''}`} onClick=${() => { setTxnForm((p) => ({ ...p, recipientType: 'merchant' })); setRecipient(null); }}>Merchant</button>
-                <button type="button" className=${`tab ${txnForm.recipientType === 'customer' ? 'active' : ''}`} onClick=${() => { setTxnForm((p) => ({ ...p, recipientType: 'customer' })); setRecipient(null); }}>Customer</button>
+                <button type="button" className=${`tab ${txnForm.recipientType === 'merchant' ? 'active' : ''}`} onClick=${() => {
+                  setTxnForm((p) => ({ ...p, recipientType: 'merchant' }));
+                  setRecipient(null);
+                  setSelectedSavedRecipientId('');
+                }}>Merchant</button>
+                <button type="button" className=${`tab ${txnForm.recipientType === 'customer' ? 'active' : ''}`} onClick=${() => {
+                  setTxnForm((p) => ({ ...p, recipientType: 'customer' }));
+                  setRecipient(null);
+                  setSelectedSavedRecipientId('');
+                }}>Customer</button>
               </div>
 
               ${txnForm.recipientType === 'merchant' ? html`
                 <div className="field"><label>Merchant ID / UEN</label><input className="input" value=${txnForm.merchantId} onInput=${(e) => setTxnForm((p) => ({ ...p, merchantId: e.target.value }))} /></div>
               ` : html`
                 <div className="field">
+                  <div className="row space-between">
+                    <label>Saved recipients</label>
+                    ${recipientDirectory.configured ? html`
+                      <button type="button" className="btn btn-ghost" onClick=${() => loadSavedRecipients({ quiet: false })} disabled=${busy.recipients}>
+                        ${busy.recipients ? 'Refreshing...' : 'Refresh directory'}
+                      </button>
+                    ` : null}
+                  </div>
+                  ${recipientDirectory.configured ? html`
+                    ${savedRecipients.length ? html`
+                      <div className="recipient-directory">
+                        ${savedRecipients.map((savedRecipient) => html`
+                          <div className=${`recipient-entry ${selectedSavedRecipientId === savedRecipient.recipient_id ? 'active' : ''}`}>
+                            <div>
+                              <div className="title-sm">${savedRecipient.nickname || savedRecipient.recipient_name}</div>
+                              <div className="muted small">${savedRecipient.recipient_name} · ${savedRecipient.recipient_email}</div>
+                            </div>
+                            <div className="row recipient-actions">
+                              ${savedRecipient.is_favorite ? html`<span className="pill status-approved">Favourite</span>` : null}
+                              <button type="button" className="btn btn-ghost" onClick=${() => useSavedRecipient(savedRecipient)}>Use</button>
+                              <button type="button" className="btn btn-ghost" onClick=${() => updateSavedRecipientFavorite(savedRecipient)} disabled=${busy.favoriteRecipient === savedRecipient.recipient_id}>
+                                ${busy.favoriteRecipient === savedRecipient.recipient_id ? 'Saving...' : savedRecipient.is_favorite ? 'Unfavourite' : 'Favourite'}
+                              </button>
+                              <button type="button" className="btn btn-danger" onClick=${() => deleteSavedRecipient(savedRecipient)} disabled=${busy.deleteRecipient === savedRecipient.recipient_id}>
+                                ${busy.deleteRecipient === savedRecipient.recipient_id ? 'Removing...' : 'Remove'}
+                              </button>
+                            </div>
+                          </div>
+                        `)}
+                      </div>
+                    ` : html`<div className="muted small">No saved recipients yet. Look up a validated customer below and save them for faster future transfers.</div>`}
+                  ` : html`
+                    <div className="muted small">Saved recipients are not available in this environment yet. You can still use live lookup for customer transfers.</div>
+                  `}
+                  ${recipientDirectory.error ? html`<div className="muted small" style=${{ marginTop: '0.45rem' }}>${recipientDirectory.error}</div>` : null}
+                </div>
+                <div className="field">
                   <label>Recipient email</label>
                   <div className="row">
-                    <input className="input" style=${{ flex: '1' }} value=${txnForm.recipientQuery} onInput=${(e) => setTxnForm((p) => ({ ...p, recipientQuery: e.target.value }))} />
+                    <input className="input" style=${{ flex: '1' }} value=${txnForm.recipientQuery} onInput=${(e) => {
+                      setTxnForm((p) => ({ ...p, recipientQuery: e.target.value }));
+                      setRecipient(null);
+                      setSelectedSavedRecipientId('');
+                    }} />
                     <button type="button" className="btn btn-ghost" onClick=${lookupRecipient} disabled=${busy.lookup}>${busy.lookup ? 'Looking...' : 'Lookup'}</button>
                   </div>
-                  ${recipient ? html`<div className="metric" style=${{ marginTop: '0.55rem' }}><div className="title-sm">${recipient.full_name}</div><div className="muted small">${recipient.email}</div></div>` : null}
+                  ${recipient ? html`
+                    <div className="metric" style=${{ marginTop: '0.55rem' }}>
+                      <div className="title-sm">${recipient.full_name}</div>
+                      <div className="muted small">${recipient.email}</div>
+                      <div className="muted small" style=${{ marginTop: '0.35rem' }}>
+                        ${matchedSavedRecipient ? 'Already saved in your recipient directory.' : 'Validated via live customer lookup.'}
+                      </div>
+                    </div>
+                  ` : null}
+                  ${recipient && recipientDirectory.configured ? html`
+                    <div className="grid cols-2" style=${{ marginTop: '0.75rem' }}>
+                      <div className="field">
+                        <label>Saved nickname</label>
+                        <input
+                          className="input"
+                          value=${recipientSaveForm.nickname}
+                          onInput=${(e) => setRecipientSaveForm((prev) => ({ ...prev, nickname: e.target.value }))}
+                          placeholder="How should this recipient appear in your directory?"
+                        />
+                      </div>
+                      <label className="checkbox-row">
+                        <input
+                          type="checkbox"
+                          checked=${recipientSaveForm.isFavorite}
+                          onChange=${(e) => setRecipientSaveForm((prev) => ({ ...prev, isFavorite: e.target.checked }))}
+                        />
+                        <span>Mark as favourite</span>
+                      </label>
+                    </div>
+                  ` : null}
+                  ${recipient && recipientDirectory.configured ? html`
+                    <div className="row" style=${{ marginTop: '0.6rem' }}>
+                      <button type="button" className="btn btn-success" onClick=${saveRecipient} disabled=${busy.saveRecipient || !hasLocalPassword}>
+                        ${busy.saveRecipient ? 'Saving...' : matchedSavedRecipient ? 'Update saved recipient' : 'Save recipient'}
+                      </button>
+                      ${hasLocalPassword ? null : html`<span className="muted small">Set a local password first to manage saved recipients.</span>`}
+                    </div>
+                  ` : null}
                 </div>
               `}
 

@@ -2,6 +2,7 @@ const express = require('express');
 const axios = require('axios');
 const config = require('../config');
 const { authenticate, authorize } = require('../middleware/auth');
+const recipientDirectoryService = require('../services/recipientDirectoryService');
 
 const router = express.Router();
 
@@ -15,6 +16,19 @@ router.use((req, _res, next) => {
 const customerOnly = [authenticate, authorize('customer')];
 const fraudStaffOnly = [authenticate, authorize('fraud_analyst', 'fraud_manager')];
 const analyticsStaffOnly = [authenticate, authorize('fraud_manager', 'ops_readonly', 'ops_admin')];
+
+const getRecipientDirectoryOwnerId = (req) => req.customerProfile?.customer_id || req.user?.userId || '';
+
+const ensureRecipientDirectoryConfigured = (res) => {
+  if (recipientDirectoryService.isConfigured()) {
+    return true;
+  }
+
+  res.status(503).json({
+    error: 'Saved recipients are not configured for this environment yet.',
+  });
+  return false;
+};
 
 const request = async (req, method, target, { body, params } = {}) => {
   return axios({
@@ -105,6 +119,87 @@ router.get('/customers/me', ...customerOnly, async (req, res) => {
     'GET',
     `${config.services.user}/me`
   );
+});
+
+router.get('/customer/recipients', ...customerOnly, async (req, res, next) => {
+  if (!ensureRecipientDirectoryConfigured(res)) {
+    return;
+  }
+
+  try {
+    const result = await recipientDirectoryService.listRecipients(
+      getRecipientDirectoryOwnerId(req),
+      req.query.favorites_only
+    );
+    return res.status(result.status).json(result.data);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get('/customer/recipients/:recipientId', ...customerOnly, async (req, res, next) => {
+  if (!ensureRecipientDirectoryConfigured(res)) {
+    return;
+  }
+
+  try {
+    const result = await recipientDirectoryService.getRecipient(
+      getRecipientDirectoryOwnerId(req),
+      req.params.recipientId
+    );
+    return res.status(result.status).json(result.data);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/customer/recipients', ...customerOnly, requireCustomerLocalPassword, async (req, res, next) => {
+  if (!ensureRecipientDirectoryConfigured(res)) {
+    return;
+  }
+
+  try {
+    const result = await recipientDirectoryService.createRecipient(
+      getRecipientDirectoryOwnerId(req),
+      req.body
+    );
+    return res.status(result.status).json(result.data);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.put('/customer/recipients/:recipientId', ...customerOnly, requireCustomerLocalPassword, async (req, res, next) => {
+  if (!ensureRecipientDirectoryConfigured(res)) {
+    return;
+  }
+
+  try {
+    const result = await recipientDirectoryService.updateRecipient(
+      getRecipientDirectoryOwnerId(req),
+      req.params.recipientId,
+      req.body
+    );
+    return res.status(result.status).json(result.data);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.delete('/customer/recipients/:recipientId', ...customerOnly, requireCustomerLocalPassword, async (req, res, next) => {
+  if (!ensureRecipientDirectoryConfigured(res)) {
+    return;
+  }
+
+  try {
+    const result = await recipientDirectoryService.deleteRecipient(
+      getRecipientDirectoryOwnerId(req),
+      req.params.recipientId
+    );
+    return res.status(result.status).json(result.data);
+  } catch (error) {
+    return next(error);
+  }
 });
 
 router.put('/customers/me', ...customerOnly, requireCustomerLocalPassword, async (req, res) => {
