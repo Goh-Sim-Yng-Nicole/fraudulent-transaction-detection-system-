@@ -4,7 +4,7 @@
 
 # 🏦 Fraudulent Transaction Detection System
 
-*Does Your Bank Actually Protect You From Fraud?*
+_Does Your Bank Actually Protect You From Fraud?_
 
 A production-grade microservices platform simulating end-to-end fraud operations — combining real-time scoring, manual analyst review, customer appeals, and full observability in a single Docker-based stack.
 
