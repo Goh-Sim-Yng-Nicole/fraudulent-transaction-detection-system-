@@ -66,6 +66,10 @@ module.exports = {
     baseUrl: process.env.APPEAL_SERVICE_URL || process.env.APPEAL_BASE_URL || 'http://appeal:8003',
     timeoutMs: parseInt(process.env.APPEAL_SERVICE_TIMEOUT_MS, 10) || 4000,
   },
+  transactionService: {
+    baseUrl: process.env.TRANSACTION_SERVICE_URL || process.env.TRANSACTION_BASE_URL || 'http://transaction:8000',
+    timeoutMs: parseInt(process.env.TRANSACTION_SERVICE_TIMEOUT_MS, 10) || 4000,
+  },
 
   kafka: {
     brokers: (process.env.KAFKA_BROKERS || process.env.KAFKA_BOOTSTRAP_SERVERS || 'localhost:9092').split(','),

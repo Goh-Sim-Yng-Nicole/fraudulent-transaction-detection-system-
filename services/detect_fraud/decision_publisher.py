@@ -196,6 +196,15 @@ class DecisionPublisher:
             )
             return self._build_decision_result("DECLINED", reasons, decision_factors, None)
 
+        if adjusted_score <= settings.threshold_approve_max:
+            decision_factors["thresholdBased"] = True
+            decision_factors["adjustedScore"] = adjusted_score
+            decision_factors["originalScore"] = fraud_analysis["riskScore"]
+            reasons.append(
+                f"Risk score {adjusted_score} below approval threshold ({settings.threshold_approve_max})"
+            )
+            return self._build_decision_result("APPROVED", reasons, decision_factors, None)
+
         high_value_override = self._check_high_value(transaction)
         if high_value_override is not None:
             reasons.append(high_value_override["reason"])
@@ -208,14 +217,10 @@ class DecisionPublisher:
             decision_factors["geographicRisk"] = True
             return self._build_decision_result(geography_override["decision"], reasons, decision_factors, geography_override)
 
-        if adjusted_score <= settings.threshold_approve_max:
-            decision = "APPROVED"
-            reasons.append(f"Risk score {adjusted_score} below approval threshold ({settings.threshold_approve_max})")
-        else:
-            decision = "FLAGGED"
-            reasons.append(
-                f"Risk score {adjusted_score} in manual review range ({settings.threshold_flag_min}-{settings.threshold_flag_max})"
-            )
+        decision = "FLAGGED"
+        reasons.append(
+            f"Risk score {adjusted_score} in manual review range ({settings.threshold_flag_min}-{settings.threshold_flag_max})"
+        )
 
         decision_factors["thresholdBased"] = True
         decision_factors["adjustedScore"] = adjusted_score

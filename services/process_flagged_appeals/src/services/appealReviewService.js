@@ -11,21 +11,96 @@ const toError = (err, fallbackMessage) => {
 };
 
 class AppealReviewService {
+  buildForwardHeaders({ authHeader, correlationId }) {
+    return {
+      ...(authHeader ? { Authorization: authHeader } : {}),
+      ...(correlationId ? { 'X-Correlation-ID': correlationId } : {}),
+    };
+  }
+
+  normalizeTransactionSummary(appeal, transaction, decision) {
+    return {
+      amount: transaction?.amount ?? null,
+      currency: transaction?.currency ?? null,
+      country: transaction?.country ?? null,
+      merchantId: transaction?.merchant_id ?? null,
+      cardType: transaction?.card_type ?? null,
+      senderName: transaction?.sender_name ?? null,
+      recipientCustomerId: transaction?.recipient_customer_id ?? null,
+      recipientName: transaction?.recipient_name ?? null,
+      transactionStatus: transaction?.status || decision?.status || appeal?.sourceTransactionStatus || null,
+      fraudScore: decision?.fraud_score ?? null,
+      outcomeReason: decision?.outcome_reason ?? null,
+      createdAt: transaction?.created_at ?? null,
+      updatedAt: transaction?.updated_at ?? null,
+    };
+  }
+
+  async fetchTransactionDetails(transactionId, headers) {
+    const baseUrl = `${config.transactionService.baseUrl}/api/v1/transactions/${encodeURIComponent(transactionId)}`;
+    const requestOptions = {
+      timeout: config.transactionService.timeoutMs,
+      headers,
+    };
+
+    const [transactionResult, decisionResult] = await Promise.allSettled([
+      axios.get(baseUrl, requestOptions),
+      axios.get(`${baseUrl}/decision`, requestOptions),
+    ]);
+
+    if (transactionResult.status === 'rejected') {
+      logger.warn('Failed to fetch linked transaction for appeal queue item', {
+        transactionId,
+        error: transactionResult.reason?.message || 'unknown error',
+      });
+    }
+
+    if (decisionResult.status === 'rejected') {
+      logger.warn('Failed to fetch linked transaction decision for appeal queue item', {
+        transactionId,
+        error: decisionResult.reason?.message || 'unknown error',
+      });
+    }
+
+    return {
+      transaction: transactionResult.status === 'fulfilled' ? transactionResult.value.data : null,
+      transactionDecision: decisionResult.status === 'fulfilled' ? decisionResult.value.data : null,
+    };
+  }
+
+  async enrichAppeal(appeal, headers) {
+    if (!appeal?.transactionId) {
+      return {
+        ...appeal,
+        transaction: null,
+        transactionDecision: null,
+        transactionSummary: null,
+      };
+    }
+
+    const { transaction, transactionDecision } = await this.fetchTransactionDetails(appeal.transactionId, headers);
+    return {
+      ...appeal,
+      transaction,
+      transactionDecision,
+      transactionSummary: this.normalizeTransactionSummary(appeal, transaction, transactionDecision),
+    };
+  }
+
   // Handles list pending appeals through appeal-service.
   async listPendingAppeals({ limit = 20, offset = 0, authHeader, correlationId }) {
     try {
+      const headers = this.buildForwardHeaders({ authHeader, correlationId });
       const response = await axios.get(
         `${config.appealService.baseUrl}/api/v1/internal/appeals/pending`,
         {
           timeout: config.appealService.timeoutMs,
           params: { limit, offset },
-          headers: {
-            ...(authHeader ? { Authorization: authHeader } : {}),
-            ...(correlationId ? { 'X-Correlation-ID': correlationId } : {}),
-          },
+          headers,
         }
       );
-      return response.data?.data || [];
+      const appeals = response.data?.data || [];
+      return Promise.all(appeals.map((appeal) => this.enrichAppeal(appeal, headers)));
     } catch (err) {
       logger.error('Failed to list pending appeals via appeal-service', {
         error: err.message,
@@ -45,10 +120,7 @@ class AppealReviewService {
         },
         {
           timeout: config.appealService.timeoutMs,
-          headers: {
-            ...(authHeader ? { Authorization: authHeader } : {}),
-            ...(correlationId ? { 'X-Correlation-ID': correlationId } : {}),
-          },
+          headers: this.buildForwardHeaders({ authHeader, correlationId }),
         }
       );
       return response.data?.data || null;
@@ -73,10 +145,7 @@ class AppealReviewService {
         },
         {
           timeout: config.appealService.timeoutMs,
-          headers: {
-            ...(authHeader ? { Authorization: authHeader } : {}),
-            ...(correlationId ? { 'X-Correlation-ID': correlationId } : {}),
-          },
+          headers: this.buildForwardHeaders({ authHeader, correlationId }),
         }
       );
       return response.data?.data || null;
@@ -103,10 +172,7 @@ class AppealReviewService {
         },
         {
           timeout: config.appealService.timeoutMs,
-          headers: {
-            ...(authHeader ? { Authorization: authHeader } : {}),
-            ...(correlationId ? { 'X-Correlation-ID': correlationId } : {}),
-          },
+          headers: this.buildForwardHeaders({ authHeader, correlationId }),
         }
       );
       return response.data?.data || null;

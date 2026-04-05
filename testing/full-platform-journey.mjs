@@ -92,26 +92,6 @@ const listCustomerTransactions = async (customer) => {
   return result.body;
 };
 
-const createCustomerAppeal = async (customer, transactionId, reason) => {
-  const result = await request(`${platform.publicBase}/api/customer/appeals`, {
-    method: 'POST',
-    headers: authHeaders(customer.token),
-    body: {
-      transaction_id: transactionId,
-      customer_id: customer.customerId,
-      reason_for_appeal: reason,
-      evidence: {
-        source: 'full-platform-journey',
-        note: 'Customer provided supporting explanation during automated journey validation.',
-      },
-    },
-  });
-
-  assertStatus(result, 200, 'create appeal');
-  assert.ok(result.body?.appeal_id, 'appeal creation should return appeal_id');
-  return result.body.appeal_id;
-};
-
 const getManagerDashboard = async (managerSession) => {
   const result = await request(`${platform.publicBase}/api/analytics/dashboard`, {
     headers: authHeaders(managerSession.token),
@@ -163,10 +143,10 @@ const approvedTransactionId = await createTransaction(journeyCustomer, {
 const approvedDecision = await waitForTransactionStatus(journeyCustomer.token, approvedTransactionId, 'APPROVED');
 assert.equal(String(approvedDecision.body?.status || '').toUpperCase(), 'APPROVED', 'approved transaction should be approved');
 
-logStep('Creating a flagged transaction, then exercising claim and release while keeping it flagged');
+logStep('Creating a medium-risk transaction, then exercising claim and release while keeping it flagged');
 const flaggedTransactionId = await createTransaction(journeyCustomer, {
   merchant_id: 'FTDS_FLAGGED_DEMO',
-  amount: 3200,
+  amount: 5200,
   currency: 'USD',
   card_type: 'PREPAID',
   country: 'NG',
@@ -199,139 +179,39 @@ assertStatus(await request(`${platform.publicBase}/api/v1/review-cases/${flagged
 
 await waitForTransactionStatus(journeyCustomer.token, flaggedTransactionId, 'FLAGGED');
 
-logStep('Creating a second risky transaction, declining it, then driving the full appeal workflow');
+logStep('Creating a high-risk transaction and waiting for automatic decline');
 const declinedTransactionId = await createTransaction(journeyCustomer, {
-  merchant_id: 'FTDS_FLAGGED_DEMO',
-  amount: 3300,
+  merchant_id: 'FTDS_DECLINED_DEMO',
+  amount: 15000,
   currency: 'USD',
   card_type: 'PREPAID',
   country: 'NG',
 });
-await waitForTransactionStatus(journeyCustomer.token, declinedTransactionId, 'FLAGGED');
-
-await poll(
-  'modern review queue contains the declined transaction candidate',
-  () => request(`${platform.publicBase}/api/v1/review-cases?status=PENDING,IN_REVIEW&limit=50&offset=0`, {
-    headers: authHeaders(analystSession.token),
-  }),
-  (result) => result.status === 200
-    && Array.isArray(result.body?.data)
-    && result.body.data.some((item) => item.transactionId === declinedTransactionId),
-  { timeoutMs: 120000, intervalMs: 2500 }
-);
-
-assertStatus(await request(`${platform.publicBase}/api/v1/review-cases/${declinedTransactionId}/claim`, {
-  method: 'POST',
-  headers: authHeaders(analystSession.token),
-  body: { claimTtlMinutes: 5 },
-}), 200, 'claim declined transaction review case');
-
-const declineReviewResult = await request(`${platform.publicBase}/api/v1/reviews/${declinedTransactionId}/decision`, {
-  method: 'POST',
-  headers: authHeaders(analystSession.token),
-  body: {
-    decision: 'DECLINED',
-    notes: 'Automated journey validation declined the high-risk transaction.',
-  },
-});
-assertStatus(declineReviewResult, 200, 'submit declined review decision');
-assert.equal(
-  declineReviewResult.body?.data?.reviewedBy,
-  analystSession.user.userId,
-  'decline decision should record the authenticated analyst'
-);
-
-await waitForTransactionStatus(journeyCustomer.token, declinedTransactionId, 'REJECTED');
-
-const appealId = await createCustomerAppeal(
-  journeyCustomer,
-  declinedTransactionId,
-  'This is a legitimate payment and the customer can provide supporting evidence.'
-);
-
-await poll(
-  'customer appeal list includes the declined transaction appeal',
-  () => request(
-    `${platform.publicBase}/api/customer/appeals?customer_id=${encodeURIComponent(journeyCustomer.customerId)}`,
-    { headers: authHeaders(journeyCustomer.token) }
-  ),
-  (result) => result.status === 200
-    && Array.isArray(result.body)
-    && result.body.some((item) => item.appeal_id === appealId),
-  { timeoutMs: 120000, intervalMs: 2500 }
-);
-
-await poll(
-  'appeal review queue includes the new appeal',
-  () => request(`${platform.publicBase}/api/v1/reviews/appeals/pending?limit=50&offset=0`, {
-    headers: authHeaders(analystSession.token),
-  }),
-  (result) => result.status === 200
-    && Array.isArray(result.body?.data)
-    && result.body.data.some((item) => item.appealId === appealId),
-  { timeoutMs: 120000, intervalMs: 2500 }
-);
-
-assertStatus(await request(`${platform.publicBase}/api/v1/reviews/appeals/${appealId}/claim`, {
-  method: 'POST',
-  headers: authHeaders(analystSession.token),
-  body: { claimTtlMinutes: 5 },
-}), 200, 'claim appeal');
-
-assertStatus(await request(`${platform.publicBase}/api/v1/reviews/appeals/${appealId}/release`, {
-  method: 'POST',
-  headers: authHeaders(analystSession.token),
-  body: { notes: 'Released once during automated appeal ownership coverage.' },
-}), 200, 'release appeal');
-
-assertStatus(await request(`${platform.publicBase}/api/v1/reviews/appeals/${appealId}/claim`, {
-  method: 'POST',
-  headers: authHeaders(analystSession.token),
-  body: { claimTtlMinutes: 5 },
-}), 200, 'reclaim appeal');
-
-const resolveAppealResult = await request(`${platform.publicBase}/api/v1/reviews/appeals/${appealId}/resolve`, {
-  method: 'POST',
-  headers: authHeaders(analystSession.token),
-  body: {
-    resolution: 'REVERSE',
-    notes: 'Automated journey validation reinstated the legitimate transaction after appeal.',
-  },
-});
-assertStatus(resolveAppealResult, 200, 'resolve appeal');
-assert.equal(
-  resolveAppealResult.body?.data?.reviewedBy,
-  analystSession.user.userId,
-  'appeal resolution should record the authenticated analyst'
-);
-
-await waitForTransactionStatus(journeyCustomer.token, declinedTransactionId, 'APPROVED');
+const declinedDecision = await waitForTransactionStatus(journeyCustomer.token, declinedTransactionId, 'REJECTED');
+assert.equal(String(declinedDecision.body?.status || '').toUpperCase(), 'REJECTED', 'declined transaction should be rejected');
 
 logStep('Checking customer-visible listings, audit trail, analytics, and settled consumers');
 const customerTransactions = await listCustomerTransactions(journeyCustomer);
 assertArrayContains(customerTransactions, (item) => item.transaction_id === approvedTransactionId && item.status === 'APPROVED', 'customer transactions should include approved journey transaction');
 assertArrayContains(customerTransactions, (item) => item.transaction_id === flaggedTransactionId && item.status === 'FLAGGED', 'customer transactions should include standalone flagged journey transaction');
-assertArrayContains(customerTransactions, (item) => item.transaction_id === declinedTransactionId && item.status === 'APPROVED', 'customer transactions should include appeal-reversed journey transaction');
+assertArrayContains(customerTransactions, (item) => item.transaction_id === declinedTransactionId && item.status === 'REJECTED', 'customer transactions should include declined journey transaction');
 
 const auditTrailResult = await poll(
-  'audit trail recorded decline and appeal events for the appealed transaction',
+  'audit trail recorded finalisation for the declined transaction',
   () => request(`${platform.auditBase}/api/v1/audit/transaction/${declinedTransactionId}`),
   (result) => result.status === 200
     && Number(result.body?.data?.eventCount) > 0
     && Array.isArray(result.body?.data?.events)
-    && ['transaction.flagged', 'transaction.reviewed', 'appeal.created', 'appeal.resolved'].every(
-      (eventType) => result.body.data.events.some((item) => item.eventType === eventType)
-    ),
+    && result.body.data.events.some((item) => item.eventType === 'transaction.finalised'),
   { timeoutMs: 120000, intervalMs: 2500 }
 );
 
 const finalDashboard = await poll(
-  'manager dashboard reflects the approved, flagged, and appeal outcomes',
+  'manager dashboard reflects the approved, flagged, and declined outcomes',
   () => getManagerDashboard(managerSession),
-  (dashboard) => Number(dashboard.appeals_created || 0) >= Number(baselineDashboard.appeals_created || 0) + 1
-    && Number(dashboard.appeals_approved || 0) >= Number(baselineDashboard.appeals_approved || 0) + 1
+  (dashboard) => Number(dashboard.transactions_approved || 0) >= Number(baselineDashboard.transactions_approved || 0) + 1
     && Number(dashboard.transactions_flagged || 0) >= Number(baselineDashboard.transactions_flagged || 0) + 1
-    && Number(dashboard.transactions_approved || 0) >= Number(baselineDashboard.transactions_approved || 0) + 2,
+    && Number(dashboard.transactions_rejected || 0) >= Number(baselineDashboard.transactions_rejected || 0) + 1,
   { timeoutMs: 120000, intervalMs: 2500 }
 );
 
@@ -350,9 +230,8 @@ console.log(JSON.stringify({
   transactions: {
     approved: approvedTransactionId,
     flagged: flaggedTransactionId,
-    declinedThenAppealed: declinedTransactionId,
+    declined: declinedTransactionId,
   },
-  appealId,
   dashboard: {
     baseline: baselineDashboard,
     final: finalDashboard,

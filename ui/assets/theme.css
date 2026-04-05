@@ -354,6 +354,93 @@ tr:hover td {
   background: rgba(90, 127, 211, 0.08);
 }
 
+.expandable-row {
+  cursor: pointer;
+}
+
+.expandable-row td {
+  transition: background 0.18s ease;
+}
+
+.expandable-row:focus-visible {
+  outline: none;
+}
+
+.expandable-row:focus-visible td,
+.expandable-row.is-expanded td {
+  background: rgba(90, 127, 211, 0.12);
+}
+
+.expand-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 999px;
+  border: 1px solid rgba(153, 173, 215, 0.26);
+  background: rgba(90, 127, 211, 0.12);
+  color: #dce7ff;
+  font-size: 0.86rem;
+  font-weight: 700;
+  line-height: 1;
+  transition: transform 0.18s ease;
+}
+
+.expand-toggle.open {
+  transform: rotate(90deg);
+}
+
+.row-preview {
+  width: 100%;
+}
+
+.detail-row td {
+  padding: 0;
+  border-bottom-color: rgba(127, 150, 202, 0.16);
+  background: rgba(10, 16, 30, 0.84);
+}
+
+.detail-panel {
+  padding: 1rem;
+  background:
+    linear-gradient(180deg, rgba(15, 23, 41, 0.96), rgba(11, 18, 32, 0.92));
+}
+
+.details-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.detail-section {
+  display: grid;
+  gap: 0.45rem;
+  align-content: start;
+}
+
+.detail-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9eb6de;
+}
+
+.detail-value {
+  color: #eef4ff;
+  font-weight: 600;
+}
+
+.detail-list {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.table-actions {
+  align-items: flex-start;
+}
+
 .badge {
   display: inline-block;
   font-size: 0.74rem;
