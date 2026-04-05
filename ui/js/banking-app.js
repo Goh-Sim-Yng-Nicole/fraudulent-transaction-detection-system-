@@ -3,6 +3,7 @@ import {
   useState,
   useEffect,
   mountApp,
+  API_ROOT,
   fetchJson,
   readCustomerSession,
   writeCustomerSession,
@@ -10,97 +11,6 @@ import {
   formatMoney,
   formatUtc,
 } from './common.js';
-
-const TxnDetailModal = ({ txn, fmtDate, onClose }) => html`
-  <div className="modal-overlay" onMouseDown=${(e) => { if (e.target === e.currentTarget) onClose(); }}>
-    <div className="modal" style=${{ maxWidth: '480px' }}>
-      <div className="modal-head">
-        <div className="modal-title">Transaction Details</div>
-        <button className="modal-close" onClick=${onClose}>✕</button>
-      </div>
-      <div className="modal-body grid" style=${{ gap: '0.6rem' }}>
-        ${[
-          ['Transaction ID', html`<span className="mono" style=${{ fontSize: '0.78rem', wordBreak: 'break-all' }}>${txn.transaction_id}</span>`],
-          ['Status', html`<span className=${`pill ${
-            String(txn.status||'').toLowerCase().includes('approved') ? 'status-approved' :
-            String(txn.status||'').toLowerCase().includes('reject') ? 'status-rejected' :
-            String(txn.status||'').toLowerCase().includes('flag') ? 'status-flagged' : 'status-pending'
-          }`}>${txn.status}</span>`],
-          ['Amount', formatMoney(txn.currency, txn.amount)],
-          ['Card type', txn.card_type || '-'],
-          ['Country', txn.country || '-'],
-          ['Counterparty', txn.recipient_name || txn.sender_name || txn.merchant_id || '-'],
-          ['Date', fmtDate(txn.created_at)],
-          ['Outcome reason', txn.outcome_reason || '-'],
-        ].map(([label, value]) => html`
-          <div style=${{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', padding: '0.4rem 0', borderBottom: '1px solid var(--border)' }}>
-            <span className="muted small">${label}</span>
-            <span style=${{ fontSize: '0.875rem', textAlign: 'right' }}>${value}</span>
-          </div>
-        `)}
-      </div>
-    </div>
-  </div>
-`;
-
-// Routing:
-//   /api/auth/*  → customer service (customer:8005)  via nginx rewrite
-//   /api/v1/*    → gateway (gateway:8004/api/v1/*)   passthrough
-const AUTH = '/api/auth';
-const V1 = '/api/v1';
-
-const ProfileModal = ({ customer, hasLocalPassword, profileForm, setProfileForm, passwordForm, setPasswordForm, deleteForm, setDeleteForm, busy, saveProfile, requestOtp, changePassword, setInitialPassword, deleteAccount, onClose }) => {
-  const [tab, setTab] = useState('profile');
-  return html`
-    <div className="modal-overlay" onMouseDown=${(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal">
-        <div className="modal-head">
-          <div style=${{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-            <span className="profile-avatar profile-avatar-lg">${(customer.full_name || 'U')[0].toUpperCase()}</span>
-            <div>
-              <div className="modal-title">${customer.full_name}</div>
-              <div style=${{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '0.1rem' }}>${customer.email}</div>
-            </div>
-          </div>
-          <button className="modal-close" onClick=${onClose}>✕</button>
-        </div>
-        <div className="modal-tabs">
-          <button className=${tab === 'profile' ? 'modal-tab active' : 'modal-tab'} onClick=${() => setTab('profile')}>Profile</button>
-          <button className=${tab === 'password' ? 'modal-tab active' : 'modal-tab'} onClick=${() => setTab('password')}>Password</button>
-          <button className=${tab === 'danger' ? 'modal-tab active' : 'modal-tab'} onClick=${() => setTab('danger')}>Account</button>
-        </div>
-        ${tab === 'profile' ? html`
-          <div className="modal-body grid" style=${{ gap: '0.65rem' }}>
-            ${!hasLocalPassword ? html`<div className="alert alert-warning" style=${{ fontSize: '0.8rem' }}>Set a password first to unlock profile edits.</div>` : null}
-            <div className="field"><label>Full name</label><input className="input" value=${profileForm.full_name} onInput=${(e) => setProfileForm((p) => ({ ...p, full_name: e.target.value }))} /></div>
-            <div className="field"><label>Email</label><input className="input" value=${profileForm.email} readonly /></div>
-            <div className="field"><label>Phone</label><input className="input" value=${profileForm.phone} onInput=${(e) => setProfileForm((p) => ({ ...p, phone: e.target.value }))} /></div>
-            <button className="btn btn-primary" onClick=${saveProfile} disabled=${busy.profile || !hasLocalPassword}>${busy.profile ? 'Saving...' : 'Save profile'}</button>
-          </div>
-        ` : null}
-        ${tab === 'password' ? html`
-          <div className="modal-body grid" style=${{ gap: '0.65rem' }}>
-            <button className="btn btn-ghost" onClick=${requestOtp} disabled=${busy.otp}>${busy.otp ? 'Sending OTP...' : hasLocalPassword ? 'Request OTP' : 'Request setup OTP'}</button>
-            ${hasLocalPassword ? html`<div className="field"><label>Current password</label><input className="input" type="password" value=${passwordForm.current_password} onInput=${(e) => setPasswordForm((p) => ({ ...p, current_password: e.target.value }))} /></div>` : null}
-            <div className="field"><label>New password</label><input className="input" type="password" value=${passwordForm.new_password} onInput=${(e) => setPasswordForm((p) => ({ ...p, new_password: e.target.value }))} /></div>
-            <div className="field"><label>Email OTP</label><input className="input mono" value=${passwordForm.otp_code} onInput=${(e) => setPasswordForm((p) => ({ ...p, otp_code: e.target.value }))} /></div>
-            <button className="btn btn-primary" onClick=${hasLocalPassword ? changePassword : setInitialPassword} disabled=${busy.password}>${busy.password ? (hasLocalPassword ? 'Changing...' : 'Setting...') : (hasLocalPassword ? 'Change password' : 'Set password')}</button>
-          </div>
-        ` : null}
-        ${tab === 'danger' ? html`
-          <div className="modal-body grid" style=${{ gap: '0.65rem' }}>
-            <div className="alert alert-warning" style=${{ fontSize: '0.82rem' }}>${hasLocalPassword ? 'This action is irreversible. Your account will be deactivated immediately.' : 'Set a local password first before deleting this account.'}</div>
-            ${hasLocalPassword ? html`
-              <div className="field"><label>Password</label><input className="input" type="password" value=${deleteForm.password} onInput=${(e) => setDeleteForm((p) => ({ ...p, password: e.target.value }))} /></div>
-              <div className="field"><label>Email OTP</label><input className="input mono" value=${deleteForm.otp_code} onInput=${(e) => setDeleteForm((p) => ({ ...p, otp_code: e.target.value }))} /></div>
-              <button className="btn btn-danger" onClick=${deleteAccount} disabled=${busy.delete}>${busy.delete ? 'Deleting...' : 'Delete account'}</button>
-            ` : html`<div className="muted small">Request the setup OTP from the Password tab, set a local password, then return here.</div>`}
-          </div>
-        ` : null}
-      </div>
-    </div>
-  `;
-};
 
 const statusClass = (status) => {
   const value = String(status || '').toLowerCase();
@@ -114,6 +24,32 @@ const statusClass = (status) => {
 const currencies = ['SGD', 'USD', 'EUR', 'GBP', 'MYR', 'CNY'];
 const countries = ['SG', 'AU', 'BR', 'CA', 'CN', 'DE', 'FR', 'GB', 'ID', 'IN', 'JP', 'MY', 'NG', 'PH', 'PK', 'RU', 'UA', 'US'];
 const cardTypes = ['CREDIT', 'DEBIT', 'PREPAID'];
+const blankRecipientSaveForm = () => ({ nickname: '', isFavorite: false });
+
+const normalizeSavedRecipient = (recipient = {}) => ({
+  recipient_id: String(recipient.recipient_id || ''),
+  owner_customer_id: recipient.owner_customer_id || '',
+  recipient_customer_id: recipient.recipient_customer_id || '',
+  recipient_name: recipient.recipient_name || '',
+  recipient_email: recipient.recipient_email || '',
+  nickname: recipient.nickname || '',
+  is_favorite: Boolean(recipient.is_favorite ?? recipient.is_favourite),
+  is_active: recipient.is_active !== false,
+  created_on: recipient.created_on || null,
+  updated_on: recipient.updated_on || null,
+});
+
+const sortSavedRecipients = (items) => {
+  return [...items].sort((left, right) => {
+    if (Boolean(left.is_favorite) !== Boolean(right.is_favorite)) {
+      return Number(Boolean(right.is_favorite)) - Number(Boolean(left.is_favorite));
+    }
+
+    const leftLabel = String(left.nickname || left.recipient_name || '').toLowerCase();
+    const rightLabel = String(right.nickname || right.recipient_name || '').toLowerCase();
+    return leftLabel.localeCompare(rightLabel);
+  });
+};
 
 const App = () => {
   const [session, setSession] = useState(null);
@@ -121,6 +57,14 @@ const App = () => {
   const [transactions, setTransactions] = useState([]);
   const [appeals, setAppeals] = useState([]);
   const [recipient, setRecipient] = useState(null);
+  const [savedRecipients, setSavedRecipients] = useState([]);
+  const [selectedSavedRecipientId, setSelectedSavedRecipientId] = useState('');
+  const [recipientSaveForm, setRecipientSaveForm] = useState(blankRecipientSaveForm());
+  const [recipientDirectory, setRecipientDirectory] = useState({
+    configured: true,
+    initialized: false,
+    error: '',
+  });
   const [message, setMessage] = useState({ type: '', text: '' });
   const [busy, setBusy] = useState({});
 
@@ -138,38 +82,17 @@ const App = () => {
   const [profileForm, setProfileForm] = useState({ full_name: '', email: '', phone: '' });
   const [passwordForm, setPasswordForm] = useState({ current_password: '', new_password: '', otp_code: '' });
   const [deleteForm, setDeleteForm] = useState({ password: '', otp_code: '' });
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [profileModalOpen, setProfileModalOpen] = useState(false);
-  const [txnDetail, setTxnDetail] = useState(null);
-  const [showUtc, setShowUtc] = useState(() => localStorage.getItem('ftds_show_utc') !== 'false');
-  const toUtcClock = () => new Date().toISOString().slice(0, 19).replace('T', ' ') + ' UTC';
-  const toLocalClock = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  const [nowUtc, setNowUtc] = useState(toUtcClock);
-  const fmtDate = (v) => {
-    if (!v) return '-';
-    if (showUtc) return formatUtc(v);
-    return new Date(v).toLocaleString(undefined, {
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', second: '2-digit',
-      timeZoneName: 'short',
-    });
-  };
-  const toggleUtc = () => {
-    const next = !showUtc;
-    setShowUtc(next);
-    localStorage.setItem('ftds_show_utc', String(next));
-  };
+  const [nowUtc, setNowUtc] = useState('');
 
   const token = session?.token || '';
   const customer = session?.customer || null;
   const headers = { Authorization: `Bearer ${token}` };
   const hasLocalPassword = customer?.has_password !== false;
-  const appealedTransactionIds = new Set(appeals.map((appeal) => appeal.transactionId));
+  const appealedTransactionIds = new Set(appeals.map((appeal) => appeal.transaction_id));
   const selectedTransactionAlreadyAppealed = appealedTransactionIds.has(appealDraft.transactionId);
-  const appealableTransactions = transactions.filter(
-    (txn) => String(txn.status || '').toUpperCase() === 'REJECTED' && !appealedTransactionIds.has(txn.transaction_id),
-  );
-  const hasAppealable = appealableTransactions.length > 0;
+  const matchedSavedRecipient = recipient?.customer_id
+    ? savedRecipients.find((item) => item.recipient_customer_id === recipient.customer_id)
+    : null;
 
   const logout = () => {
     clearCustomerSession();
@@ -181,7 +104,7 @@ const App = () => {
 
   const syncCustomerProfile = async () => {
     if (!token) return;
-    const payload = await fetchJson(`${AUTH}/me`, { headers });
+    const payload = await fetchJson(`${API_ROOT}/customers/me`, { headers });
     writeCustomerSession(token, payload);
     setSession({ token, customer: payload });
     setProfileForm({
@@ -194,7 +117,7 @@ const App = () => {
   const loadTransactions = async (currentDirection = direction) => {
     if (!customer) return;
     const payload = await fetchJson(
-      `${V1}/transactions?customer_id=${encodeURIComponent(customer.customer_id)}&direction=${encodeURIComponent(currentDirection)}`,
+      `${API_ROOT}/customer/transactions?customer_id=${encodeURIComponent(customer.customer_id)}&direction=${encodeURIComponent(currentDirection)}`,
       { headers },
     );
     setTransactions(Array.isArray(payload) ? payload : []);
@@ -203,11 +126,41 @@ const App = () => {
   const loadAppeals = async () => {
     if (!customer) return;
     const payload = await fetchJson(
-      `${V1}/appeals/customer/${encodeURIComponent(customer.customer_id)}`,
+      `${API_ROOT}/customer/appeals?customer_id=${encodeURIComponent(customer.customer_id)}`,
       { headers },
     );
-    const list = Array.isArray(payload) ? payload : (Array.isArray(payload?.data) ? payload.data : []);
-    setAppeals(list);
+    setAppeals(Array.isArray(payload) ? payload : []);
+  };
+
+  const loadSavedRecipients = async ({ quiet = true } = {}) => {
+    if (!token) return;
+    setLoading('recipients', true);
+    try {
+      const payload = await fetchJson(`${API_ROOT}/customer/recipients`, { headers });
+      const normalized = sortSavedRecipients(
+        Array.isArray(payload) ? payload.map(normalizeSavedRecipient) : [],
+      );
+      setSavedRecipients(normalized);
+      setRecipientDirectory({
+        configured: true,
+        initialized: true,
+        error: '',
+      });
+    } catch (error) {
+      const errorMessage = String(error.message || '');
+      const unavailable = /saved recipients are not configured/i.test(errorMessage);
+      setSavedRecipients([]);
+      setRecipientDirectory({
+        configured: !unavailable,
+        initialized: true,
+        error: unavailable ? '' : errorMessage,
+      });
+      if (!quiet && !unavailable) {
+        showMessage('danger', errorMessage);
+      }
+    } finally {
+      setLoading('recipients', false);
+    }
   };
 
   useEffect(() => {
@@ -229,23 +182,17 @@ const App = () => {
     if (typeof session.customer?.has_password === 'undefined') {
       syncCustomerProfile().catch(() => {});
     }
-    Promise.all([loadTransactions(), loadAppeals()]).catch(() => {});
-  }, [session, direction]); // eslint-disable-line react-hooks/exhaustive-deps
+    Promise.all([loadTransactions(direction), loadAppeals(), loadSavedRecipients()]).catch(() => {});
+  }, [session]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    const id = setInterval(() => setNowUtc(showUtc ? toUtcClock() : toLocalClock()), 1000);
-    setNowUtc(showUtc ? toUtcClock() : toLocalClock());
+    if (!session) return;
+    loadTransactions(direction).catch(() => {});
+  }, [direction, session]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const id = setInterval(() => setNowUtc(formatUtc(new Date())), 1000);
     return () => clearInterval(id);
-  }, [showUtc]);
-
-  useEffect(() => {
-    const handler = (e) => {
-      if (!e.target.closest('.profile-dropdown') && !e.target.closest('.profile-trigger')) {
-        setProfileOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
   }, []);
 
   useEffect(() => {
@@ -261,16 +208,172 @@ const App = () => {
     setLoading('lookup', true);
     try {
       const payload = await fetchJson(
-        `${AUTH}/lookup?query=${encodeURIComponent(txnForm.recipientQuery.trim())}`,
+        `${API_ROOT}/customers/lookup?query=${encodeURIComponent(txnForm.recipientQuery.trim())}`,
         { headers },
       );
       setRecipient(payload);
-      showMessage('success', `Recipient found: ${payload.full_name}`);
+      const existingSavedRecipient = savedRecipients.find(
+        (item) => item.recipient_customer_id === payload.customer_id,
+      );
+      setSelectedSavedRecipientId(existingSavedRecipient?.recipient_id || '');
+      setRecipientSaveForm({
+        nickname: existingSavedRecipient?.nickname || payload.full_name || '',
+        isFavorite: Boolean(existingSavedRecipient?.is_favorite),
+      });
+      showMessage(
+        'success',
+        existingSavedRecipient
+          ? `Recipient found: ${payload.full_name}. This recipient is already saved in your directory.`
+          : `Recipient found: ${payload.full_name}`,
+      );
     } catch (error) {
       showMessage('danger', error.message);
       setRecipient(null);
+      setSelectedSavedRecipientId('');
+      setRecipientSaveForm(blankRecipientSaveForm());
     } finally {
       setLoading('lookup', false);
+    }
+  };
+
+  const useSavedRecipient = (savedRecipient) => {
+    setTxnForm((prev) => ({
+      ...prev,
+      recipientType: 'customer',
+      recipientQuery: savedRecipient.recipient_email,
+    }));
+    setRecipient({
+      customer_id: savedRecipient.recipient_customer_id,
+      full_name: savedRecipient.recipient_name,
+      email: savedRecipient.recipient_email,
+    });
+    setSelectedSavedRecipientId(savedRecipient.recipient_id);
+    setRecipientSaveForm({
+      nickname: savedRecipient.nickname || savedRecipient.recipient_name,
+      isFavorite: Boolean(savedRecipient.is_favorite),
+    });
+    showMessage('success', `Using saved recipient: ${savedRecipient.nickname || savedRecipient.recipient_name}`);
+  };
+
+  const upsertSavedRecipient = (savedRecipient) => {
+    setSavedRecipients((previous) => {
+      const next = previous.some((item) => item.recipient_id === savedRecipient.recipient_id)
+        ? previous.map((item) => (item.recipient_id === savedRecipient.recipient_id ? savedRecipient : item))
+        : [...previous, savedRecipient];
+      return sortSavedRecipients(next);
+    });
+  };
+
+  const saveRecipient = async () => {
+    if (!recipient?.customer_id) {
+      showMessage('danger', 'Look up a recipient first before saving them.');
+      return;
+    }
+
+    setLoading('saveRecipient', true);
+    try {
+      const existingSavedRecipient = savedRecipients.find(
+        (item) => item.recipient_customer_id === recipient.customer_id,
+      );
+      const payload = await fetchJson(
+        existingSavedRecipient
+          ? `${API_ROOT}/customer/recipients/${encodeURIComponent(existingSavedRecipient.recipient_id)}`
+          : `${API_ROOT}/customer/recipients`,
+        {
+          method: existingSavedRecipient ? 'PUT' : 'POST',
+          headers,
+          body: JSON.stringify(
+            existingSavedRecipient
+              ? {
+                nickname: recipientSaveForm.nickname.trim() || recipient.full_name,
+                is_favorite: recipientSaveForm.isFavorite,
+              }
+              : {
+                recipient_customer_id: recipient.customer_id,
+                recipient_name: recipient.full_name,
+                recipient_email: recipient.email,
+                nickname: recipientSaveForm.nickname.trim() || recipient.full_name,
+                is_favorite: recipientSaveForm.isFavorite,
+              },
+          ),
+        },
+      );
+      const normalized = normalizeSavedRecipient(payload);
+      upsertSavedRecipient(normalized);
+      setSelectedSavedRecipientId(normalized.recipient_id);
+      setRecipientSaveForm({
+        nickname: normalized.nickname || normalized.recipient_name,
+        isFavorite: Boolean(normalized.is_favorite),
+      });
+      showMessage(
+        'success',
+        existingSavedRecipient
+          ? 'Saved recipient updated successfully.'
+          : 'Recipient saved for quicker future transfers.',
+      );
+    } catch (error) {
+      showMessage('danger', error.message);
+    } finally {
+      setLoading('saveRecipient', false);
+    }
+  };
+
+  const updateSavedRecipientFavorite = async (savedRecipient) => {
+    setLoading('favoriteRecipient', savedRecipient.recipient_id);
+    try {
+      const payload = await fetchJson(
+        `${API_ROOT}/customer/recipients/${encodeURIComponent(savedRecipient.recipient_id)}`,
+        {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify({
+            nickname: savedRecipient.nickname || savedRecipient.recipient_name,
+            is_favorite: !savedRecipient.is_favorite,
+          }),
+        },
+      );
+      const normalized = normalizeSavedRecipient(payload);
+      upsertSavedRecipient(normalized);
+      if (selectedSavedRecipientId === normalized.recipient_id) {
+        setRecipientSaveForm({
+          nickname: normalized.nickname || normalized.recipient_name,
+          isFavorite: Boolean(normalized.is_favorite),
+        });
+      }
+      showMessage('success', normalized.is_favorite ? 'Recipient marked as favourite.' : 'Recipient removed from favourites.');
+    } catch (error) {
+      showMessage('danger', error.message);
+    } finally {
+      setLoading('favoriteRecipient', '');
+    }
+  };
+
+  const deleteSavedRecipient = async (savedRecipient) => {
+    if (!window.confirm(`Remove ${savedRecipient.nickname || savedRecipient.recipient_name} from saved recipients?`)) {
+      return;
+    }
+
+    setLoading('deleteRecipient', savedRecipient.recipient_id);
+    try {
+      await fetchJson(
+        `${API_ROOT}/customer/recipients/${encodeURIComponent(savedRecipient.recipient_id)}`,
+        {
+          method: 'DELETE',
+          headers,
+        },
+      );
+      setSavedRecipients((previous) => previous.filter((item) => item.recipient_id !== savedRecipient.recipient_id));
+      if (selectedSavedRecipientId === savedRecipient.recipient_id) {
+        setSelectedSavedRecipientId('');
+        setRecipient(null);
+        setRecipientSaveForm(blankRecipientSaveForm());
+        setTxnForm((prev) => ({ ...prev, recipientQuery: '' }));
+      }
+      showMessage('success', 'Saved recipient removed.');
+    } catch (error) {
+      showMessage('danger', error.message);
+    } finally {
+      setLoading('deleteRecipient', '');
     }
   };
 
@@ -303,7 +406,7 @@ const App = () => {
         body.recipient_name = recipient.full_name;
       }
 
-      const payload = await fetchJson(`${V1}/transactions`, {
+      const payload = await fetchJson(`${API_ROOT}/customer/transactions`, {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
@@ -342,13 +445,13 @@ const App = () => {
     }
     setLoading('appeal', true);
     try {
-      await fetchJson(`${V1}/appeals`, {
+      await fetchJson(`${API_ROOT}/customer/appeals`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          transactionId: appealDraft.transactionId,
-          customerId: customer.customer_id,
-          appealReason: appealDraft.reason.trim(),
+          transaction_id: appealDraft.transactionId,
+          reason_for_appeal: appealDraft.reason.trim(),
+          customer_id: customer.customer_id,
         }),
       });
       setAppealDraft({ transactionId: '', reason: '' });
@@ -368,7 +471,7 @@ const App = () => {
     }
     setLoading('profile', true);
     try {
-      const payload = await fetchJson(`${AUTH}/me`, {
+      const payload = await fetchJson(`${API_ROOT}/customers/me`, {
         method: 'PUT',
         headers,
         body: JSON.stringify({
@@ -390,7 +493,7 @@ const App = () => {
   const requestOtp = async () => {
     setLoading('otp', true);
     try {
-      await fetchJson(`${AUTH}/me/request-otp`, { method: 'POST', headers });
+      await fetchJson(`${API_ROOT}/customers/me/request-otp`, { method: 'POST', headers });
       showMessage('success', hasLocalPassword ? `OTP sent to ${customer.email}` : `Setup OTP sent to ${customer.email}`);
     } catch (error) {
       showMessage('danger', error.message);
@@ -402,7 +505,7 @@ const App = () => {
   const setInitialPassword = async () => {
     setLoading('password', true);
     try {
-      const payload = await fetchJson(`${AUTH}/me/password/set`, {
+      const payload = await fetchJson(`${API_ROOT}/customers/me/password/set`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -430,7 +533,7 @@ const App = () => {
     }
     setLoading('password', true);
     try {
-      await fetchJson(`${AUTH}/me/password`, {
+      await fetchJson(`${API_ROOT}/customers/me/password`, {
         method: 'PUT',
         headers,
         body: JSON.stringify(passwordForm),
@@ -451,7 +554,7 @@ const App = () => {
     }
     setLoading('delete', true);
     try {
-      await fetchJson(`${AUTH}/me`, {
+      await fetchJson(`${API_ROOT}/customers/me`, {
         method: 'DELETE',
         headers,
         body: JSON.stringify(deleteForm),
@@ -472,73 +575,14 @@ const App = () => {
   return html`
     <header className="topbar">
       <div className="topbar-inner">
-        <div className="brand">
-          <img src="/assets/images/app-logo.png" alt="FTDS" style=${{ height: '22px', width: '22px', objectFit: 'contain', flexShrink: 0 }} />
-          FTDS Banking
-        </div>
-
-        <div style=${{ position: 'relative' }}>
-          <button className="profile-trigger" onClick=${() => setProfileOpen((o) => !o)}>
-            <span className="profile-avatar">${(customer.full_name || 'U')[0].toUpperCase()}</span>
-            <div className="profile-trigger-info">
-              <span className="profile-trigger-name">${customer.full_name}</span>
-              <span className="profile-trigger-sub">${customer.email}</span>
-            </div>
-            <span className="profile-caret">▾</span>
-          </button>
-
-          ${profileOpen ? html`
-            <div className="profile-dropdown">
-              <button className="profile-dropdown-item" onClick=${() => { setProfileOpen(false); setProfileModalOpen(true); }}>
-                <span className="profile-dropdown-icon">👤</span>
-                <span>Edit Profile</span>
-              </button>
-              <button className="profile-dropdown-item" onClick=${toggleUtc} style=${{ justifyContent: 'space-between' }}>
-                <span style=${{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span className="profile-dropdown-icon">🕐</span>
-                  <span>Show UTC time</span>
-                </span>
-                <span style=${{
-                  display: 'inline-flex', alignItems: 'center', width: '2rem', height: '1.1rem',
-                  background: showUtc ? 'var(--accent)' : 'var(--border)', borderRadius: '999px',
-                  padding: '0.1rem', transition: 'background 0.2s', flexShrink: 0,
-                }}>
-                  <span style=${{
-                    width: '0.85rem', height: '0.85rem', borderRadius: '50%', background: '#fff',
-                    transform: showUtc ? 'translateX(0.9rem)' : 'translateX(0)',
-                    transition: 'transform 0.2s',
-                  }} />
-                </span>
-              </button>
-              <button className="profile-dropdown-item profile-dropdown-item--danger" onClick=${logout}>
-                <span className="profile-dropdown-icon">⎋</span>
-                <span>Logout</span>
-              </button>
-            </div>
-          ` : null}
+        <div className="brand"><span className="brand-dot"></span>FTDS Banking</div>
+        <div className="row">
+          <span className="badge">${customer.full_name}</span>
+          <span className="badge">${customer.email}</span>
+          <button className="btn btn-ghost" onClick=${logout}>Logout</button>
         </div>
       </div>
     </header>
-
-    ${txnDetail ? html`<${TxnDetailModal} txn=${txnDetail} fmtDate=${fmtDate} onClose=${() => setTxnDetail(null)} />` : null}
-
-    ${profileModalOpen ? html`<${ProfileModal}
-      customer=${customer}
-      hasLocalPassword=${hasLocalPassword}
-      profileForm=${profileForm}
-      setProfileForm=${setProfileForm}
-      passwordForm=${passwordForm}
-      setPasswordForm=${setPasswordForm}
-      deleteForm=${deleteForm}
-      setDeleteForm=${setDeleteForm}
-      busy=${busy}
-      saveProfile=${saveProfile}
-      requestOtp=${requestOtp}
-      changePassword=${changePassword}
-      setInitialPassword=${setInitialPassword}
-      deleteAccount=${deleteAccount}
-      onClose=${() => setProfileModalOpen(false)}
-    />` : null}
 
     <main className="app-shell">
       <section className="hero">
@@ -551,24 +595,110 @@ const App = () => {
 
       <section className="grid cols-2" style=${{ marginTop: '1rem' }}>
         <article className="card">
-          <div className="card-head"><h2 className="title-sm">New Transaction</h2><div className="muted small">${showUtc ? 'UTC' : 'Local'} now: ${nowUtc}</div></div>
+          <div className="card-head"><h2 className="title-sm">New Transaction</h2><div className="muted small">UTC now: ${nowUtc}</div></div>
           <div className="card-body">
             <form className="grid" style=${{ gap: '0.75rem' }} onSubmit=${submitTransaction}>
               <div className="tabs">
-                <button type="button" className=${`tab ${txnForm.recipientType === 'merchant' ? 'active' : ''}`} onClick=${() => { setTxnForm((p) => ({ ...p, recipientType: 'merchant' })); setRecipient(null); }}>Merchant</button>
-                <button type="button" className=${`tab ${txnForm.recipientType === 'customer' ? 'active' : ''}`} onClick=${() => { setTxnForm((p) => ({ ...p, recipientType: 'customer' })); setRecipient(null); }}>Customer</button>
+                <button type="button" className=${`tab ${txnForm.recipientType === 'merchant' ? 'active' : ''}`} onClick=${() => {
+                  setTxnForm((p) => ({ ...p, recipientType: 'merchant' }));
+                  setRecipient(null);
+                  setSelectedSavedRecipientId('');
+                }}>Merchant</button>
+                <button type="button" className=${`tab ${txnForm.recipientType === 'customer' ? 'active' : ''}`} onClick=${() => {
+                  setTxnForm((p) => ({ ...p, recipientType: 'customer' }));
+                  setRecipient(null);
+                  setSelectedSavedRecipientId('');
+                }}>Customer</button>
               </div>
 
               ${txnForm.recipientType === 'merchant' ? html`
                 <div className="field"><label>Merchant ID / UEN</label><input className="input" value=${txnForm.merchantId} onInput=${(e) => setTxnForm((p) => ({ ...p, merchantId: e.target.value }))} /></div>
               ` : html`
                 <div className="field">
+                  <div className="row space-between">
+                    <label>Saved recipients</label>
+                    ${recipientDirectory.configured ? html`
+                      <button type="button" className="btn btn-ghost" onClick=${() => loadSavedRecipients({ quiet: false })} disabled=${busy.recipients}>
+                        ${busy.recipients ? 'Refreshing...' : 'Refresh directory'}
+                      </button>
+                    ` : null}
+                  </div>
+                  ${recipientDirectory.configured ? html`
+                    ${savedRecipients.length ? html`
+                      <div className="recipient-directory">
+                        ${savedRecipients.map((savedRecipient) => html`
+                          <div className=${`recipient-entry ${selectedSavedRecipientId === savedRecipient.recipient_id ? 'active' : ''}`}>
+                            <div>
+                              <div className="title-sm">${savedRecipient.nickname || savedRecipient.recipient_name}</div>
+                              <div className="muted small">${savedRecipient.recipient_name} · ${savedRecipient.recipient_email}</div>
+                            </div>
+                            <div className="row recipient-actions">
+                              ${savedRecipient.is_favorite ? html`<span className="pill status-approved">Favourite</span>` : null}
+                              <button type="button" className="btn btn-ghost" onClick=${() => useSavedRecipient(savedRecipient)}>Use</button>
+                              <button type="button" className="btn btn-ghost" onClick=${() => updateSavedRecipientFavorite(savedRecipient)} disabled=${busy.favoriteRecipient === savedRecipient.recipient_id}>
+                                ${busy.favoriteRecipient === savedRecipient.recipient_id ? 'Saving...' : savedRecipient.is_favorite ? 'Unfavourite' : 'Favourite'}
+                              </button>
+                              <button type="button" className="btn btn-danger" onClick=${() => deleteSavedRecipient(savedRecipient)} disabled=${busy.deleteRecipient === savedRecipient.recipient_id}>
+                                ${busy.deleteRecipient === savedRecipient.recipient_id ? 'Removing...' : 'Remove'}
+                              </button>
+                            </div>
+                          </div>
+                        `)}
+                      </div>
+                    ` : html`<div className="muted small">No saved recipients yet. Look up a validated customer below and save them for faster future transfers.</div>`}
+                  ` : html`
+                    <div className="muted small">Saved recipients are not available in this environment yet. You can still use live lookup for customer transfers.</div>
+                  `}
+                  ${recipientDirectory.error ? html`<div className="muted small" style=${{ marginTop: '0.45rem' }}>${recipientDirectory.error}</div>` : null}
+                </div>
+                <div className="field">
                   <label>Recipient email</label>
                   <div className="row">
-                    <input className="input" style=${{ flex: '1' }} value=${txnForm.recipientQuery} onInput=${(e) => setTxnForm((p) => ({ ...p, recipientQuery: e.target.value }))} />
+                    <input className="input" style=${{ flex: '1' }} value=${txnForm.recipientQuery} onInput=${(e) => {
+                      setTxnForm((p) => ({ ...p, recipientQuery: e.target.value }));
+                      setRecipient(null);
+                      setSelectedSavedRecipientId('');
+                    }} />
                     <button type="button" className="btn btn-ghost" onClick=${lookupRecipient} disabled=${busy.lookup}>${busy.lookup ? 'Looking...' : 'Lookup'}</button>
                   </div>
-                  ${recipient ? html`<div className="metric" style=${{ marginTop: '0.55rem' }}><div className="title-sm">${recipient.full_name}</div><div className="muted small">${recipient.email}</div></div>` : null}
+                  ${recipient ? html`
+                    <div className="metric" style=${{ marginTop: '0.55rem' }}>
+                      <div className="title-sm">${recipient.full_name}</div>
+                      <div className="muted small">${recipient.email}</div>
+                      <div className="muted small" style=${{ marginTop: '0.35rem' }}>
+                        ${matchedSavedRecipient ? 'Already saved in your recipient directory.' : 'Validated via live customer lookup.'}
+                      </div>
+                    </div>
+                  ` : null}
+                  ${recipient && recipientDirectory.configured ? html`
+                    <div className="grid cols-2" style=${{ marginTop: '0.75rem' }}>
+                      <div className="field">
+                        <label>Saved nickname</label>
+                        <input
+                          className="input"
+                          value=${recipientSaveForm.nickname}
+                          onInput=${(e) => setRecipientSaveForm((prev) => ({ ...prev, nickname: e.target.value }))}
+                          placeholder="How should this recipient appear in your directory?"
+                        />
+                      </div>
+                      <label className="checkbox-row">
+                        <input
+                          type="checkbox"
+                          checked=${recipientSaveForm.isFavorite}
+                          onChange=${(e) => setRecipientSaveForm((prev) => ({ ...prev, isFavorite: e.target.checked }))}
+                        />
+                        <span>Mark as favourite</span>
+                      </label>
+                    </div>
+                  ` : null}
+                  ${recipient && recipientDirectory.configured ? html`
+                    <div className="row" style=${{ marginTop: '0.6rem' }}>
+                      <button type="button" className="btn btn-success" onClick=${saveRecipient} disabled=${busy.saveRecipient || !hasLocalPassword}>
+                        ${busy.saveRecipient ? 'Saving...' : matchedSavedRecipient ? 'Update saved recipient' : 'Save recipient'}
+                      </button>
+                      ${hasLocalPassword ? null : html`<span className="muted small">Set a local password first to manage saved recipients.</span>`}
+                    </div>
+                  ` : null}
                 </div>
               `}
 
@@ -586,15 +716,13 @@ const App = () => {
           </div>
         </article>
 
-        <article className="card">
-          <div className="card-head row space-between">
-            <h2 className="title-sm">Appeal Submission</h2>
-            <button className="btn btn-ghost" onClick=${() => loadAppeals().catch(() => {})}>Refresh appeals</button>
-          </div>
-          <div className="card-body">
-            ${!hasAppealable ? html`
-              <div className="muted" style=${{ textAlign: 'center', padding: '1.5rem 0', fontSize: '0.9rem' }}>No transaction needed for appeal.</div>
-            ` : html`
+        ${transactions.length ? html`
+          <article className="card">
+            <div className="card-head row space-between">
+              <h2 className="title-sm">Appeal Submission</h2>
+              <button className="btn btn-ghost" onClick=${() => loadAppeals().catch(() => {})}>Refresh appeals</button>
+            </div>
+            <div className="card-body">
               <div className="field"><label>Selected transaction ID</label><input className="input mono" value=${appealDraft.transactionId} readonly /></div>
               <div className="field" style=${{ marginTop: '0.65rem' }}><label>Reason for appeal</label><textarea className="textarea" value=${appealDraft.reason} onInput=${(e) => setAppealDraft((p) => ({ ...p, reason: e.target.value }))}></textarea></div>
               <button className="btn btn-warning" style=${{ marginTop: '0.65rem' }} onClick=${submitAppeal} disabled=${busy.appeal || !hasLocalPassword || selectedTransactionAlreadyAppealed || !appealDraft.transactionId}>${busy.appeal ? 'Submitting...' : selectedTransactionAlreadyAppealed ? 'Appeal already submitted' : 'Submit appeal'}</button>
@@ -603,12 +731,12 @@ const App = () => {
                 : null}
               ${hasLocalPassword ? null : html`<div className="muted small" style=${{ marginTop: '0.65rem' }}>Set a local password first to unlock new appeals.</div>`}
               <div className="muted small" style=${{ marginTop: '0.65rem' }}>Tip: click "Appeal" from a transaction row to auto-fill the selected transaction ID.</div>
-            `}
-          </div>
-        </article>
+            </div>
+          </article>
+        ` : null}
       </section>
 
-      <section id="transactions" className="card" style=${{ marginTop: '1rem' }}>
+      <section className="card" style=${{ marginTop: '1rem' }}>
         <div className="card-head row space-between">
           <h2 className="title-sm">My Transactions</h2>
           <div className="row">
@@ -619,17 +747,18 @@ const App = () => {
         <div className="card-body">
           <div className="table-wrap">
             <table>
-              <thead><tr><th>ID</th><th>Amount</th><th>Counterparty</th><th>Status</th><th>Date</th><th>Action</th></tr></thead>
+              <thead><tr><th>ID</th><th>Amount</th><th>Counterparty</th><th>Status</th><th>Risk</th><th>Date (UTC)</th><th>Action</th></tr></thead>
               <tbody>
                 ${transactions.length ? transactions.map((txn) => html`
                   <tr>
-                    <td className="mono" style=${{ cursor: 'pointer', color: 'var(--accent)' }} onClick=${() => setTxnDetail(txn)}>${txn.transaction_id}</td>
+                    <td className="mono">${txn.transaction_id}</td>
                     <td>${formatMoney(txn.currency, txn.amount)}</td>
                     <td>${txn.recipient_name || txn.sender_name || txn.recipient_customer_id || txn.merchant_id || '-'}</td>
                     <td><span className=${`pill ${statusClass(txn.status)}`}>${txn.status}</span></td>
-                    <td className="muted small mono">${fmtDate(txn.created_at)}</td>
+                    <td>${txn.fraud_score == null ? '-' : `${txn.fraud_score}/100`}</td>
+                    <td className="muted small mono">${formatUtc(txn.created_at)}</td>
                     <td>
-                      ${['REJECTED'].includes(String(txn.status || '').toUpperCase())
+                      ${['FLAGGED', 'REJECTED'].includes(String(txn.status || '').toUpperCase())
                         ? !hasLocalPassword
                           ? html`<span className="muted small">Locked</span>`
                           : appealedTransactionIds.has(txn.transaction_id)
@@ -638,14 +767,14 @@ const App = () => {
                         : html`<span className="muted small">-</span>`}
                     </td>
                   </tr>
-                `) : html`<tr><td colspan="6" className="muted">No transactions found.</td></tr>`}
+                `) : html`<tr><td colspan="7" className="muted">No transactions found.</td></tr>`}
               </tbody>
             </table>
           </div>
         </div>
       </section>
 
-      <section id="appeals" className="card" style=${{ marginTop: '1rem' }}>
+      <section className="card" style=${{ marginTop: '1rem' }}>
         <div className="card-head"><h2 className="title-sm">My Appeals</h2></div>
         <div className="card-body">
           <div className="table-wrap">
@@ -654,12 +783,12 @@ const App = () => {
               <tbody>
                 ${appeals.length ? appeals.map((a) => html`
                   <tr>
-                    <td className="mono">${a.appealId}</td>
-                    <td className="mono" style=${{ cursor: 'pointer', color: 'var(--accent)' }} onClick=${() => { const t = transactions.find((x) => x.transaction_id === a.transactionId); if (t) setTxnDetail(t); }}>${a.transactionId}</td>
-                    <td><span className=${`pill ${statusClass(a.currentStatus)}`}>${a.currentStatus}</span></td>
-                    <td>${a.resolution || '-'}</td>
-                    <td>${a.resolutionNotes || a.appealReason || '-'}</td>
-                    <td className="muted small">${fmtDate(a.createdAt)}</td>
+                    <td className="mono">${a.appeal_id}</td>
+                    <td className="mono">${a.transaction_id}</td>
+                    <td><span className=${`pill ${statusClass(a.status)}`}>${a.status}</span></td>
+                    <td>${a.manual_outcome || '-'}</td>
+                    <td>${a.outcome_reason || '-'}</td>
+                    <td className="muted small">${new Date(a.created_at).toLocaleString()}</td>
                   </tr>
                 `) : html`<tr><td colspan="6" className="muted">No appeals submitted yet.</td></tr>`}
               </tbody>
@@ -668,6 +797,37 @@ const App = () => {
         </div>
       </section>
 
+      <section className="grid cols-2" style=${{ marginTop: '1rem' }}>
+        <article className="card">
+          <div className="card-head"><h2 className="title-sm">Profile & Password</h2></div>
+          <div className="card-body grid" style=${{ gap: '0.65rem' }}>
+            ${hasLocalPassword ? null : html`<div className="alert alert-warning">This account has no local password yet. Set one first to unlock profile changes and account deletion.</div>`}
+            <div className="field"><label>Full name</label><input className="input" value=${profileForm.full_name} onInput=${(e) => setProfileForm((p) => ({ ...p, full_name: e.target.value }))} /></div>
+            <div className="field"><label>Email</label><input className="input" value=${profileForm.email} readonly /></div>
+            <div className="field"><label>Phone</label><input className="input" value=${profileForm.phone} onInput=${(e) => setProfileForm((p) => ({ ...p, phone: e.target.value }))} /></div>
+            <button className="btn btn-primary" onClick=${saveProfile} disabled=${busy.profile || !hasLocalPassword}>${busy.profile ? 'Saving...' : 'Save profile'}</button>
+            <div className="row"><button className="btn btn-ghost" onClick=${requestOtp} disabled=${busy.otp}>${busy.otp ? 'Sending OTP...' : hasLocalPassword ? 'Request OTP' : 'Request setup OTP'}</button></div>
+            ${hasLocalPassword ? html`<div className="field"><label>Current password</label><input className="input" type="password" value=${passwordForm.current_password} onInput=${(e) => setPasswordForm((p) => ({ ...p, current_password: e.target.value }))} /></div>` : null}
+            <div className="field"><label>New password</label><input className="input" type="password" value=${passwordForm.new_password} onInput=${(e) => setPasswordForm((p) => ({ ...p, new_password: e.target.value }))} /></div>
+            <div className="field"><label>Email OTP</label><input className="input mono" value=${passwordForm.otp_code} onInput=${(e) => setPasswordForm((p) => ({ ...p, otp_code: e.target.value }))} /></div>
+            <button className="btn btn-primary" onClick=${hasLocalPassword ? changePassword : setInitialPassword} disabled=${busy.password}>${busy.password ? (hasLocalPassword ? 'Changing...' : 'Setting...') : (hasLocalPassword ? 'Change password' : 'Set password')}</button>
+          </div>
+        </article>
+
+        <article className="card">
+          <div className="card-head"><h2 className="title-sm">Delete Account</h2></div>
+          <div className="card-body grid" style=${{ gap: '0.65rem' }}>
+            <div className="alert alert-warning">${hasLocalPassword ? 'This action is irreversible. Your account will be deactivated immediately.' : 'Set a local password first before deleting this account.'}</div>
+            ${hasLocalPassword ? html`
+              <div className="field"><label>Password</label><input className="input" type="password" value=${deleteForm.password} onInput=${(e) => setDeleteForm((p) => ({ ...p, password: e.target.value }))} /></div>
+              <div className="field"><label>Email OTP</label><input className="input mono" value=${deleteForm.otp_code} onInput=${(e) => setDeleteForm((p) => ({ ...p, otp_code: e.target.value }))} /></div>
+            ` : html`
+              <div className="muted small">Request the setup OTP from the profile card, set a local password, then come back here if you still want to close the account.</div>
+            `}
+            <button className="btn btn-danger" onClick=${deleteAccount} disabled=${busy.delete || !hasLocalPassword}>${busy.delete ? 'Deleting...' : 'Delete account'}</button>
+          </div>
+        </article>
+      </section>
     </main>
   `;
 };

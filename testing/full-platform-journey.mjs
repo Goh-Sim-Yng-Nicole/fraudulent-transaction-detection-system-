@@ -5,6 +5,7 @@ import {
   assertArrayContains,
   assertStatus,
   authHeaders,
+  isRecipientDirectoryConfigured,
   credentials,
   logStep,
   makeCustomer,
@@ -105,6 +106,43 @@ await waitForStack();
 logStep('Registering and verifying a fresh customer for the full platform journey');
 let journeyCustomer = await registerCustomer(journeyCustomerSeed);
 journeyCustomer = await verifyOtp(journeyCustomer, await waitForLatestOtp(journeyCustomer.email));
+
+if (isRecipientDirectoryConfigured()) {
+  logStep('Registering a second customer and validating the saved-recipient flow');
+  let savedRecipientCustomer = await registerCustomer(makeCustomer('journey-recipient'));
+  savedRecipientCustomer = await verifyOtp(savedRecipientCustomer, await waitForLatestOtp(savedRecipientCustomer.email));
+
+  const lookupRecipientResult = await request(
+    `${platform.publicBase}/api/customers/lookup?query=${encodeURIComponent(savedRecipientCustomer.email)}`,
+    { headers: authHeaders(journeyCustomer.token) }
+  );
+  assertStatus(lookupRecipientResult, 200, 'lookup recipient for journey directory save');
+
+  const saveRecipientResult = await request(`${platform.publicBase}/api/customer/recipients`, {
+    method: 'POST',
+    headers: authHeaders(journeyCustomer.token),
+    body: {
+      recipient_customer_id: lookupRecipientResult.body.customer_id,
+      recipient_name: lookupRecipientResult.body.full_name,
+      recipient_email: lookupRecipientResult.body.email,
+      nickname: 'Journey Recipient',
+      is_favorite: true,
+    },
+  });
+  assertStatus(saveRecipientResult, 200, 'save journey recipient');
+
+  const recipientDirectoryList = await request(`${platform.publicBase}/api/customer/recipients`, {
+    headers: authHeaders(journeyCustomer.token),
+  });
+  assertStatus(recipientDirectoryList, 200, 'list journey recipients');
+  assertArrayContains(
+    recipientDirectoryList.body,
+    (item) => item.recipient_customer_id === savedRecipientCustomer.customerId,
+    'journey recipient directory should include the saved customer'
+  );
+} else {
+  logStep('Skipping recipient-directory journey coverage because the external integration is not configured');
+}
 
 logStep('Signing in analyst and manager roles');
 const analystSession = await staffLogin(credentials.analyst);
