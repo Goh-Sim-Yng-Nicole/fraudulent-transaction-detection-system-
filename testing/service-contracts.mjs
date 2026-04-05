@@ -126,6 +126,7 @@ for (const check of directHealthChecks) {
 
 logStep('Validating protected UI and observability surfaces');
 await checkHtmlPage(`${platform.publicBase}/`, 'public edge root');
+await checkHtmlPage(`${platform.publicBase}/swagger/`, 'public swagger ui', 'Fraud Detection REST API Documentation');
 await checkHtmlPage(`${platform.nginxBase}/staff-login.html`, 'staff login ui', 'FTDS | Staff Sign In');
 await checkHtmlPage(`${platform.httpsBase}/staff-login.html`, 'https staff login ui', 'FTDS | Staff Sign In', {
   insecureTls: true,
@@ -335,6 +336,9 @@ logStep('Validating gateway docs and modern auth proxy');
 const gatewayDocs = await request(`${platform.gatewayBase}/api-docs.json`);
 assertStatus(gatewayDocs, 200, 'gateway api docs');
 assert.ok(gatewayDocs.body?.openapi, 'gateway api docs should expose openapi');
+const gatewaySwaggerAlias = await request(`${platform.gatewayBase}/swagger.json`);
+assertStatus(gatewaySwaggerAlias, 200, 'gateway swagger alias');
+assert.ok(gatewaySwaggerAlias.body?.openapi, 'gateway swagger alias should expose openapi');
 
 const gatewayLogin = await request(`${platform.gatewayBase}/api/v1/auth/login`, {
   method: 'POST',
