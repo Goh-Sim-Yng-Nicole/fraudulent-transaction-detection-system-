@@ -24,6 +24,7 @@ const buildFlaggedTransactionPayload = ({
   recipientCustomerId,
   recipientName,
   amount,
+  hourUtc,
 }) => ({
   customer_id: customerId,
   sender_name: senderName,
@@ -34,6 +35,7 @@ const buildFlaggedTransactionPayload = ({
   card_type: 'PREPAID',
   country: 'NG',
   merchant_id: 'FTDS_E2E_MERCHANT',
+  ...(hourUtc === undefined ? {} : { hour_utc: hourUtc }),
 });
 
 const firstCustomer = makeCustomer('primary-customer');
@@ -93,7 +95,7 @@ const getCustomerDecision = async (token, transactionId) => {
   return result;
 };
 
-const createFlaggedTransaction = async (customer, recipient, amount) => {
+const createFlaggedTransaction = async (customer, recipient, amount, hourUtc = 2) => {
   const result = await request(`${platform.publicBase}/api/customer/transactions`, {
     method: 'POST',
     headers: authHeaders(customer.token, {
@@ -105,6 +107,7 @@ const createFlaggedTransaction = async (customer, recipient, amount) => {
       recipientCustomerId: recipient.customerId,
       recipientName: recipient.full_name,
       amount,
+      hourUtc,
     }),
   });
 
@@ -293,7 +296,7 @@ const fraudScoreProbe = await request(`${platform.fraudScoreBase}/api/v1/score`,
 assertStatus(fraudScoreProbe, 200, 'fraud score probe');
 
 logStep('Creating a flagged transaction and resolving it via the public legacy review workflow');
-const transactionOneId = await createFlaggedTransaction(customerA, customerB, 5200);
+const transactionOneId = await createFlaggedTransaction(customerA, customerB, 50000);
 await waitForTransactionStatus(customerA.token, transactionOneId, 'FLAGGED');
 
 await poll(
@@ -321,7 +324,7 @@ assertStatus(resolveFlaggedResult, 200, 'resolve flagged transaction');
 await waitForTransactionStatus(customerA.token, transactionOneId, 'APPROVED');
 
 logStep('Creating a second flagged transaction and resolving it through the modern review APIs');
-const transactionTwoId = await createFlaggedTransaction(customerA, customerB, 5300);
+const transactionTwoId = await createFlaggedTransaction(customerA, customerB, 50000);
 await waitForTransactionStatus(customerA.token, transactionTwoId, 'FLAGGED');
 
 const reviewCasesResult = await poll(
@@ -366,7 +369,7 @@ assert.equal(resolveModernReview.body?.data?.reviewedBy, analystSession.user.use
 await waitForTransactionStatus(customerA.token, transactionTwoId, 'APPROVED');
 
 logStep('Creating a third flagged transaction and driving the appeal flow');
-const transactionThreeId = await createFlaggedTransaction(customerA, customerB, 5400);
+const transactionThreeId = await createFlaggedTransaction(customerA, customerB, 50000);
 await waitForTransactionStatus(customerA.token, transactionThreeId, 'FLAGGED');
 
 const appealCreateResult = await request(`${platform.publicBase}/api/customer/appeals`, {
@@ -403,11 +406,11 @@ const pendingAppealQueue = await poll(
     headers: authHeaders(analystSession.token),
   }),
   (result) => result.status === 200 && Array.isArray(result.body?.data)
-    && result.body.data.some((item) => item.appealId === appealId && item.transactionSummary?.amount === 5400),
+    && result.body.data.some((item) => item.appealId === appealId && item.transactionSummary?.amount === 50000),
   { timeoutMs: 120000, intervalMs: 2500 }
 );
 const queuedAppeal = pendingAppealQueue.body?.data?.find((item) => item.appealId === appealId);
-assert.equal(queuedAppeal?.transactionSummary?.amount, 5400, 'appeal queue should include linked transaction amount');
+assert.equal(queuedAppeal?.transactionSummary?.amount, 50000, 'appeal queue should include linked transaction amount');
 assert.equal(queuedAppeal?.transactionSummary?.transactionStatus, 'FLAGGED', 'appeal queue should include linked transaction status');
 assert.ok(
   typeof queuedAppeal?.transactionSummary?.fraudScore === 'number',
