@@ -30,8 +30,8 @@ const normalizeErrorPayload = (payload, status) => {
 
 const buildHeaders = (ownerCustomerId) => ({
   'Content-Type': 'application/json',
-  'X-Internal-Api-Key': config.recipientDirectory.apiKey,
-  'X-User-ID': ownerCustomerId,
+  XInternalApiKey: config.recipientDirectory.apiKey,
+  XUserID: ownerCustomerId,
 });
 
 const request = async ({ method, path, ownerCustomerId, body, params }) => {
