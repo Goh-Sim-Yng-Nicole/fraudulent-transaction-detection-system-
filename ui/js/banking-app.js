@@ -58,6 +58,7 @@ const App = () => {
   const [appeals, setAppeals] = useState([]);
   const [recipient, setRecipient] = useState(null);
   const [savedRecipients, setSavedRecipients] = useState([]);
+  const [showRecipientDirectoryModal, setShowRecipientDirectoryModal] = useState(false);
   const [selectedSavedRecipientId, setSelectedSavedRecipientId] = useState('');
   const [recipientSaveForm, setRecipientSaveForm] = useState(blankRecipientSaveForm());
   const [recipientDirectory, setRecipientDirectory] = useState({
@@ -93,6 +94,10 @@ const App = () => {
   const matchedSavedRecipient = recipient?.customer_id
     ? savedRecipients.find((item) => item.recipient_customer_id === recipient.customer_id)
     : null;
+  const selectedSavedRecipient = selectedSavedRecipientId
+    ? savedRecipients.find((item) => item.recipient_id === selectedSavedRecipientId)
+    : null;
+  const favoriteRecipientCount = savedRecipients.filter((item) => item.is_favorite).length;
 
   const logout = () => {
     clearCustomerSession();
@@ -146,6 +151,7 @@ const App = () => {
         initialized: true,
         error: '',
       });
+      return normalized;
     } catch (error) {
       const errorMessage = String(error.message || '');
       const unavailable = /saved recipients are not configured/i.test(errorMessage);
@@ -158,10 +164,20 @@ const App = () => {
       if (!quiet && !unavailable) {
         showMessage('danger', errorMessage);
       }
+      return [];
     } finally {
       setLoading('recipients', false);
     }
   };
+
+  const openRecipientDirectoryModal = () => {
+    setShowRecipientDirectoryModal(true);
+    if (recipientDirectory.configured && !recipientDirectory.initialized && !busy.recipients) {
+      loadSavedRecipients({ quiet: false }).catch(() => {});
+    }
+  };
+
+  const closeRecipientDirectoryModal = () => setShowRecipientDirectoryModal(false);
 
   useEffect(() => {
     const saved = readCustomerSession();
@@ -194,6 +210,17 @@ const App = () => {
     const id = setInterval(() => setNowUtc(formatUtc(new Date())), 1000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (!showRecipientDirectoryModal) return undefined;
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setShowRecipientDirectoryModal(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showRecipientDirectoryModal]);
 
   useEffect(() => {
     const pollId = setInterval(() => {
@@ -252,6 +279,7 @@ const App = () => {
       nickname: savedRecipient.nickname || savedRecipient.recipient_name,
       isFavorite: Boolean(savedRecipient.is_favorite),
     });
+    setShowRecipientDirectoryModal(false);
     showMessage('success', `Using saved recipient: ${savedRecipient.nickname || savedRecipient.recipient_name}`);
   };
 
@@ -299,11 +327,15 @@ const App = () => {
         },
       );
       const normalized = normalizeSavedRecipient(payload);
-      upsertSavedRecipient(normalized);
-      setSelectedSavedRecipientId(normalized.recipient_id);
+      const refreshedRecipients = await loadSavedRecipients({ quiet: true });
+      const savedRecipient = refreshedRecipients.find(
+        (item) => item.recipient_customer_id === recipient.customer_id,
+      ) || normalized;
+      upsertSavedRecipient(savedRecipient);
+      setSelectedSavedRecipientId(savedRecipient.recipient_id);
       setRecipientSaveForm({
-        nickname: normalized.nickname || normalized.recipient_name,
-        isFavorite: Boolean(normalized.is_favorite),
+        nickname: savedRecipient.nickname || savedRecipient.recipient_name,
+        isFavorite: Boolean(savedRecipient.is_favorite),
       });
       showMessage(
         'success',
@@ -617,15 +649,34 @@ const App = () => {
                 <div className="field">
                   <div className="row space-between">
                     <label>Saved recipients</label>
-                    ${recipientDirectory.configured ? html`
-                      <button type="button" className="btn btn-ghost" onClick=${() => loadSavedRecipients({ quiet: false })} disabled=${busy.recipients}>
-                        ${busy.recipients ? 'Refreshing...' : 'Refresh directory'}
-                      </button>
-                    ` : null}
+                    <div className="row">
+                      ${recipientDirectory.configured ? html`
+                        <button type="button" className="btn btn-ghost" onClick=${() => loadSavedRecipients({ quiet: false })} disabled=${busy.recipients}>
+                          ${busy.recipients ? 'Refreshing...' : 'Refresh directory'}
+                        </button>
+                        <button type="button" className="btn btn-ghost" onClick=${openRecipientDirectoryModal}>
+                          ${savedRecipients.length ? `Open directory (${savedRecipients.length})` : 'Open directory'}
+                        </button>
+                      ` : null}
+                    </div>
                   </div>
                   ${recipientDirectory.configured ? html`
                     ${savedRecipients.length ? html`
-                      <div className="recipient-directory">
+                      <div className="recipient-directory-summary">
+                        <div className="row recipient-directory-metrics">
+                          <span className="pill">${savedRecipients.length} saved</span>
+                          <span className="pill">${favoriteRecipientCount} favourites</span>
+                          ${selectedSavedRecipient ? html`
+                            <span className="pill status-approved">
+                              Selected: ${selectedSavedRecipient.nickname || selectedSavedRecipient.recipient_name}
+                            </span>
+                          ` : null}
+                        </div>
+                        <div className="muted small">
+                          Browse your saved recipients in the directory popup and pick one without stretching the transfer form.
+                        </div>
+                      </div>
+                      <div className="recipient-directory hidden">
                         ${savedRecipients.map((savedRecipient) => html`
                           <div className=${`recipient-entry ${selectedSavedRecipientId === savedRecipient.recipient_id ? 'active' : ''}`}>
                             <div>
@@ -828,6 +879,58 @@ const App = () => {
           </div>
         </article>
       </section>
+
+      ${showRecipientDirectoryModal && recipientDirectory.configured ? html`
+        <div className="modal-backdrop" onClick=${(event) => {
+          if (event.target === event.currentTarget) {
+            closeRecipientDirectoryModal();
+          }
+        }}>
+          <div className="modal recipient-directory-modal" role="dialog" aria-modal="true" aria-labelledby="recipient-directory-title">
+            <div className="row space-between recipient-directory-modal-header">
+              <div>
+                <h2 id="recipient-directory-title" className="title-sm">Saved recipient directory</h2>
+                <div className="muted small">Use, favourite, or remove recipients without leaving the transfer form.</div>
+              </div>
+              <div className="row">
+                <button type="button" className="btn btn-ghost" onClick=${() => loadSavedRecipients({ quiet: false })} disabled=${busy.recipients}>
+                  ${busy.recipients ? 'Refreshing...' : 'Refresh'}
+                </button>
+                <button type="button" className="btn btn-ghost" onClick=${closeRecipientDirectoryModal}>Close</button>
+              </div>
+            </div>
+
+            ${savedRecipients.length ? html`
+              <div className="recipient-directory-modal-list">
+                ${savedRecipients.map((savedRecipient) => html`
+                  <div className=${`recipient-entry ${selectedSavedRecipientId === savedRecipient.recipient_id ? 'active' : ''}`}>
+                    <div>
+                      <div className="title-sm">${savedRecipient.nickname || savedRecipient.recipient_name}</div>
+                      <div className="muted small">${savedRecipient.recipient_name} - ${savedRecipient.recipient_email}</div>
+                    </div>
+                    <div className="row recipient-actions">
+                      ${savedRecipient.is_favorite ? html`<span className="pill status-approved">Favourite</span>` : null}
+                      <button type="button" className="btn btn-ghost" onClick=${() => useSavedRecipient(savedRecipient)}>Use</button>
+                      <button type="button" className="btn btn-ghost" onClick=${() => updateSavedRecipientFavorite(savedRecipient)} disabled=${busy.favoriteRecipient === savedRecipient.recipient_id}>
+                        ${busy.favoriteRecipient === savedRecipient.recipient_id ? 'Saving...' : savedRecipient.is_favorite ? 'Unfavourite' : 'Favourite'}
+                      </button>
+                      <button type="button" className="btn btn-danger" onClick=${() => deleteSavedRecipient(savedRecipient)} disabled=${busy.deleteRecipient === savedRecipient.recipient_id}>
+                        ${busy.deleteRecipient === savedRecipient.recipient_id ? 'Removing...' : 'Remove'}
+                      </button>
+                    </div>
+                  </div>
+                `)}
+              </div>
+            ` : html`
+              <div className="muted small recipient-directory-empty-state">
+                No saved recipients yet. Look up a validated customer below and save them to build your directory.
+              </div>
+            `}
+
+            ${recipientDirectory.error ? html`<div className="muted small">${recipientDirectory.error}</div>` : null}
+          </div>
+        </div>
+      ` : null}
     </main>
   `;
 };

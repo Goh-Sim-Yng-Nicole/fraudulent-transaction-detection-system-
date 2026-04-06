@@ -316,6 +316,16 @@ a {
   margin-top: 0.4rem;
 }
 
+.recipient-directory-summary {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.4rem;
+}
+
+.recipient-directory-metrics {
+  gap: 0.5rem;
+}
+
 .recipient-entry {
   display: flex;
   justify-content: space-between;
@@ -520,6 +530,27 @@ tr:hover td {
   background: rgba(12, 19, 36, 0.95);
   box-shadow: var(--glow);
   padding: 1rem;
+}
+
+.recipient-directory-modal {
+  display: grid;
+  gap: 1rem;
+}
+
+.recipient-directory-modal-header {
+  align-items: flex-start;
+}
+
+.recipient-directory-modal-list {
+  display: grid;
+  gap: 0.65rem;
+  max-height: min(60vh, 540px);
+  overflow: auto;
+  padding-right: 0.2rem;
+}
+
+.recipient-directory-empty-state {
+  padding: 0.85rem 0;
 }
 
 .toast-stack {
