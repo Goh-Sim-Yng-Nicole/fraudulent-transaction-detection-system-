@@ -83,6 +83,48 @@ const waitForTransactionStatus = async (token, transactionId, expectedStatus) =>
   { timeoutMs: 120000, intervalMs: 2500 }
 );
 
+const waitForTransactionStatusInSet = async (token, transactionId, expectedStatuses) => poll(
+  `transaction ${transactionId} -> one of ${expectedStatuses.join(', ')}`,
+  () => getCustomerDecision(token, transactionId),
+  (result) => expectedStatuses.includes(String(result.body?.status || '').toUpperCase()),
+  { timeoutMs: 120000, intervalMs: 2500 }
+);
+
+const createReviewableFlaggedTransaction = async (
+  customer,
+  candidateAmounts = [10000, 7500, 6000, 5000, 12000],
+  hourUtc = 2,
+) => {
+  const attempts = [];
+
+  for (const amount of candidateAmounts) {
+    const transactionId = await createTransaction(customer, {
+      merchant_id: 'FTDS_FLAGGED_DEMO',
+      amount,
+      currency: 'USD',
+      card_type: 'PREPAID',
+      country: 'NG',
+      hour_utc: hourUtc,
+    });
+    const statusResult = await waitForTransactionStatusInSet(customer.token, transactionId, ['FLAGGED', 'REJECTED', 'APPROVED']);
+    const status = String(statusResult.body?.status || '').toUpperCase();
+
+    attempts.push({
+      transactionId,
+      amount,
+      status,
+      fraudScore: statusResult.body?.fraud_score,
+      outcomeReason: statusResult.body?.outcome_reason,
+    });
+
+    if (status === 'FLAGGED') {
+      return { transactionId, amount };
+    }
+  }
+
+  throw new Error(`Unable to create a reviewable FLAGGED transaction. Attempts: ${JSON.stringify(attempts)}`);
+};
+
 const listCustomerTransactions = async (customer) => {
   const result = await request(
     `${platform.publicBase}/api/customer/transactions?customer_id=${encodeURIComponent(customer.customerId)}&direction=all`,
@@ -182,14 +224,8 @@ const approvedDecision = await waitForTransactionStatus(journeyCustomer.token, a
 assert.equal(String(approvedDecision.body?.status || '').toUpperCase(), 'APPROVED', 'approved transaction should be approved');
 
 logStep('Creating a medium-risk transaction, then exercising claim and release while keeping it flagged');
-const flaggedTransactionId = await createTransaction(journeyCustomer, {
-  merchant_id: 'FTDS_FLAGGED_DEMO',
-  amount: 50000,
-  currency: 'USD',
-  card_type: 'PREPAID',
-  country: 'NG',
-  hour_utc: 2,
-});
+const flaggedTransaction = await createReviewableFlaggedTransaction(journeyCustomer);
+const flaggedTransactionId = flaggedTransaction.transactionId;
 await waitForTransactionStatus(journeyCustomer.token, flaggedTransactionId, 'FLAGGED');
 
 const flaggedQueue = await poll(
