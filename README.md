@@ -30,6 +30,8 @@ The platform is designed to support three user-facing journeys:
 - 🔍 **Scenario 2** — a risky transaction is flagged and manually reviewed
 - ⚖️ **Scenario 3** — a declined transaction is appealed and later reversed
 
+**Link to Deployed Version:** [https://ftds.eastasia.cloudapp.azure.com/](https://ftds.eastasia.cloudapp.azure.com/)
+
 **What's inside:**
 
 - Customer registration, login, OTP verification, profile management, and account lifecycle actions
