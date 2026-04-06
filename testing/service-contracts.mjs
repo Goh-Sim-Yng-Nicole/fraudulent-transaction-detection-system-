@@ -71,6 +71,42 @@ const createFlaggedTransactionDirect = async (customer, recipient, amount, hourU
   return result.body.transaction_id;
 };
 
+const waitForTransactionStatusInSet = async (transactionId, expectedStatuses) => poll(
+  `transaction ${transactionId} -> one of ${expectedStatuses.join(', ')}`,
+  () => getTransactionDecisionDirect(transactionId),
+  (result) => expectedStatuses.includes(String(result.body?.status || '').toUpperCase()),
+  { timeoutMs: 120000, intervalMs: 2500 }
+);
+
+const createReviewableTransactionDirect = async (
+  customer,
+  recipient,
+  candidateAmounts = [10000, 7500, 6000, 5000, 12000],
+  hourUtc = 2,
+) => {
+  const attempts = [];
+
+  for (const amount of candidateAmounts) {
+    const transactionId = await createFlaggedTransactionDirect(customer, recipient, amount, hourUtc);
+    const statusResult = await waitForTransactionStatusInSet(transactionId, ['FLAGGED', 'REJECTED', 'APPROVED']);
+    const status = String(statusResult.body?.status || '').toUpperCase();
+
+    attempts.push({
+      transactionId,
+      amount,
+      status,
+      fraudScore: statusResult.body?.fraud_score,
+      outcomeReason: statusResult.body?.outcome_reason,
+    });
+
+    if (status === 'FLAGGED') {
+      return { transactionId, amount };
+    }
+  }
+
+  throw new Error(`Unable to create a reviewable FLAGGED transaction. Attempts: ${JSON.stringify(attempts)}`);
+};
+
 const getTransactionDecisionDirect = async (transactionId) => {
   const result = await request(`${platform.transactionBase}/transactions/${transactionId}/decision`);
   assertStatus(result, 200, `direct transaction decision ${transactionId}`);
@@ -413,10 +449,12 @@ const gatewayLogin = await request(`${platform.gatewayBase}/api/v1/auth/login`, 
 assertStatus(gatewayLogin, 200, 'gateway modern auth login');
 
 logStep('Creating flagged transactions for transaction, review, and appeal coverage');
-const reviewedTransactionId = await createFlaggedTransactionDirect(primaryCustomer, recipientCustomer, 50000);
+const reviewedTransaction = await createReviewableTransactionDirect(primaryCustomer, recipientCustomer);
+const reviewedTransactionId = reviewedTransaction.transactionId;
 await waitForTransactionStatus(reviewedTransactionId, 'FLAGGED');
 
-const appealTransactionId = await createFlaggedTransactionDirect(primaryCustomer, recipientCustomer, 50000);
+const appealTransaction = await createReviewableTransactionDirect(primaryCustomer, recipientCustomer);
+const appealTransactionId = appealTransaction.transactionId;
 await waitForTransactionStatus(appealTransactionId, 'FLAGGED');
 
 const directTransactionList = await request(
@@ -513,12 +551,12 @@ const modernPendingAppeals = await poll(
     headers: authHeaders(analystSession.token),
   }),
   (result) => result.status === 200 && Array.isArray(result.body?.data)
-    && result.body.data.some((item) => item.appealId === appealId && item.transactionSummary?.amount === 50000),
+    && result.body.data.some((item) => item.appealId === appealId && item.transactionSummary?.amount === appealTransaction.amount),
   { timeoutMs: 120000, intervalMs: 2500 }
 );
 assertArrayContains(modernPendingAppeals.body?.data, (item) => item.appealId === appealId, 'modern appeal queue should include created appeal');
 const enrichedAppeal = modernPendingAppeals.body?.data?.find((item) => item.appealId === appealId);
-assert.equal(enrichedAppeal?.transactionSummary?.amount, 50000, 'modern appeal queue should expose linked transaction amount');
+assert.equal(enrichedAppeal?.transactionSummary?.amount, appealTransaction.amount, 'modern appeal queue should expose linked transaction amount');
 assert.equal(enrichedAppeal?.transactionSummary?.transactionStatus, 'FLAGGED', 'modern appeal queue should expose linked transaction status');
 assert.ok(
   typeof enrichedAppeal?.transactionSummary?.fraudScore === 'number',

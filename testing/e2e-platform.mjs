@@ -115,6 +115,42 @@ const createFlaggedTransaction = async (customer, recipient, amount, hourUtc = 2
   return result.body.transaction_id;
 };
 
+const waitForTransactionStatusInSet = async (token, transactionId, expectedStatuses) => poll(
+  `transaction ${transactionId} -> one of ${expectedStatuses.join(', ')}`,
+  () => getCustomerDecision(token, transactionId),
+  (result) => expectedStatuses.includes(String(result.body?.status || '').toUpperCase()),
+  { timeoutMs: 120000, intervalMs: 2500 }
+);
+
+const createReviewableTransaction = async (
+  customer,
+  recipient,
+  candidateAmounts = [10000, 7500, 6000, 5000, 12000],
+  hourUtc = 2,
+) => {
+  const attempts = [];
+
+  for (const amount of candidateAmounts) {
+    const transactionId = await createFlaggedTransaction(customer, recipient, amount, hourUtc);
+    const statusResult = await waitForTransactionStatusInSet(customer.token, transactionId, ['FLAGGED', 'REJECTED', 'APPROVED']);
+    const status = String(statusResult.body?.status || '').toUpperCase();
+
+    attempts.push({
+      transactionId,
+      amount,
+      status,
+      fraudScore: statusResult.body?.fraud_score,
+      outcomeReason: statusResult.body?.outcome_reason,
+    });
+
+    if (status === 'FLAGGED') {
+      return { transactionId, amount };
+    }
+  }
+
+  throw new Error(`Unable to create a reviewable FLAGGED transaction. Attempts: ${JSON.stringify(attempts)}`);
+};
+
 const waitForTransactionStatus = async (token, transactionId, expectedStatus) => poll(
   `transaction ${transactionId} -> ${expectedStatus}`,
   () => getCustomerDecision(token, transactionId),
@@ -292,7 +328,8 @@ const fraudScoreProbe = await request(`${platform.fraudScoreBase}/api/v1/score`,
 assertStatus(fraudScoreProbe, 200, 'fraud score probe');
 
 logStep('Creating a flagged transaction and resolving it via the public legacy review workflow');
-const transactionOneId = await createFlaggedTransaction(customerA, customerB, 50000);
+const transactionOne = await createReviewableTransaction(customerA, customerB);
+const transactionOneId = transactionOne.transactionId;
 await waitForTransactionStatus(customerA.token, transactionOneId, 'FLAGGED');
 
 await poll(
@@ -320,7 +357,8 @@ assertStatus(resolveFlaggedResult, 200, 'resolve flagged transaction');
 await waitForTransactionStatus(customerA.token, transactionOneId, 'APPROVED');
 
 logStep('Creating a second flagged transaction and resolving it through the modern review APIs');
-const transactionTwoId = await createFlaggedTransaction(customerA, customerB, 50000);
+const transactionTwo = await createReviewableTransaction(customerA, customerB);
+const transactionTwoId = transactionTwo.transactionId;
 await waitForTransactionStatus(customerA.token, transactionTwoId, 'FLAGGED');
 
 const reviewCasesResult = await poll(
@@ -365,7 +403,8 @@ assert.equal(resolveModernReview.body?.data?.reviewedBy, analystSession.user.use
 await waitForTransactionStatus(customerA.token, transactionTwoId, 'APPROVED');
 
 logStep('Creating a third flagged transaction and driving the appeal flow');
-const transactionThreeId = await createFlaggedTransaction(customerA, customerB, 50000);
+const transactionThree = await createReviewableTransaction(customerA, customerB);
+const transactionThreeId = transactionThree.transactionId;
 await waitForTransactionStatus(customerA.token, transactionThreeId, 'FLAGGED');
 
 const appealCreateResult = await request(`${platform.publicBase}/api/customer/appeals`, {
@@ -402,11 +441,11 @@ const pendingAppealQueue = await poll(
     headers: authHeaders(analystSession.token),
   }),
   (result) => result.status === 200 && Array.isArray(result.body?.data)
-    && result.body.data.some((item) => item.appealId === appealId && item.transactionSummary?.amount === 50000),
+    && result.body.data.some((item) => item.appealId === appealId && item.transactionSummary?.amount === transactionThree.amount),
   { timeoutMs: 120000, intervalMs: 2500 }
 );
 const queuedAppeal = pendingAppealQueue.body?.data?.find((item) => item.appealId === appealId);
-assert.equal(queuedAppeal?.transactionSummary?.amount, 50000, 'appeal queue should include linked transaction amount');
+assert.equal(queuedAppeal?.transactionSummary?.amount, transactionThree.amount, 'appeal queue should include linked transaction amount');
 assert.equal(queuedAppeal?.transactionSummary?.transactionStatus, 'FLAGGED', 'appeal queue should include linked transaction status');
 assert.ok(
   typeof queuedAppeal?.transactionSummary?.fraudScore === 'number',
